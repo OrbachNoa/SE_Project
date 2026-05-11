@@ -31,3 +31,8 @@ class ExamSchedule:
         Returns the list of assignments.
         """
         pass
+    
+    def removeAssignment(self, a: ExamAssignment) -> None:
+        """Removes an assignment from the schedule (for backtracking)."""
+        if a in self.assignments:
+            self.assignments.remove(a)
