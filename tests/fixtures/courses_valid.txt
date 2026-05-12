@@ -1,0 +1,44 @@
+Calculus 1
+83001
+Prof. Cohen
+83101,1,FALL,Obligatory
+83102,1,FALL,Obligatory
+Exam
+$$$$
+Linear Algebra
+83002
+Dr. Levi
+83101,1,FALL,Obligatory
+83102,1,FALL,Obligatory
+Exam
+$$$$
+Introduction to Programming
+83003
+Dr. Mizrahi
+83101,1,FALL,Obligatory
+Exam
+$$$$
+Data Structures
+83004
+Dr. Avraham
+83101,2,FALL,Obligatory
+83102,2,FALL,Obligatory
+Exam
+$$$$
+Computer Architecture
+83005
+Prof. Ben-David
+83101,2,FALL,Elective
+Exam
+$$$$
+Operating Systems Lab
+83006
+Dr. Sasson
+83101,2,FALL,Elective
+Project
+$$$$
+Engineering Ethics Seminar
+83007
+Dr. Friedman
+83101,3,FALL,Elective
+Attendance

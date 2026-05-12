@@ -1,0 +1,16 @@
+# IDE settings
+.vscode/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Testing and Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+.vscode/settings.json
