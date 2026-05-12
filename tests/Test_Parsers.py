@@ -163,6 +163,71 @@ def test_courses_parser_accepts_sentence_case_requirement(
     assert courses[0].programEntries[0].requirement.name == expected
 
 
+# ---------------------------------------------------------------------------
+# TC-PRS-005b — Test that an empty courses file is handled properly.
+# ---------------------------------------------------------------------------
+# If the courses file has absolutely no text in it, the system should 
+# either reject it safely or return an empty list. It must not crash.
+def test_courses_parser_handles_empty_file(tmp_path):
+    # Arrange — Create a file with zero bytes.
+    fixture = tmp_path / "courses_empty.txt"
+    fixture.write_text("", encoding="utf-8")
+
+    # Act — Try to read the empty file.
+    try:
+        courses = CoursesFileParser().parse(str(fixture))
+    except ValueError:
+        return  # This is okay: the parser safely rejected the empty file.
+    except Exception as e:
+        pytest.fail(f"Empty courses file caused a crash: {e}")
+
+    # Assert — If it didn't raise an error, it must return an empty list.
+    assert courses == [] or len(courses) == 0
+
+
+# ---------------------------------------------------------------------------
+# TC-PRS-006c — Test that invalid Requirement values are rejected.
+# ---------------------------------------------------------------------------
+# A course requirement must be either 'Obligatory' or 'Elective'.
+# Anything else should cause an error.
+def test_courses_parser_rejects_invalid_requirement(tmp_path):
+    # Arrange — Create a course with a bad requirement ('Recommended').
+    fixture = tmp_path / "course_bad_requirement.txt"
+    fixture.write_text(
+        "Calculus 1\n"
+        "10101\n"
+        "Dr. Cohen\n"
+        "83101,1,FALL,Recommended\n"   
+        "Exam\n",
+        encoding="utf-8",
+    )
+
+    # Act + Assert — The system must raise a ValueError.
+    with pytest.raises(ValueError):
+        CoursesFileParser().parse(str(fixture))
+
+
+# ---------------------------------------------------------------------------
+# TC-PRS-006d — Test that invalid Evaluation values are rejected.
+# ---------------------------------------------------------------------------
+# A course evaluation must be 'Exam', 'Project', or 'Attendance'.
+def test_courses_parser_rejects_invalid_evaluation(tmp_path):
+    # Arrange — Create a course with a bad evaluation ('Quiz').
+    fixture = tmp_path / "course_bad_evaluation.txt"
+    fixture.write_text(
+        "Calculus 1\n"
+        "10101\n"
+        "Dr. Cohen\n"
+        "83101,1,FALL,Obligatory\n"
+        "Quiz\n",                        
+        encoding="utf-8",
+    )
+
+    # Act + Assert — The system must raise a ValueError.
+    with pytest.raises(ValueError):
+        CoursesFileParser().parse(str(fixture))
+
+
 # ===========================================================================
 # ExamPeriodsFileParser — TC-PRS-007
 # ===========================================================================
@@ -248,6 +313,38 @@ def test_exam_periods_parser_rejects_invalid_date_formats(tmp_path, bad_date):
     with pytest.raises(ValueError):
         ExamPeriodsFileParser().parse(str(fixture))
 
+# ---------------------------------------------------------------------------
+# TC-PRS-007e — Test that invalid Semester values are rejected.
+# ---------------------------------------------------------------------------
+# A semester must be 'FALL', 'SPRI', or 'SUMM'.
+def test_exam_periods_parser_rejects_invalid_semester(tmp_path):
+    # Arrange — Create a period with a bad semester ('WINTER').
+    fixture = tmp_path / "periods_bad_semester.txt"
+    fixture.write_text(
+        "WINTER, Aleph\n01-02-2026, 28-02-2026\n",
+        encoding="utf-8",
+    )
+
+    # Act + Assert — The system must raise a ValueError.
+    with pytest.raises(ValueError):
+        ExamPeriodsFileParser().parse(str(fixture))
+
+
+# ---------------------------------------------------------------------------
+# TC-PRS-007f — Test that invalid Moed values are rejected.
+# ---------------------------------------------------------------------------
+# A moed must be 'Aleph', 'Bet', or 'Gimel'.
+def test_exam_periods_parser_rejects_invalid_moed(tmp_path):
+    # Arrange — Create a period with a bad moed ('Delta').
+    fixture = tmp_path / "periods_bad_moed.txt"
+    fixture.write_text(
+        "FALL, Delta\n01-02-2026, 28-02-2026\n",
+        encoding="utf-8",
+    )
+
+    # Act + Assert — The system must raise a ValueError.
+    with pytest.raises(ValueError):
+        ExamPeriodsFileParser().parse(str(fixture))
 
 # ===========================================================================
 # ProgramsFileParser — TC-PRS-008..009
@@ -281,7 +378,28 @@ def test_programs_parser_accepts_non_contiguous_valid_code(tmp_path):
     assert len(entries) == 1
     assert entries[0].programId == "83182"
 
+# ---------------------------------------------------------------------------
+# TC-PRS-008c — Test that an empty programs file is handled properly.
+# ---------------------------------------------------------------------------
+# If the programs file is completely empty, the system must not crash.
+# It should safely reject it or return an empty list.
+def test_programs_parser_rejects_empty_file(tmp_path):
+    # Arrange — Create a file with zero bytes.
+    fixture = tmp_path / "programs_empty.txt"
+    fixture.write_text("", encoding="utf-8")
 
+    # Act + Assert — Try to read the file.
+    try:
+        entries = ProgramsFileParser().parse(str(fixture))
+    except ValueError:
+        return  # This is okay: the parser rejected the empty file.
+    except Exception as e:
+        pytest.fail(f"Empty programs file caused a crash: {e}")
+
+    # If it didn't raise an error, it must return an empty list.
+    assert entries == [] or len(entries) == 0
+
+    
 # TC-PRS-009: Check that an invalid program code raises an error with the bad code in the message.
 @pytest.mark.parametrize("bad_code", [
     "99999",   # well outside any plausible range

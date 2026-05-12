@@ -255,3 +255,42 @@ def test_only_exam_courses_are_scheduled(
     for s in schedules:
         ids = {a.course.courseId for a in s.assignments}
         assert ids == {"E"}
+
+    
+# ---------------------------------------------------------------------------
+# SCRUM-20 — Test that a program with no exams works without crashing.
+# ---------------------------------------------------------------------------
+
+# If a study program only has 'Project' or 'Attendance' courses 
+# (and zero 'Exam' courses), the system should just return an empty 
+# schedule. It must not crash.
+def test_program_with_only_non_exam_courses_returns_empty_schedule(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange — Create a program that only has a project and attendance.
+    pe = make_program_entry(program_id="83101", year=2)
+    project_course = make_course(
+        course_id="P1", evaluation=EvalType.PROJECT, program_entries=[pe])
+    att_course = make_course(
+        course_id="A1", evaluation=EvalType.ATTENDANCE, program_entries=[pe])
+    period = make_period(
+        start=date(2026, 6, 1), end=date(2026, 6, 5), excluded=[]
+    )
+
+    scheduler = Scheduler(
+        courses=[project_course, att_course],
+        periods=[period],
+        conflictCheckers=_default_checkers([period]),
+        validators=[],
+    )
+
+    # Act — Run the scheduler. It should not cause any errors.
+    schedules = scheduler.generateAllSchedules()
+
+    # Assert — Check that there are no exams inside the created schedules.
+    if len(schedules) > 0:
+        for s in schedules:
+            assert len(s.assignments) == 0, (
+                "A program with no 'Exam' courses should not create "
+                "any exam schedules."
+            )
