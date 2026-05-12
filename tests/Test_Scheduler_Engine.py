@@ -183,7 +183,7 @@ def test_scheduler_uses_injected_custom_checker(
 
 
 # ---------------------------------------------------------------------------
-# SCRUM-18 (Engine): Test that a course belonging to two programs is only scheduled once.
+# TC-ENG-006 — Courses shared across programs scheduled exactly once.
 # ---------------------------------------------------------------------------
 
 # If a course is part of two different study programs, it should
@@ -222,11 +222,11 @@ def test_courses_shared_across_programs_are_scheduled_once(
 
 
 # ---------------------------------------------------------------------------
-# Test that only courses with an "Exam" evaluation are scheduled.
+# TC-ENG-007 — Only EXAM courses are scheduled.
 # ---------------------------------------------------------------------------
 
 
-# SCRUM-18 (Engine): Check that courses like projects or attendance-only are ignored 
+# TC-ENG-007: Check that courses like projects or attendance-only are ignored 
 # by the scheduler.
 def test_only_exam_courses_are_scheduled(
     make_course, make_program_entry, make_period,
@@ -258,7 +258,7 @@ def test_only_exam_courses_are_scheduled(
 
     
 # ---------------------------------------------------------------------------
-# SCRUM-20 — Test that a program with no exams works without crashing.
+# TC-ENG-008 — Program with no EXAM courses returns empty schedule.
 # ---------------------------------------------------------------------------
 
 # If a study program only has 'Project' or 'Attendance' courses 

@@ -71,7 +71,7 @@ def test_validate_separator_rejects_partial_separator(partial):
 
 
 # ===========================================================================
-# CoursesFileParser — TC-PRS-005..006b
+# CoursesFileParser — TC-PRS-005..007
 # ===========================================================================
 
 # TC-PRS-005: A well-formed courses file with three records produces three Course objects whose key
@@ -135,7 +135,7 @@ def test_courses_parser_handles_multiple_programs_per_course(tmp_path):
     assert courses[0].evaluation.name == "EXAM"
 
 
-# TC-PRS-006b: Requirement and Evaluation
+# TC-PRS-007: Requirement and Evaluation
 # field values appear in sentence case in the file ("Obligatory","Elective", "Exam", "Project", "Attendance").
 # The parser must accept them in that form.
 
@@ -164,29 +164,7 @@ def test_courses_parser_accepts_sentence_case_requirement(
 
 
 # ---------------------------------------------------------------------------
-# TC-PRS-005b — Test that an empty courses file is handled properly.
-# ---------------------------------------------------------------------------
-# If the courses file has absolutely no text in it, the system should 
-# either reject it safely or return an empty list. It must not crash.
-def test_courses_parser_handles_empty_file(tmp_path):
-    # Arrange — Create a file with zero bytes.
-    fixture = tmp_path / "courses_empty.txt"
-    fixture.write_text("", encoding="utf-8")
-
-    # Act — Try to read the empty file.
-    try:
-        courses = CoursesFileParser().parse(str(fixture))
-    except ValueError:
-        return  # This is okay: the parser safely rejected the empty file.
-    except Exception as e:
-        pytest.fail(f"Empty courses file caused a crash: {e}")
-
-    # Assert — If it didn't raise an error, it must return an empty list.
-    assert courses == [] or len(courses) == 0
-
-
-# ---------------------------------------------------------------------------
-# TC-PRS-006c — Test that invalid Requirement values are rejected.
+# TC-PRS-008 — Test that invalid Requirement values are rejected.
 # ---------------------------------------------------------------------------
 # A course requirement must be either 'Obligatory' or 'Elective'.
 # Anything else should cause an error.
@@ -207,8 +185,9 @@ def test_courses_parser_rejects_invalid_requirement(tmp_path):
         CoursesFileParser().parse(str(fixture))
 
 
+
 # ---------------------------------------------------------------------------
-# TC-PRS-006d — Test that invalid Evaluation values are rejected.
+# TC-PRS-009 — Test that invalid Evaluation values are rejected.
 # ---------------------------------------------------------------------------
 # A course evaluation must be 'Exam', 'Project', or 'Attendance'.
 def test_courses_parser_rejects_invalid_evaluation(tmp_path):
@@ -228,11 +207,35 @@ def test_courses_parser_rejects_invalid_evaluation(tmp_path):
         CoursesFileParser().parse(str(fixture))
 
 
+
+# ---------------------------------------------------------------------------
+# TC-PRS-010 — Test that an empty courses file is handled properly.
+# ---------------------------------------------------------------------------
+# If the courses file has absolutely no text in it, the system should 
+# either reject it safely or return an empty list. It must not crash.
+def test_courses_parser_handles_empty_file(tmp_path):
+    # Arrange — Create a file with zero bytes.
+    fixture = tmp_path / "courses_empty.txt"
+    fixture.write_text("", encoding="utf-8")
+
+    # Act — Try to read the empty file.
+    try:
+        courses = CoursesFileParser().parse(str(fixture))
+    except ValueError:
+        return  # This is okay: the parser safely rejected the empty file.
+    except Exception as e:
+        pytest.fail(f"Empty courses file caused a crash: {e}")
+
+    # Assert — If it didn't raise an error, it must return an empty list.
+    assert courses == [] or len(courses) == 0
+
+
+
 # ===========================================================================
-# ExamPeriodsFileParser — TC-PRS-007
+# ExamPeriodsFileParser — TC-PRS-011...016
 # ===========================================================================
 
-# TC-PRS-007: A valid exam periods file with two periods produces two
+# TC-PRS-011: A valid exam periods file with two periods produces two
 # ExamPeriod objects with correct semester/moed/date boundaries.
 def test_exam_periods_parser_returns_correct_period_list(tmp_path):
     # Arrange — two periods per SRS Appendix A line order.
@@ -257,7 +260,7 @@ def test_exam_periods_parser_returns_correct_period_list(tmp_path):
     assert periods[1].moed.name == "BET"
 
 
-# TC-PRS-007b: Check that dates inside an excluded range cannot be used for exams.
+# TC-PRS-012: Check that dates inside an excluded range cannot be used for exams.
 def test_exam_periods_parser_expands_excluded_date_range(tmp_path):
     # Arrange — a single period whose Excluded entry is a 3-day range.
     fixture = tmp_path / "periods_with_range_excluded.txt"
@@ -276,7 +279,7 @@ def test_exam_periods_parser_expands_excluded_date_range(tmp_path):
     assert date(2026, 3, 4) in excluded
 
 
-# TC-PRS-007c: An exam period whose start date is NOT strictly less than its end date must cause a parse error.
+# TC-PRS-013: An exam period whose start date is NOT strictly less than its end date must cause a parse error.
 @pytest.mark.parametrize("start,end", [
     ("11-03-2026", "11-03-2026"),   # start == end  → invalid per SRS
     ("11-03-2026", "01-03-2026"),   # start  > end  → invalid per SRS
@@ -293,7 +296,7 @@ def test_exam_periods_parser_rejects_non_strict_date_range(tmp_path, start, end)
         ExamPeriodsFileParser().parse(str(fixture))
 
 
-# TC-PRS-007d: Invalid date formats — wrong order, letters, missing dashes — must cause a parse error.
+# TC-PRS-014: Invalid date formats — wrong order, letters, missing dashes — must cause a parse error.
 @pytest.mark.parametrize("bad_date", [
     "2026-03-11",   # not DD-MM-YYYY
     "11/03/2026",   # wrong separator
@@ -314,7 +317,7 @@ def test_exam_periods_parser_rejects_invalid_date_formats(tmp_path, bad_date):
         ExamPeriodsFileParser().parse(str(fixture))
 
 # ---------------------------------------------------------------------------
-# TC-PRS-007e — Test that invalid Semester values are rejected.
+# TC-PRS-015 — Test that invalid Semester values are rejected.
 # ---------------------------------------------------------------------------
 # A semester must be 'FALL', 'SPRI', or 'SUMM'.
 def test_exam_periods_parser_rejects_invalid_semester(tmp_path):
@@ -331,7 +334,7 @@ def test_exam_periods_parser_rejects_invalid_semester(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# TC-PRS-007f — Test that invalid Moed values are rejected.
+# TC-PRS-016 — Test that invalid Moed values are rejected.
 # ---------------------------------------------------------------------------
 # A moed must be 'Aleph', 'Bet', or 'Gimel'.
 def test_exam_periods_parser_rejects_invalid_moed(tmp_path):
@@ -347,10 +350,10 @@ def test_exam_periods_parser_rejects_invalid_moed(tmp_path):
         ExamPeriodsFileParser().parse(str(fixture))
 
 # ===========================================================================
-# ProgramsFileParser — TC-PRS-008..009
+# ProgramsFileParser — TC-PRS-017..020
 # ===========================================================================
 
-# TC-PRS-008: A valid programs file with three valid 5-digit program
+# TC-PRS-017: A valid programs file with three valid 5-digit program
 # codes produces three ProgramEntry objects.
 def test_programs_parser_returns_valid_program_entries(tmp_path):
     # Arrange — comma-separated codes per SRS §1.1 example format.
@@ -366,7 +369,7 @@ def test_programs_parser_returns_valid_program_entries(tmp_path):
         assert code in VALID_PROGRAM_CODES
 
 
-# TC-PRS-008b: Check that the parser accepts 83182 as a valid program code.
+# TC-PRS-018: Check that the parser accepts 83182 as a valid program code.
 # This code is valid in the SRS, even though it is not in the 83101-83115 range.
 def test_programs_parser_accepts_non_contiguous_valid_code(tmp_path):
     # Arrange — code 83182 (Quantum Engineering).
@@ -378,8 +381,27 @@ def test_programs_parser_accepts_non_contiguous_valid_code(tmp_path):
     assert len(entries) == 1
     assert entries[0].programId == "83182"
 
+
+# TC-PRS-019: Check that an invalid program code raises an error with the bad code in the message.
+@pytest.mark.parametrize("bad_code", [
+    "99999",   # well outside any plausible range
+    "83106",   # IN the 83101..83115 range, but NOT in SRS valid set
+    "83110",   # also inside the 83101-83115 range, but not valid in the SRS list
+    "83100",   # one below the lowest valid code
+])
+def test_programs_parser_rejects_unknown_code(tmp_path, bad_code):
+    # Arrange — a single invalid code.
+    fixture = tmp_path / "programs_bad.txt"
+    fixture.write_text(bad_code + "\n", encoding="utf-8")
+
+    # Act + Assert — the error message must reference the bad code.
+    with pytest.raises(ValueError) as excinfo:
+        ProgramsFileParser().parse(str(fixture))
+    assert bad_code in str(excinfo.value)
+
+
 # ---------------------------------------------------------------------------
-# TC-PRS-008c — Test that an empty programs file is handled properly.
+# TC-PRS-020 — Test that an empty programs file is handled properly.
 # ---------------------------------------------------------------------------
 # If the programs file is completely empty, the system must not crash.
 # It should safely reject it or return an empty list.
@@ -398,21 +420,3 @@ def test_programs_parser_rejects_empty_file(tmp_path):
 
     # If it didn't raise an error, it must return an empty list.
     assert entries == [] or len(entries) == 0
-
-    
-# TC-PRS-009: Check that an invalid program code raises an error with the bad code in the message.
-@pytest.mark.parametrize("bad_code", [
-    "99999",   # well outside any plausible range
-    "83106",   # IN the 83101..83115 range, but NOT in SRS valid set
-    "83110",   # also inside the 83101-83115 range, but not valid in the SRS list
-    "83100",   # one below the lowest valid code
-])
-def test_programs_parser_rejects_unknown_code(tmp_path, bad_code):
-    # Arrange — a single invalid code.
-    fixture = tmp_path / "programs_bad.txt"
-    fixture.write_text(bad_code + "\n", encoding="utf-8")
-
-    # Act + Assert — the error message must reference the bad code.
-    with pytest.raises(ValueError) as excinfo:
-        ProgramsFileParser().parse(str(fixture))
-    assert bad_code in str(excinfo.value)

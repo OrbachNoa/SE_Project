@@ -48,7 +48,7 @@ def test_course_has_exam_returns_false_for_attendance_eval(make_course):
 
 
 # ---------------------------------------------------------------------------
-# ExamPeriod.getAvailableDates() — TC-DOM-004..006
+# ExamPeriod.getAvailableDates() — TC-DOM-004..007
 # ---------------------------------------------------------------------------
 
 # TC-DOM-004: For a period with a normal date range and some excluded
@@ -102,7 +102,7 @@ def test_get_available_dates_returns_both_days_for_two_day_period(make_period):
     assert dates == [date(2026, 6, 10), date(2026, 6, 11)]
 
 
-# TC-DOM-006b: An ExamPeriod whose startDate is NOT strictly less than its endDate must be rejected at construction.
+# TC-DOM-007: An ExamPeriod whose startDate is NOT strictly less than its endDate must be rejected at construction.
 # This covers both start == end and start > end
 @pytest.mark.parametrize("start,end", [
     (date(2026, 6, 10), date(2026, 6, 10)),  # start == end (invalid)
@@ -121,10 +121,10 @@ def test_exam_period_rejects_non_strict_start_before_end(start, end):
 
 
 # ---------------------------------------------------------------------------
-# ExamSchedule.addAssignment() and getByDate() — TC-DOM-007..009
+# ExamSchedule.addAssignment() and getByDate() — TC-DOM-008..010
 # ---------------------------------------------------------------------------
 
-# TC-DOM-007: Check that addAssignment() adds an assignment to the schedule.
+# TC-DOM-008: Check that addAssignment() adds an assignment to the schedule.
 def test_add_assignment_stores_assignment(empty_schedule, make_assignment):
     # Arrange
     schedule = empty_schedule
@@ -136,7 +136,7 @@ def test_add_assignment_stores_assignment(empty_schedule, make_assignment):
     assert schedule.assignments[0] is assignment
 
 
-# TC-DOM-008: getByDate() returns only the assignments whose date matches the requested date.
+# TC-DOM-009: getByDate() returns only the assignments whose date matches the requested date.
 def test_get_by_date_returns_only_matching_assignments(
     empty_schedule, make_course, make_assignment,
 ):
@@ -157,7 +157,7 @@ def test_get_by_date_returns_only_matching_assignments(
     assert all(a.date == target for a in result)
 
 
-# TC-DOM-009: getByDate() on an empty schedule must return an empty list
+# TC-DOM-010: getByDate() on an empty schedule must return an empty list
 def test_get_by_date_on_empty_schedule_returns_empty_list(empty_schedule):
     # Arrange + Act
     result = empty_schedule.getByDate(date(2026, 6, 1))
@@ -166,10 +166,10 @@ def test_get_by_date_on_empty_schedule_returns_empty_list(empty_schedule):
 
 
 # ---------------------------------------------------------------------------
-# SCRUM-18: Enum / domain-value validation
+# TC-DOM-011..014
 # ---------------------------------------------------------------------------
 
-# SCRUM-18 (Year domain): A ProgramEntry must accept years 1..4 inclusive.
+# TC-DOM-011: A ProgramEntry must accept years 1..4 inclusive.
 @pytest.mark.parametrize("good_year", [1, 2, 3, 4])
 def test_program_entry_accepts_year_in_range(good_year, make_program_entry):
     # Arrange + Act — should not raise.
@@ -179,7 +179,7 @@ def test_program_entry_accepts_year_in_range(good_year, make_program_entry):
     assert entry.year == good_year
 
 
-# SCRUM-18 (Year domain): Values outside {1,2,3,4} must be rejected.
+# TC-DOM-012: Values outside {1,2,3,4} must be rejected.
 @pytest.mark.parametrize("bad_year", [0, 5, -1, 10])
 def test_program_entry_rejects_year_out_of_range(bad_year, make_program_entry):
     # Arrange + Act + Assert
@@ -187,9 +187,8 @@ def test_program_entry_rejects_year_out_of_range(bad_year, make_program_entry):
         make_program_entry(year=bad_year)
 
 
-# SCRUM-18 (Program code domain): A ProgramEntry program ID must be a
-# 5-digit string. Strings of other lengths or with non-digits must be
-# rejected.
+# TC-DOM-013: A ProgramEntry program ID must be a
+# 5-digit string. Strings of other lengths or with non-digits must be rejected.
 @pytest.mark.parametrize("bad_code", [
     "8310",      # too short
     "831011",    # too long
@@ -202,7 +201,7 @@ def test_program_entry_rejects_invalid_program_id(bad_code, make_program_entry):
         make_program_entry(program_id=bad_code)
 
 
-# SCRUM-18 (Semester domain): Only FALL, SPRI, SUMM exist; nothing else.
+# TC-DOM-014: Only FALL, SPRI, SUMM exist; nothing else.
 def test_semester_enum_has_exactly_three_members():
     # Arrange + Act
     names = {m.name for m in Semester}
@@ -211,7 +210,7 @@ def test_semester_enum_has_exactly_three_members():
     assert names == {"FALL", "SPRI", "SUMM"}
 
 
-# SCRUM-18 (Moed domain): Only ALEPH, BET, GIMEL exist.
+# TC-DOM-014: Only ALEPH, BET, GIMEL exist.
 def test_moed_enum_has_exactly_three_members():
     # Arrange + Act
     names = {m.name for m in Moed}
@@ -220,7 +219,7 @@ def test_moed_enum_has_exactly_three_members():
     assert names == {"ALEPH", "BET", "GIMEL"}
 
 
-# SCRUM-18 (Evaluation domain): EvalType must contain exactly EXAM,
+# TC-DOM-014: EvalType must contain exactly EXAM,
 # PROJECT, ATTENDANCE — and no others.
 def test_eval_type_enum_has_exactly_three_members():
     # Arrange + Act

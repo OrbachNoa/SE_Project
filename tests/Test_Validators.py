@@ -42,7 +42,7 @@ def test_max_programs_validator_accepts_one(make_program_entry):
 
 
 # TC-VAL-004: 0 programs (empty selection) must be rejected.
-# The systemcannot schedule anything with no programs selected.
+# The system cannot schedule anything with no programs selected.
 def test_max_programs_validator_rejects_zero():
     # Arrange — empty selection.
     selected = []

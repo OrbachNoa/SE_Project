@@ -108,12 +108,7 @@ def test_program_year_checker_no_conflict_between_two_electives(
     assert result is False
 
 
-# Rule 3 (Scope — dates, not hours): the checker compares date objects
-# only and ignores any hour component. This test asserts that two
-# assignments on the same calendar date conflict, regardless of what
-# "time" might be attached to them. (Date-only comparison is enforced
-# by the use of plain `date` objects in the domain — this test simply
-# fixes that contract.)
+# TC-CHK-005 — ProgramYearChecker: compares by date only
 def test_program_year_checker_uses_date_only_not_time(
     make_course, make_program_entry, make_assignment, empty_schedule,
 ):
@@ -142,10 +137,10 @@ def test_program_year_checker_uses_date_only_not_time(
 
 
 # ===========================================================================
-# ExcludedDatesChecker — Rule 4 from SCRUM-18.
+# ExcludedDatesChecker — TC-CHK-006..007.
 # ===========================================================================
 
-# TC-CHK-005: Check that an exam cannot be scheduled on an excluded date.
+# TC-CHK-006: Check that an exam cannot be scheduled on an excluded date.
 def test_excluded_dates_checker_rejects_excluded_date(
     make_course, make_period, make_assignment, empty_schedule,
 ):
@@ -168,7 +163,7 @@ def test_excluded_dates_checker_rejects_excluded_date(
     assert result is True
 
 
-# TC-CHK-006: an assignment on a date NOT in the excluded list is OK.
+# TC-CHK-007: an assignment on a date NOT in the excluded list is OK.
 def test_excluded_dates_checker_accepts_non_excluded_date(
     make_course, make_period, make_assignment, empty_schedule,
 ):
@@ -190,10 +185,10 @@ def test_excluded_dates_checker_accepts_non_excluded_date(
 
 
 # ===========================================================================
-# ExamPeriodBoundaryChecker — Rule 5 from SCRUM-18.
+# ExamPeriodBoundaryChecker — TC-CHK-008..011
 # ===========================================================================
 
-# TC-CHK-007: Check that an exam before the exam period start date is marked as a conflict.
+# TC-CHK-008: Check that an exam before the exam period start date is marked as a conflict.
 def test_period_boundary_checker_rejects_date_before_start(
     make_course, make_period, make_assignment, empty_schedule,
 ):
@@ -211,7 +206,7 @@ def test_period_boundary_checker_rejects_date_before_start(
     assert result is True
 
 
-# TC-CHK-008: Check that a date after the exam period ends is rejected.
+# TC-CHK-009: Check that a date after the exam period ends is rejected.
 def test_period_boundary_checker_rejects_date_after_end(
     make_course, make_period, make_assignment, empty_schedule,
 ):
@@ -228,7 +223,7 @@ def test_period_boundary_checker_rejects_date_after_end(
     assert result is True
 
 
-# TC-CHK-009: The startDate itself is inclusive — a candidate exactly on the start of the period is NOT a conflict.
+# TC-CHK-010: The startDate itself is inclusive — a candidate exactly on the start of the period is NOT a conflict.
 def test_period_boundary_checker_accepts_start_date_inclusive(
     make_course, make_period, make_assignment, empty_schedule,
 ):
@@ -245,7 +240,7 @@ def test_period_boundary_checker_accepts_start_date_inclusive(
     assert result is False
 
 
-# TC-CHK-009b: The endDate itself is inclusive — a candidate exactly on
+# TC-CHK-011: The endDate itself is inclusive — a candidate exactly on
 # the end of the period is NOT a conflict.
 def test_period_boundary_checker_accepts_end_date_inclusive(
     make_course, make_period, make_assignment, empty_schedule,

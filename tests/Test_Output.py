@@ -97,7 +97,7 @@ def test_write_creates_file_at_specified_path(
 
 
 # ---------------------------------------------------------------------------
-# SCRUM-18 (Output sorting): Test that exams are sorted by date.
+# TC-OUT-005 — formatSchedule sorts assignments by date within section.
 # ---------------------------------------------------------------------------
 
 # Inside each section, the dates should appear in order (earliest first).
@@ -124,7 +124,7 @@ def test_format_schedule_sorts_assignments_by_date_within_section(
 
 
 # ---------------------------------------------------------------------------
-# SCRUM-18 (Content): Test that the instructor's name is in the output.
+# TC-OUT-006 — formatSchedule includes instructor name.
 # ---------------------------------------------------------------------------
 
 
