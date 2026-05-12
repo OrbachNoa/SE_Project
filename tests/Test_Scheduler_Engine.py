@@ -2,7 +2,7 @@ from datetime import date
 from unittest.mock import MagicMock
 import pytest
 
-from exam_scheduler.enums import EvalType, Semester, Moed, Requirement
+from src.models.enums import EvalType, Semester, Moed, Requirement
 from exam_scheduler.checkers import (
     ProgramYearConflictChecker,
     ExcludedDatesChecker,
