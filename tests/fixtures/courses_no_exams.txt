@@ -1,0 +1,17 @@
+Software Project
+83010
+Dr. Goldberg
+83101,3,FALL,Obligatory
+Project
+$$$$
+Engineering Workshop
+83011
+Dr. Rabinovich
+83101,3,FALL,Elective
+Project
+$$$$
+Industrial Seminar
+83012
+Dr. Hadad
+83101,4,FALL,Elective
+Attendance
