@@ -5,40 +5,34 @@ from ..models.course import Course, ProgramEntry
 """
 This is the course parser.
 """
-class CourseParser(FileParser):
+class CoursesFileParser(FileParser):
 
     """
     Parse the course file and return a list of course objects.
     """
     def parse(self, file_path):
-        # List to store course objects
-        courses = []
         # Open the file
         with open(file_path, "r", encoding="utf-8") as file:
-            current_record = []
-            # Go throught every line in the file
-            for line in file:
-                # Check if the line is a separator
-                if self._validate_separator(line):
-                    # If the line is a separator and there is a current record, parse it
-                    if current_record:
-                        course = self._parse_course("\n".join(current_record))
-                        if course is not None:
-                            self._validate_course(course)
-                            courses.append(course)
-                        current_record = []
-                # otherwise, add it to the current record
-                else:
-                    if line.strip():
-                        current_record.append(line.strip())
+            content = file.read()
+        
+        # Validate separator
+        FileParser.validateSeparator(content)
             
-            # Process the very last record
-            if current_record:
-                course = self._parse_course("\n".join(current_record))
+        # List to store course objects
+        courses = []
+        records = content.split("$$$$")
+        # Iterate over all records
+        for record in records:
+            # If the record is not empty
+            if record.strip():
+                course = self._parse_course(record)
+                # Check if the course is not None
                 if course is not None:
+                    # Validate the course
                     self._validate_course(course)
+                    # Add the course to the list
                     courses.append(course)
-
+        # Return the list of courses
         return courses
 
     def _validate_course(self, course):
@@ -99,10 +93,7 @@ class CourseParser(FileParser):
             # A valid program entry must have 4 parts
             if len(parts) == 4:
                 # Get the program id
-                try:
-                    program_id = int(parts[0])
-                except ValueError:
-                    program_id = parts[0]
+                program_id = parts[0].strip()
                 # Get the year
                 try:
                     year = int(parts[1])

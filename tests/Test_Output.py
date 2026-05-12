@@ -2,7 +2,7 @@ from datetime import date
 import os
 import pytest
 
-from exam_scheduler.enums import EvalType, Semester, Moed, Requirement
+from src.models.enums import EvalType, Semester, Moed, Requirement
 from exam_scheduler.domain import ExamSchedule
 from exam_scheduler.output import TextFileWriter
 

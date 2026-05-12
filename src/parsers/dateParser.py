@@ -7,41 +7,31 @@ import re
 """
 Parser for exam periods
 """
-class DateParser(FileParser):
+class ExamPeriodsFileParser(FileParser):
 
     def parse(self, file_path):
         """
         Parse the file and return the data.
         """
+        with open(file_path, "r", encoding="utf-8") as file:
+            content = file.read()
+
+        # Validate separator
+        FileParser.validateSeparator(content)
+        
         # Init list to store exam periods
         dates = []
-        
-        # Open the file and parse it
-        with open(file_path, "r", encoding="utf-8") as file:
-            current_record = []
-            # Go through each line in the file
-            for line in file:
-                # Check if the line is a separator
-                if self._validate_separator(line):
-                    # If the line is a separator and there is a current record, parse it
-                    if current_record:
-                        period = self._parse_date("\n".join(current_record))
-                        if period is not None:
-                            self._validate_exam_period(period)
-                            dates.append(period)
-                        current_record = []
-                # Otherwise, add the line to the current record
-                else:
-                    if line.strip():
-                        current_record.append(line.strip())
-            
-            # Process the very last record
-            if current_record:
-                period = self._parse_date("\n".join(current_record))
+        records = content.split("$$$$")
+        # Iterate over all records
+        for record in records:
+            # If the record is not empty
+            if record.strip():
+                period = self._parse_date(record)
+                # Check if the period is not None
                 if period is not None:
                     self._validate_exam_period(period)
                     dates.append(period)
-        
+                    
         # Return the list of exam periods
         return dates
 
@@ -49,25 +39,19 @@ class DateParser(FileParser):
         """
         Validates the exam period.
         """
-        # check that the periods are rightly formatted DD-MM-YYYY
-        try:
-            start_date = datetime.strptime(period.startDate, "%d-%m-%Y")
-        except ValueError:
-            raise ValueError(f"Invalid start date format: {period.startDate}")
-        try:
-            end_date = datetime.strptime(period.endDate, "%d-%m-%Y")
-        except ValueError:
-            raise ValueError(f"Invalid end date format: {period.endDate}")
-        
-        # check that start date is before end date
-        if start_date > end_date:
+        # Check if dates are valid strings
+        if isinstance(period.startDate, str) or isinstance(period.endDate, str):
+            raise ValueError("Dates must be valid DD-MM-YYYY formats.")
+            
+        # Check that start date is before end date
+        if period.startDate > period.endDate:
             raise ValueError(f"Start date is after end date")
         
-        # check that moed is valid
+        # Check that moed is valid
         if period.moed not in Moed:
             raise ValueError(f"Invalid moed: {period.moed}")
-        
-        # check that semester is valid
+            
+        # Check that semester is valid
         if period.semester not in Semester:
             raise ValueError(f"Invalid semester: {period.semester}")
 
@@ -100,20 +84,34 @@ class DateParser(FileParser):
         except ValueError:
             moed = moed_str
             
-        # Parse start and end dates into variables in the format "29-01-2026"
+        # Parse start and end dates into date objects
         dates_parts = [p.strip() for p in lines[1].split(',')]
         if len(dates_parts) != 2:
             raise ValueError(f"Invalid Dates line: {lines[1]}")
             
-        start_date = dates_parts[0]
-        end_date = dates_parts[1]
+        try:
+            start_date = datetime.strptime(dates_parts[0], "%d-%m-%Y").date()
+            end_date = datetime.strptime(dates_parts[1], "%d-%m-%Y").date()
+        except ValueError:
+            start_date = dates_parts[0]
+            end_date = dates_parts[1]
         
-        # Add all remaining lines to excluded dates
-        excluded_dates = []
+        # Add all remaining lines to excluded dates, expanding ranges
+        excluded_dates = set()
+        from datetime import timedelta
         for i in range(2, len(lines)):
-            # Extract only the dates (DD-MM-YYYY) and ignore the text reasons
             found_dates = re.findall(r"\d{2}-\d{2}-\d{4}", lines[i])
-            excluded_dates.extend(found_dates)
+            if len(found_dates) == 1:
+                d = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
+                excluded_dates.add(d)
+            elif len(found_dates) >= 2:
+                # Handle range
+                d1 = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
+                d2 = datetime.strptime(found_dates[1], "%d-%m-%Y").date()
+                curr = d1
+                while curr <= d2:
+                    excluded_dates.add(curr)
+                    curr += timedelta(days=1)
             
         # Return the exam period
-        return ExamPeriod(semester, moed, start_date, end_date, excluded_dates)
+        return ExamPeriod(semester, moed, start_date, end_date, list(excluded_dates))

@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 import pytest
 
-from exam_scheduler.validators import (
+from src.validators import (
     MaxProgramsValidator,
     ProgramExistenceValidator,
 )

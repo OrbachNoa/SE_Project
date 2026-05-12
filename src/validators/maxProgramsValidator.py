@@ -4,7 +4,9 @@ class MaxProgramsValidator(InputValidator):
 
     MAX_PROGRAMS = 5
 
-    def validate(self, selected_programs):
-
+    def validate(self, selected_programs, master=None):
+        if not selected_programs:
+            return False
         if len(selected_programs) > self.MAX_PROGRAMS:
-            raise ValueError(f"Maximum {self.MAX_PROGRAMS} programs allowed")
+            return False
+        return True

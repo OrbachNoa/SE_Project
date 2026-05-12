@@ -1,10 +1,11 @@
 from .fileParser import FileParser
 from typing import override
+from ..models.course import ProgramEntry
 
 """
 This is the program parser class.
 """
-class ProgramParser(FileParser):
+class ProgramsFileParser(FileParser):
 
     def parse(self, file_path):
         """
@@ -24,21 +25,19 @@ class ProgramParser(FileParser):
             
             # Iterate over all parts
             for part in parts:
-                # If the part is not empty
                 if part:
-                    # Try to convert the part to an integer
-                    try:
-                        prog_id = int(part)
-                    # If the part is not an integer, raise a ValueError
-                    except ValueError:
-                        raise ValueError(f"Invalid program ID format: {part}")
-                        
-                    # Check if the program ID is exactly 5 digits
-                    if len(str(prog_id)) != 5:
+                    # Keep as string for tests
+                    prog_id = part
+                    
+                    # Check if the program id is 5 digits
+                    if len(prog_id) != 5 or not prog_id.isdigit():
                         raise ValueError(f"Program ID must be 5 digits: {prog_id}")
                     
-                    programs.append(prog_id)
-                        
+                    # Add the program to the list in ProgramEntry object
+                    # For tests, the other values are default
+                    programs.append(ProgramEntry(program_id=prog_id, year=0, semester=None, requirement=None))
+        
+        # Return the list of programs
         return programs
 
     @override

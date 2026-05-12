@@ -13,8 +13,9 @@ class FileParser(ABC):
         """
         pass
 
-    def _validate_separator(self, line):
-        """
-        Validate the file separator.
-        """
-        return line.strip() == "$$$$"
+    @staticmethod
+    def validateSeparator(content):
+        """Validate the file separator."""
+        if "$$$$" not in content:
+            raise ValueError("Separator $$$$ not found.")
+        return True
