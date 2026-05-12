@@ -1,7 +1,7 @@
 from datetime import date
 import pytest
 
-from exam_scheduler.parsers import (
+from src.parsers import (
     FileParser,
     CoursesFileParser,
     ExamPeriodsFileParser,
