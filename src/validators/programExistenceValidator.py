@@ -10,7 +10,7 @@ class ProgramExistenceValidator(InputValidator):
 
         for program in selected_programs:
 
-            if program not in programs_data.values():
+            if program not in programs_data.keys():
                 raise ValueError(
                     f"Program does not exist: {program}"
                 )   
