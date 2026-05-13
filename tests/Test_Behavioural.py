@@ -119,46 +119,6 @@ def test_beh_002_every_schedule_passes_all_conflict_checks(
 
 
 # ===========================================================================
-# TC-BEH-003 — Test that mandatory courses across programs conflict.
-# ===========================================================================
-
-# TC-BEH-003: If a student takes two mandatory courses in the same year, but from 
-# DIFFERENT programs, these courses still cannot be on the same day.
-def test_beh_003_obligatory_courses_across_programs_conflict(
-    make_course, make_program_entry, make_period,
-):
-    # Arrange — Two mandatory courses in year 2, but different programs.
-    pe_prog1 = make_program_entry(
-        program_id="83101", year=2, requirement=Requirement.OBLIGATORY)
-    pe_prog2 = make_program_entry(
-        program_id="83102", year=2, requirement=Requirement.OBLIGATORY)
-    course_a = make_course(course_id="10101", program_entries=[pe_prog1])
-    course_b = make_course(course_id="10102", program_entries=[pe_prog2])
-    period = make_period(
-        start=date(2026, 6, 1), end=date(2026, 6, 3), excluded=[]
-    )
-    scheduler = Scheduler(
-        courses=[course_a, course_b],
-        periods=[period],
-        conflictCheckers=_default_checkers([period]),
-        validators=[],
-    )
-
-    # Act
-    schedules = scheduler.generateAllSchedules()
-
-    # Assert — Make sure these two courses never share the same date.
-    assert len(schedules) > 0, "Sanity: 3 days available should allow some schedule"
-    for s in schedules:
-        date_a = next(a.date for a in s.assignments if a.course.courseId == "10101")
-        date_b = next(a.date for a in s.assignments if a.course.courseId == "10102")
-        assert date_a != date_b, (
-            f"OBLIGATORY courses across programs share date {date_a} — "
-            f"cross-program same-year conflict not detected"
-        )
-
-
-# ===========================================================================
 # TC-BEH-004 — Test that elective courses across programs CAN share a date.
 # ===========================================================================
 

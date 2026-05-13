@@ -10,16 +10,16 @@ class ExcludedDatesChecker(IConflictChecker):
         self._periods = periods
 
     def check(self, assignment, schedule) -> bool:
-        # Step 1: Look at all the periods we have.
+        # Look at all the periods we have.
         for p in self._periods:
             
-            # Step 2: Find the period that matches the semester and moed of our new exam.
+            # Find the period that matches the semester and moed of our new exam.
             if p.moed == assignment.moed and p.semester == assignment.semester:
                 
-                # Step 3: Check if the new exam date is inside the 'excludedDates' list.
+                # Check if the new exam date is inside the 'excludedDates' list.
                 if assignment.date in p.excludedDates:
                     # The date is not allowed. Return True (this is a conflict).
                     return True
                     
-        # Step 4: The date is allowed. Return False (no conflict).
+        # The date is allowed. Return False (no conflict).
         return False
