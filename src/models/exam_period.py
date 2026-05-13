@@ -1,5 +1,6 @@
 from typing import List
 from src.models.enums import Semester, Moed
+from datetime import timedelta
 
 class ExamPeriod:
     """
@@ -15,6 +16,14 @@ class ExamPeriod:
     def getAvailableDates(self) -> List[str]:
         """
         Calculates and returns the list of dates available for exams.
-        To be implemented.
         """
-        pass
+        if self.startDate >= self.endDate:
+            raise ValueError("start date must be strictly less than end date")
+
+        dates = []
+        curr = self.startDate
+        while curr <= self.endDate:
+            if curr not in self.excludedDates:
+                dates.append(curr)
+            curr += timedelta(days=1)
+        return dates

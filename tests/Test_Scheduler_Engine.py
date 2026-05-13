@@ -3,12 +3,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.logic.scheduler.checkers import (
-    ProgramYearConflictChecker,
-    ExcludedDatesChecker,
-    ExamPeriodBoundaryChecker,
-)
-from src.logic.scheduler.scheduler import Scheduler
+from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.ExcludedDatesChecker import ExcludedDatesChecker
+from src.logic.ExamPeriodBoundaryChecker import ExamPeriodBoundaryChecker
+from src.logic.Scheduler import Scheduler
 
 
 # Helper: Creates the default checkers and gives them the exam dates they need.
