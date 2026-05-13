@@ -1,7 +1,7 @@
 import os
 from typing import List
-from writers.outputWriter import OutputWriter
-from models.exam_schedule import ExamSchedule
+from src.writers.outputWriter import OutputWriter
+from src.models.domain import ExamSchedule, ExamAssignment
 
 class TextFileWriter(OutputWriter):
     """

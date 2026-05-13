@@ -1,10 +1,8 @@
 from unittest.mock import MagicMock
 import pytest
 
-from src.validators import (
-    MaxProgramsValidator,
-    ProgramExistenceValidator,
-)
+from src.validators.maxProgramsValidator import MaxProgramsValidator
+from src.validators.programExistenceValidator import ProgramExistenceValidator
 
 
 # ---------------------------------------------------------------------------
