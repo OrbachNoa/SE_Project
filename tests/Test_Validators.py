@@ -1,10 +1,8 @@
 from unittest.mock import MagicMock
 import pytest
 
-from src.validators import (
-    MaxProgramsValidator,
-    ProgramExistenceValidator,
-)
+from src.validators.maxProgramsValidator import MaxProgramsValidator
+from src.validators.programExistenceValidator import ProgramExistenceValidator
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +118,7 @@ def test_validator_failure_prevents_schedule_generation(make_program_entry):
 
     # We import the orchestration entry point lazily so this test can
     # still load even if the module is renamed during development.
-    from exam_scheduler.scheduler import run_pipeline  # type: ignore
+    from src.main import run_pipeline  # type: ignore
     selected = [make_program_entry(program_id="83101")]
     # Act — run the pipeline with the failing validator injected.
     try:

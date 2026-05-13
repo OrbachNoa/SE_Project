@@ -1,5 +1,5 @@
 import argparse
-from fileValidator import validate_all_files
+from src.validators.fileValidator import validate_all_files
 
 def main():
     # Use argparse to get files from user and set them as arguments for the program

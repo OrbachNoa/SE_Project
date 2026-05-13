@@ -11,7 +11,7 @@ import pytest
 # Imports for the system
 # ---------------------------------------------------------------------------
 from src.models.enums import EvalType, Semester, Moed, Requirement
-from exam_scheduler.domain import (
+from src.models.domain import (
     Course,
     ProgramEntry,
     ExamPeriod,
@@ -34,7 +34,7 @@ def make_program_entry():
               semester=Semester.FALL,
               requirement=Requirement.OBLIGATORY):
         return ProgramEntry(
-            programId=program_id,
+            program_id=program_id,
             year=year,
             semester=semester,
             requirement=requirement,
@@ -55,11 +55,11 @@ def make_course(make_program_entry):
         if program_entries is None:
             program_entries = [make_program_entry()]
         return Course(
-            courseId=course_id,
+            course_id=course_id,
             name=name,
             instructor=instructor,
             evaluation=evaluation,
-            programEntries=program_entries,
+            program_entries=program_entries,
         )
     return _make
 
@@ -76,9 +76,9 @@ def make_period():
         return ExamPeriod(
             semester=semester,
             moed=moed,
-            startDate=start,
-            endDate=end,
-            excludedDates=excluded or [],
+            start_date=start,
+            end_date=end,
+            excluded_dates=excluded or [],
         )
     return _make
 
