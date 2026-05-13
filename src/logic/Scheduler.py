@@ -33,7 +33,7 @@ class Scheduler:
 
     def filterCourses(self) -> list:
         """
-        Step 1 of the algorithm: Find only the courses we actually need to schedule.
+        Find only the courses we actually need to schedule.
         """
         relevant = []
         selected_set = set(self._selected_programs)
@@ -78,7 +78,7 @@ class Scheduler:
 
     def _buildSlots(self) -> List[Slot]:
         """
-        Step 2 of the algorithm: Build a list of 'Slots' (tasks) to do.
+        Build a list of 'Slots' (tasks) to do.
         """
         relevant_courses = self.filterCourses()
         selected_set = set(self._selected_programs)
@@ -124,7 +124,7 @@ class Scheduler:
 
     def _backtrack(self, index: int, slots: List[Slot], schedule: ExamSchedule, results: list) -> None:
         """
-        Step 3 of the algorithm: The Backtracking engine.
+        The Backtracking.
         It tries to put each course in a date, one by one.
         If it gets stuck, it goes back and tries a different date.
         """
