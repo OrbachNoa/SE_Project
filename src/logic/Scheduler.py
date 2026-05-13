@@ -234,7 +234,7 @@ class Scheduler:
             )
 
             # Run all conflict checkers (short-circuits on first failure)
-            if all(checker.check(assignment, schedule) for checker in self._checkers):
+            if not any(checker.check(assignment, schedule) for checker in self._checkers):
                 schedule.addAssignment(assignment)
                 self._backtrack(index + 1, slots, schedule, results)
                 schedule.removeAssignment(assignment)   # backtrack
