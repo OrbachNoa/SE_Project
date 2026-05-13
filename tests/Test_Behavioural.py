@@ -2,8 +2,8 @@ from datetime import date
 import pytest
 
 from src.models.enums import EvalType, Semester, Moed, Requirement
-from exam_scheduler.scheduler import Scheduler
-from exam_scheduler.checkers import (
+from src.logic.scheduler.scheduler import Scheduler
+from src.logic.scheduler.checkers import (
     ProgramYearConflictChecker,
     ExcludedDatesChecker,
     ExamPeriodBoundaryChecker,
@@ -102,7 +102,8 @@ def test_beh_002_every_schedule_passes_all_conflict_checks(
 
     # Assert — Go through every exam in every schedule and ask the 
     # checkers if there is a conflict. None of them should fail.
-    from exam_scheduler.domain import ExamSchedule  # local import
+    # Local import
+    from src.models.domain import ExamSchedule
     assert len(schedules) > 0, "Sanity: scheduler should produce results"
     for s in schedules:
         partial = ExamSchedule()

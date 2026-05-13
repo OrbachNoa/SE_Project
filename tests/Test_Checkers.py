@@ -2,7 +2,7 @@ from datetime import date
 import pytest
 
 from src.models.enums import EvalType, Semester, Moed, Requirement
-from exam_scheduler.checkers import (
+from src.logic.scheduler.checkers import (
     ProgramYearConflictChecker,
     ExcludedDatesChecker,
     ExamPeriodBoundaryChecker,

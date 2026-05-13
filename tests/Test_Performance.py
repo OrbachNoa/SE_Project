@@ -3,8 +3,8 @@ import time
 import pytest
 
 from src.models.enums import EvalType, Semester, Moed, Requirement
-from exam_scheduler.scheduler import Scheduler
-from exam_scheduler.checkers import (
+from src.logic.scheduler.scheduler import Scheduler
+from src.logic.scheduler.checkers import (
     ProgramYearConflictChecker,
     ExcludedDatesChecker,
     ExamPeriodBoundaryChecker,

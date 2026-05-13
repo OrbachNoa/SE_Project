@@ -3,8 +3,8 @@ import os
 import pytest
 
 from src.models.enums import EvalType, Semester, Moed, Requirement
-from exam_scheduler.domain import ExamSchedule
-from exam_scheduler.output import TextFileWriter
+from src.models.domain import ExamSchedule
+from src.writers.textFileWriter import TextFileWriter
 
 
 # ---------------------------------------------------------------------------

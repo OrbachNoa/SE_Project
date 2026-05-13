@@ -2,7 +2,7 @@ from datetime import date
 import pytest
 
 from src.models.enums import EvalType, Semester, Moed, Requirement
-from exam_scheduler.domain import (
+from src.models.domain import (
     Course,
     ProgramEntry,
     ExamPeriod,
@@ -114,9 +114,9 @@ def test_exam_period_rejects_non_strict_start_before_end(start, end):
         ExamPeriod(
             semester=Semester.FALL,
             moed=Moed.ALEPH,
-            startDate=start,
-            endDate=end,
-            excludedDates=[],
+            start_date=start,
+            end_date=end,
+            excluded_dates=[],
         )
 
 

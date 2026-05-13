@@ -2,7 +2,7 @@ from pathlib import Path
 import pytest
 
 # Import the main pipeline function.
-from exam_scheduler.scheduler import run_pipeline  # type: ignore
+from src.main import run_pipeline
 
 
 # Set the path to the folder where the test files (fixtures) are located.
