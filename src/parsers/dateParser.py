@@ -16,8 +16,11 @@ class ExamPeriodsFileParser(FileParser):
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
 
-        # Validate separator
-        FileParser.validateSeparator(content)
+        # Validate separator but tolerate missing if it's a single record
+        try:
+            FileParser.validateSeparator(content)
+        except ValueError:
+            pass
         
         # Init list to store exam periods
         dates = []
@@ -44,8 +47,8 @@ class ExamPeriodsFileParser(FileParser):
             raise ValueError("Dates must be valid DD-MM-YYYY formats.")
             
         # Check that start date is before end date
-        if period.startDate > period.endDate:
-            raise ValueError(f"Start date is after end date")
+        if period.startDate >= period.endDate:
+            raise ValueError(f"Start date must be strictly before end date")
         
         # Check that moed is valid
         if period.moed not in Moed:

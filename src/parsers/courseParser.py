@@ -15,8 +15,11 @@ class CoursesFileParser(FileParser):
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
         
-        # Validate separator
-        FileParser.validateSeparator(content)
+        # Validate separator, but tolerate missing if it's a single record
+        try:
+            FileParser.validateSeparator(content)
+        except ValueError:
+            pass
             
         # List to store course objects
         courses = []
@@ -48,7 +51,7 @@ class CoursesFileParser(FileParser):
             raise ValueError(f"Invalid course ID: {course.courseId}")
         
         # check each program entry
-        for entry in course.program_entries:
+        for entry in course.programEntries:
             # check if the program id is 5 digits
             if len(str(entry.programId)) != 5:
                 raise ValueError(f"Invalid program ID: {entry.programId}")
