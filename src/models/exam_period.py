@@ -17,9 +17,6 @@ class ExamPeriod:
         """
         Calculates and returns the list of dates available for exams.
         """
-        if self.startDate >= self.endDate:
-            raise ValueError("start date must be strictly less than end date")
-
         dates = []
         curr = self.startDate
         while curr <= self.endDate:
