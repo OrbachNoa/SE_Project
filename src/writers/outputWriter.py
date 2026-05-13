@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from models.exam_schedule import ExamSchedule
+from src.models.domain import ExamSchedule
 
 # Abstract base class for all output writers as defined in UML
 class OutputWriter(ABC):
