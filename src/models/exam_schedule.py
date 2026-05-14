@@ -22,7 +22,7 @@ class ExamSchedule:
         self.assignments.append(a)
 
     # Returns the list of assignments.
-    def getByData(self, target_date) -> List[ExamAssignment]:
+    def getByDate(self, target_date) -> List[ExamAssignment]:
         return [a for a in self.assignments if a.date == target_date]
     
     # Removes an assignment from the schedule (for backtracking).

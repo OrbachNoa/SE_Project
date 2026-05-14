@@ -50,7 +50,7 @@ class TextFileWriter(OutputWriter):
         grouped_data = {}
         for a in assignments:
             # Extract semester and moed labels from their respective enums
-            semester_label = a.course.program_entries[0].semester.name if a.course.program_entries else "UNKNOWN"
+            semester_label = a.semester.name
             moed_label = a.moed.name
             
             key = (semester_label, moed_label)

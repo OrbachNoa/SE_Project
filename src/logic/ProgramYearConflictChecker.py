@@ -2,39 +2,57 @@ from src.logic.IConflictChecker import IConflictChecker
 from src.models.enums import Requirement
 
 class ProgramYearConflictChecker(IConflictChecker):
-    """
-    This class checks if two exams are in the same program and the same year.
-    If they are, and one of them is OBLIGATORY, they cannot be on the same date.
-    """
-    def check(self, assignment, schedule) -> bool:
-        # Get the course and the date of the new exam.
-        new_course = assignment.course
-        new_date = assignment.date
 
-        # Look at every exam that is already in the schedule.
-        for existing in schedule.assignments:
+    def __init__(self):
+        # מילון שישמור מי מתנגש עם מי. יאותחל רק אם תהיה קריאה ל-precompute
+        self._conflict_graph = None
+
+    def precompute_conflicts(self, courses: list) -> None:
+        """
+        בונה גרף התנגשויות מראש. רץ פעם אחת בלבד O(N^2)
+        וחוסך אלפי בנייות מילונים כפולות בתוך הרקורסיה.
+        """
+        self._conflict_graph = {c.courseId: set() for c in courses}
+
+        for i, c1 in enumerate(courses):
+            entries1 = {(e.programId, e.year): e for e in c1.programEntries}
+            for c2 in courses[i + 1:]:
+                entries2 = {(e.programId, e.year): e for e in c2.programEntries}
+                
+                # חיתוך מהיר של מפתחות
+                for key in entries1.keys() & entries2.keys():
+                    if (entries1[key].requirement == Requirement.OBLIGATORY or
+                            entries2[key].requirement == Requirement.OBLIGATORY):
+                        self._conflict_graph[c1.courseId].add(c2.courseId)
+                        self._conflict_graph[c2.courseId].add(c1.courseId)
+                        break
+
+    def check(self, assignment, schedule) -> bool:
+        new_date = assignment.date
+        new_course = assignment.course
+
+        # נתיב מהיר: אם עשינו חישוב מראש, הבדיקה היא שליפה ב-O(1)
+        if self._conflict_graph is not None:
+            new_id = new_course.courseId
+            conflicts = self._conflict_graph.get(new_id, set())
             
-            # If the dates are different, there is no problem. Skip to the next exam.
+            for existing in schedule.assignments:
+                if existing.date == new_date and existing.course.courseId in conflicts:
+                    return True
+            return False
+
+        # נתיב איטי (Fallback): אם מסיבה כלשהי לא קראו ל-precompute
+        # הלוגיקה המקורית והבטוחה רצה.
+        for existing in schedule.assignments:
             if existing.date != new_date:
                 continue
 
-            existing_course = existing.course
+            new_entries      = {(e.programId, e.year): e for e in new_course.programEntries}
+            existing_entries = {(e.programId, e.year): e for e in existing.course.programEntries}
 
-            # Create a dictionary to easily find the program and year of both courses.
-            new_entries = {(e.programId, e.year): e for e in new_course.programEntries}
-            existing_entries = {(e.programId, e.year): e for e in existing_course.programEntries}
-
-            # Find if the two courses share the exact same program and the exact same year.
-            shared_keys = set(new_entries.keys()) & set(existing_entries.keys())
-
-            # If they share a program and year, check if they are obligatory.
-            for key in shared_keys:
-                new_req = new_entries[key].requirement
-                existing_req = existing_entries[key].requirement
-                
-                # If at least one of them is OBLIGATORY, this is a conflict. Return True.
-                if new_req.name == "OBLIGATORY" or existing_req.name == "OBLIGATORY":
+            for key in new_entries.keys() & existing_entries.keys():
+                if (new_entries[key].requirement      == Requirement.OBLIGATORY or
+                        existing_entries[key].requirement == Requirement.OBLIGATORY):
                     return True
 
-        # If we checked everything and found no problems, return False.
         return False
