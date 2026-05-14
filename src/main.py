@@ -1,28 +1,73 @@
 import argparse
 import os
 from src.validators.fileValidator import validate_all_files
+from src.parsers.courseParser import CoursesFileParser
+from src.parsers.dateParser import ExamPeriodsFileParser
+from src.parsers.programParser import ProgramsFileParser
+from src.logic.Scheduler import Scheduler
+from src.writers.textFileWriter import TextFileWriter
+from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.ExcludedDatesChecker import ExcludedDatesChecker
+from src.logic.ExamPeriodBoundaryChecker import ExamPeriodBoundaryChecker
+from src.validators.maxProgramsValidator import MaxProgramsValidator
+from src.validators.programExistenceValidator import ProgramExistenceValidator
+
+def run_pipeline(courses_file=None, periods_file=None, programs_file=None, output_file=None,
+                 courses=None, periods=None, programs=None, validators=None,
+                 scheduler=None, output_writer=None, output_path=None):
+
+    # Parses raw input files into structured domain objects to prepare data for the scheduling logic.
+    if courses_file:
+        courses = CoursesFileParser().parse(courses_file)
+    if periods_file:
+        periods = ExamPeriodsFileParser().parse(periods_file)
+    if programs_file:
+        programs = ProgramsFileParser().parse(programs_file)
+
+    final_output_path = output_file or output_path
+
+    # Runs pre-check validators on selected programs to catch invalid inputs before starting the scheduling engine.
+    validators = validators or [MaxProgramsValidator(), ProgramExistenceValidator()]
+    for v in validators:
+        if not v.validate(programs):
+            raise ValueError(f"Validation failed for programs: {programs}")
+    # Initializes the Scheduler with specific rule-checkers to enforce constraints like date boundaries and excluded days.
+    if not scheduler:
+        checkers = [
+            ProgramYearConflictChecker(),
+            ExcludedDatesChecker(periods),
+            ExamPeriodBoundaryChecker(periods)
+        ]
+        scheduler = Scheduler(courses, periods, checkers, validators, selected_programs=programs)
+
+    # Triggers the core logic to calculate and return all possible valid exam schedules based on the constraints.
+    schedules = scheduler.generateAllSchedules()
+
+    # Delegates the results to an output writer to save the generated schedules into a physical file.
+    writer = output_writer or TextFileWriter()
+    if final_output_path:
+        writer.write(schedules, final_output_path)
+
+    return schedules
 
 def main():
-    # Use argparse to get files from user and set them as arguments for the program
-    parser = argparse.ArgumentParser(description="Upload the necessary files.")
-    parser.add_argument("courses", help="Path to Courses file.")
-    parser.add_argument("periods", help="Path to Exam Periods file.")
-    parser.add_argument("programs", help="Path to Selected Programs file.")
-    
-    # Parse arguments into matching variables
+    parser = argparse.ArgumentParser()
+    parser.add_argument("courses")
+    parser.add_argument("periods")
+    parser.add_argument("programs")
+    parser.add_argument("--output", default="output.txt")
+
     args = parser.parse_args()
-    
-    # Validate all files
-    validate_all_files(vars(args).values())
 
-    # Set default output path to the current user's Downloads folder
-    default_path = os.path.join(os.path.expanduser("~"), "Downloads", "exam_schedules.txt")
+    # Verifies that all provided file paths exist and are accessible to prevent runtime crashes during parsing.
+    validate_all_files([args.courses, args.periods, args.programs])
 
-    # Fetch output path from Environment Variable, or fallback to the default path
-    output_path = os.environ.get('EXAM_OUTPUT_PATH', default_path)
+    run_pipeline(
+        courses_file=args.courses,
+        periods_file=args.periods,
+        programs_file=args.programs,
+        output_file=args.output
+    )
 
-    print(f"File validation successful. Output will be saved to: {output_path}")
-    
-    
 if __name__ == "__main__":
     main()

@@ -3,12 +3,10 @@ import time
 import pytest
 
 from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.logic.scheduler.scheduler import Scheduler
-from src.logic.scheduler.checkers import (
-    ProgramYearConflictChecker,
-    ExcludedDatesChecker,
-    ExamPeriodBoundaryChecker,
-)
+from src.logic.Scheduler import Scheduler
+from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.ExcludedDatesChecker import ExcludedDatesChecker
+from src.logic.ExamPeriodBoundaryChecker import ExamPeriodBoundaryChecker
 
 
 # The maximum time allowed to run the algorithm (30 seconds).

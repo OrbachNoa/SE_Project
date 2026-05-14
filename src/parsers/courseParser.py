@@ -53,7 +53,7 @@ class CoursesFileParser(FileParser):
         # check each program entry
         for entry in course.programEntries:
             # check if the program id is 5 digits
-            if len(str(entry.programId)) != 5:
+            if len(entry.programId) != 5:
                 raise ValueError(f"Invalid program ID: {entry.programId}")
             # check if the semester is valid
             if entry.semester not in Semester:
@@ -98,10 +98,10 @@ class CoursesFileParser(FileParser):
                 # Get the program id
                 program_id = parts[0].strip()
                 # Get the year
-                try:
-                    year = int(parts[1])
-                except ValueError:
-                    year = parts[1]
+                year_str = parts[1].strip()
+                if not year_str.isdigit():
+                    raise ValueError(f"Year must be a digit, got: '{year_str}' in line: {lines[i]}")
+                year = int(year_str)
                 # Get the semester
                 semester_str = parts[2].upper()
                 try:

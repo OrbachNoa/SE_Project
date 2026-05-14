@@ -11,28 +11,21 @@ class ExamAssignment:
         self.date = date
         self.moed = moed
 
-
+# A collection of exam assignments forming a complete schedule.
 class ExamSchedule:
-    """
-    A collection of exam assignments forming a complete schedule.
-    """
     def __init__(self):
         # List to store all assignments 
         self.assignments: List[ExamAssignment] = []
 
+    # Adds an assignment to the schedule.
     def addAssignment(self, a: ExamAssignment) -> None:
-        """
-        Adds an assignment to the schedule. 
-        """
-        pass
+        self.assignments.append(a)
 
-    def getByData(self) -> List[ExamAssignment]:
-        """
-        Returns the list of assignments.
-        """
-        pass
+    # Returns the list of assignments.
+    def getByDate(self, target_date) -> List[ExamAssignment]:
+        return [a for a in self.assignments if a.date == target_date]
     
+    # Removes an assignment from the schedule (for backtracking).
     def removeAssignment(self, a: ExamAssignment) -> None:
-        """Removes an assignment from the schedule (for backtracking)."""
         if a in self.assignments:
             self.assignments.remove(a)
