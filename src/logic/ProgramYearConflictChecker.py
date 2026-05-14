@@ -4,14 +4,9 @@ from src.models.enums import Requirement
 class ProgramYearConflictChecker(IConflictChecker):
 
     def __init__(self):
-        # מילון שישמור מי מתנגש עם מי. יאותחל רק אם תהיה קריאה ל-precompute
         self._conflict_graph = None
 
     def precompute_conflicts(self, courses: list) -> None:
-        """
-        בונה גרף התנגשויות מראש. רץ פעם אחת בלבד O(N^2)
-        וחוסך אלפי בנייות מילונים כפולות בתוך הרקורסיה.
-        """
         self._conflict_graph = {c.courseId: set() for c in courses}
 
         for i, c1 in enumerate(courses):
@@ -19,7 +14,6 @@ class ProgramYearConflictChecker(IConflictChecker):
             for c2 in courses[i + 1:]:
                 entries2 = {(e.programId, e.year): e for e in c2.programEntries}
                 
-                # חיתוך מהיר של מפתחות
                 for key in entries1.keys() & entries2.keys():
                     if (entries1[key].requirement == Requirement.OBLIGATORY or
                             entries2[key].requirement == Requirement.OBLIGATORY):
@@ -31,7 +25,6 @@ class ProgramYearConflictChecker(IConflictChecker):
         new_date = assignment.date
         new_course = assignment.course
 
-        # נתיב מהיר: אם עשינו חישוב מראש, הבדיקה היא שליפה ב-O(1)
         if self._conflict_graph is not None:
             new_id = new_course.courseId
             conflicts = self._conflict_graph.get(new_id, set())
@@ -41,8 +34,6 @@ class ProgramYearConflictChecker(IConflictChecker):
                     return True
             return False
 
-        # נתיב איטי (Fallback): אם מסיבה כלשהי לא קראו ל-precompute
-        # הלוגיקה המקורית והבטוחה רצה.
         for existing in schedule.assignments:
             if existing.date != new_date:
                 continue
