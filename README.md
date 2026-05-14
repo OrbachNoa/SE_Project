@@ -50,7 +50,7 @@ pip install -r requirements.txt
 The system is operated via a Command Line Interface (CLI). You must provide paths to the three required input files: courses, exam periods, and selected programs.
 
 ```bash
-python src/main.py <courses_file.txt> <periods_file.txt> <programs_file.txt> [--output my_schedule.txt]
+python -m src.main <courses_file.txt> <periods_file.txt> <programs_file.txt> [--output my_schedule.txt]
 ```
 
 ### Arguments:
