@@ -1,6 +1,5 @@
 from .fileParser import FileParser
 from typing import override
-from ..models.course import ProgramEntry
 
 """
 This is the program parser class.
@@ -33,9 +32,8 @@ class ProgramsFileParser(FileParser):
                     if len(prog_id) != 5 or not prog_id.isdigit():
                         raise ValueError(f"Program ID must be 5 digits: {prog_id}")
                     
-                    # Add the program to the list in ProgramEntry object
-                    # For tests, the other values are default
-                    programs.append(ProgramEntry(program_id=prog_id, year=0, semester=None, requirement=None))
+                    # Add the program code to the list of selected programs
+                    programs.append(prog_id)
         
         # Return the list of programs
         return programs

@@ -1,12 +1,15 @@
 from typing import List
 from src.models.enums import Semester, Moed
-from datetime import timedelta
+from datetime import timedelta, date
 
 class ExamPeriod:
     """
     Represents the timeframe for an exam session.
     """
-    def __init__(self, semester: Semester, moed: Moed, start_date: str, end_date: str, excluded_dates: List[str]):
+    def __init__(self, semester: Semester, moed: Moed, start_date: date, end_date: date, excluded_dates: List[date]):
+        # Added a check for 'start_date' and 'end_date' to prevent creating an invalid object.
+        if start_date >= end_date:
+            raise ValueError("start date must be strictly less than end date")
         self.semester = semester
         self.moed = moed
         self.startDate = start_date

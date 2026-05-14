@@ -12,7 +12,7 @@ from src.validators.programExistenceValidator import ProgramExistenceValidator
 # TC-VAL-001: Exactly 5 programs (the upper boundary) must be accepted.
 def test_max_programs_validator_accepts_exactly_five(make_program_entry):
     # Arrange — 5 distinct program entries, codes 83101..83105.
-    selected = [make_program_entry(program_id=f"8310{i}") for i in range(1, 6)]
+    selected = [f"8310{i}" for i in range(1, 6)]
     # Act
     result = MaxProgramsValidator().validate(selected, master=None)
     # Assert
@@ -22,7 +22,7 @@ def test_max_programs_validator_accepts_exactly_five(make_program_entry):
 # TC-VAL-002: 6 programs (one over the max) must be rejected.
 def test_max_programs_validator_rejects_six(make_program_entry):
     # Arrange — 6 distinct program entries.
-    selected = [make_program_entry(program_id=f"8310{i}") for i in range(1, 7)]
+    selected = [f"8310{i}" for i in range(1, 7)]
     # Act
     result = MaxProgramsValidator().validate(selected, master=None)
     # Assert
@@ -32,7 +32,7 @@ def test_max_programs_validator_rejects_six(make_program_entry):
 # TC-VAL-003: 1 program (the minimum viable input) must be accepted.
 def test_max_programs_validator_accepts_one(make_program_entry):
     # Arrange — exactly one program entry.
-    selected = [make_program_entry(program_id="83101")]
+    selected = ["83101"]
     # Act
     result = MaxProgramsValidator().validate(selected, master=None)
     # Assert
@@ -58,10 +58,7 @@ def test_max_programs_validator_rejects_zero():
 def test_program_existence_validator_accepts_when_all_in_master(make_program_entry):
     # Arrange
     master = ["83101", "83102", "83103"]
-    selected = [
-        make_program_entry(program_id="83101"),
-        make_program_entry(program_id="83102"),
-    ]
+    selected = ["83101", "83102"]
     # Act
     result = ProgramExistenceValidator().validate(selected, master)
     # Assert
@@ -72,10 +69,7 @@ def test_program_existence_validator_accepts_when_all_in_master(make_program_ent
 def test_program_existence_validator_rejects_unknown_code(make_program_entry):
     # Arrange — '99999' is not in the master list.
     master = ["83101", "83102"]
-    selected = [
-        make_program_entry(program_id="83101"),
-        make_program_entry(program_id="99999"),
-    ]
+    selected = ["83101", "99999"]
     # Act
     result = ProgramExistenceValidator().validate(selected, master)
     # Assert
@@ -86,8 +80,7 @@ def test_program_existence_validator_rejects_unknown_code(make_program_entry):
 def test_program_existence_validator_rejects_prefix_match(make_program_entry):
     # Arrange — '8310' is a prefix of '83101' but not equal to it.
     master = ["83101"]
-    selected = [make_program_entry(program_id="8310")]
-
+    selected = ["8310"]
     # Act
     try:
         result = ProgramExistenceValidator().validate(selected, master)
@@ -119,7 +112,7 @@ def test_validator_failure_prevents_schedule_generation(make_program_entry):
     # We import the orchestration entry point lazily so this test can
     # still load even if the module is renamed during development.
     from src.main import run_pipeline  # type: ignore
-    selected = [make_program_entry(program_id="83101")]
+    selected = ["83101"]
     # Act — run the pipeline with the failing validator injected.
     try:
         run_pipeline(
