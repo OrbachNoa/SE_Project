@@ -50,6 +50,10 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None, outpu
     return schedules
 
 def main():
+    """
+    Main function - Parses arguments, validates files, and runs the scheduling pipeline.
+    """
+    # Parses command-line arguments to extract file paths and output configuration.
     parser = argparse.ArgumentParser()
     parser.add_argument("courses")
     parser.add_argument("periods")
@@ -61,6 +65,7 @@ def main():
     # Verifies that all provided file paths exist and are accessible to prevent runtime crashes during parsing.
     validate_all_files([args.courses, args.periods, args.programs])
 
+    # Runs the exam scheduling pipeline using command-line arguments.
     run_pipeline(
         courses_file=args.courses,
         periods_file=args.periods,
