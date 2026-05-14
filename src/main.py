@@ -55,18 +55,30 @@ def main():
     parser.add_argument("courses")
     parser.add_argument("periods")
     parser.add_argument("programs")
-    parser.add_argument("--output", default="output.txt")
+    parser.add_argument("--output", default=None)
 
     args = parser.parse_args()
 
     # Verifies that all provided file paths exist and are accessible to prevent runtime crashes during parsing.
     validate_all_files([args.courses, args.periods, args.programs])
 
+    # Set default output path to the current user's Downloads folder
+    default_path = os.path.join(os.path.expanduser("~"), "Downloads", "exam_schedules.txt")
+    
+    # Fetch path from Environment Variable, or fallback to the downloads folder
+    env_path = os.environ.get('EXAM_OUTPUT_PATH', default_path)
+    
+    # Resolve the final output path based on following Priority: 
+    # 1. Manual flag (--output), 2. Environment Variable/Downloads
+    output_path = args.output or env_path
+
+    print(f"Validation successful. Output will be exported to: {output_path}")
+
     run_pipeline(
         courses_file=args.courses,
         periods_file=args.periods,
         programs_file=args.programs,
-        output_file=args.output
+        output_file=output_path
     )
 
 if __name__ == "__main__":
