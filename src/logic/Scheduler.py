@@ -1,6 +1,6 @@
 from typing import List, Tuple
-from src.models.exam_schedule import ExamSchedule, ExamAssignment
-from src.models.enums import Moed, Requirement
+from ..models.exam_schedule import ExamSchedule, ExamAssignment
+from ..models.enums import Moed, Requirement
 
 class Slot:
     def __init__(self, course, semester, moed):
@@ -51,12 +51,19 @@ class Scheduler:
                 if not selected_set or e.programId in selected_set
             }
             for sem in semesters:
-                for moed in Moed:
-                    if self._periodExists(sem, moed):
-                        key = (course.courseId, sem, moed)
-                        if key not in seen:
-                            seen.add(key)
-                            slots.append(Slot(course, sem, moed))
+                moeds_with_period = [m for m in Moed if self._periodExists(sem, m)]
+                if not moeds_with_period:
+                    raise ValueError(
+                        f"Course '{course.name}' ({course.courseId}) belongs to "
+                        f"semester {sem.name} but no exam period is defined for "
+                        f"that semester. Cannot generate a schedule that includes "
+                        f"all required courses."
+                    )
+                for moed in moeds_with_period:
+                    key = (course.courseId, sem, moed)
+                    if key not in seen:
+                        seen.add(key)
+                        slots.append(Slot(course, sem, moed))
         slots.sort(key=lambda s: self._score(s.course), reverse=True)
         return slots
 
@@ -79,6 +86,7 @@ class Scheduler:
         if index == len(slots):
             new_sched = ExamSchedule()
             new_sched.assignments = list(schedule.assignments)
+            new_sched._date_to_course_ids = {k: set(v) for k, v in schedule._date_to_course_ids.items()}
             results.append(new_sched)
             return
 
@@ -88,10 +96,16 @@ class Scheduler:
             if len(results) >= max_results:
                 return
 
-            assignment          = ExamAssignment(course=slot.course, date=date, moed=slot.moed)
-            assignment.semester = slot.semester
+            assignment = ExamAssignment(course=slot.course, date=date, moed=slot.moed, semester=slot.semester)
 
-            if not any(ck.check(assignment, schedule) for ck in self._checkers):
+            # Use a direct loop, so conflict checks avoid extra generator work.
+            conflict = False
+            for ck in self._checkers:
+                if ck.check(assignment, schedule):
+                    conflict = True
+                    break
+
+            if not conflict:
                 schedule.addAssignment(assignment)
                 self._backtrack(index + 1, slots, candidates_cache, schedule, results, max_results)
                 schedule.removeAssignment(assignment)
@@ -114,7 +128,7 @@ class Scheduler:
                 
         if py_checker and hasattr(py_checker, 'precompute_conflicts'):
             courses_set = {s.course for s in slots}
-            py_checker.precompute_conflicts(list(courses_set))
+            py_checker.precompute_conflicts(list(courses_set), self._selected_programs)
 
         schedule = ExamSchedule()
         results  = []

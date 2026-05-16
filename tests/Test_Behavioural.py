@@ -256,3 +256,52 @@ def test_beh_006_engine_backtracks_to_next_candidate(
             "Schedule assigns both courses to the same date — engine "
             "produced a conflicting result instead of backtracking"
         )
+
+
+        # ===========================================================================
+# TC-BEH-006 — Course in a semester with no matching period must raise.
+# Regression test for bug #1 (silent course-drop).
+# REQ-1.2: all required courses must be scheduled. The engine MUST NOT
+# silently drop a course whose semester has no exam period defined.
+# ===========================================================================
+def test_course_with_no_matching_period_raises_clear_error(make_course, make_period, make_program_entry):
+    # Arrange — one FALL course and one SPRI course, but only a FALL period.
+    fall_course = make_course(
+        course_id="10001",
+        name="Fall Course",
+        program_entries=[make_program_entry(
+            program_id="83101", year=1,
+            semester=Semester.FALL, requirement=Requirement.OBLIGATORY,
+        )],
+    )
+    spring_course = make_course(
+        course_id="10002",
+        name="Spring Course",
+        program_entries=[make_program_entry(
+            program_id="83101", year=1,
+            semester=Semester.SPRI, requirement=Requirement.OBLIGATORY,
+        )],
+    )
+    fall_period = make_period(
+        semester=Semester.FALL, moed=Moed.ALEPH,
+        start=date(2026, 2, 1), end=date(2026, 2, 3),
+    )
+
+    scheduler = Scheduler(
+        courses=[fall_course, spring_course],
+        periods=[fall_period],
+        conflictCheckers=_default_checkers([fall_period]),
+        validators=[],
+        selected_programs=["83101"],
+    )
+
+    # Act + Assert — must raise, must name the orphan course and semester.
+    with pytest.raises(ValueError) as exc_info:
+        scheduler.generateAllSchedules()
+    msg = str(exc_info.value)
+    assert "10002" in msg or "Spring Course" in msg, (
+        f"Error must identify the orphan course; got: {msg!r}"
+    )
+    assert "SPRI" in msg, (
+        f"Error must mention the missing semester; got: {msg!r}"
+    )

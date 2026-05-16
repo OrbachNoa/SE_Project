@@ -90,11 +90,11 @@ def make_assignment(make_course):
     Default: A course on June 5, 2026.
     """
     def _make(course=None, exam_date=date(2026, 6, 5), moed=Moed.ALEPH):
-            if course is None:
-                course = make_course()
-            assignment = ExamAssignment(course=course, date=exam_date, moed=moed)
-            assignment.semester = course.programEntries[0].semester if course.programEntries else Semester.FALL
-            return assignment
+        if course is None:
+            course = make_course()
+        sem = course.programEntries[0].semester if course.programEntries else Semester.FALL
+        assignment = ExamAssignment(course=course, date=exam_date, moed=moed, semester=sem)
+        return assignment
     return _make
 
 

@@ -3,123 +3,139 @@ from ..models.enums import EvalType, Semester, Requirement, Moed
 from ..models.course import Course, ProgramEntry
 
 """
-This is the course parser.
+Parses course records into course objects.
 """
 class CoursesFileParser(FileParser):
 
     """
-    Parse the course file and return a list of course objects.
+    Reads the course file and returns course objects.
     """
     def parse(self, file_path):
-        # Open the file
+        # Read the whole file, so records can be split by the separator.
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
-        
-        # Validate separator, but tolerate missing if it's a single record
+
+        # Validate the separator, so badly formatted multi-record files are caught.
         try:
             FileParser.validateSeparator(content)
         except ValueError:
             pass
-            
-        # List to store course objects
+
+        # Track parsed courses and IDs, so duplicate course IDs can be rejected.
         courses = []
+        seen_ids = set()
         records = content.split("$$$$")
-        # Iterate over all records
+        # Parse each non-empty record, so blank sections are ignored.
         for record in records:
-            # If the record is not empty
             if record.strip():
                 course = self._parse_course(record)
-                # Check if the course is not None
                 if course is not None:
-                    # Validate the course
+                    # Validate each course before adding it to the result.
                     self._validate_course(course)
-                    # Add the course to the list
+                    # Reject duplicate IDs, so each course appears only once.
+                    if course.courseId in seen_ids:
+                        raise ValueError(f"Duplicate course ID found: {course.courseId}")
+                    seen_ids.add(course.courseId)
+                    # Add the valid course, so it can be scheduled later.
                     courses.append(course)
-        # Return the list of courses
+        # Return all valid courses found in the file.
         return courses
 
     def _validate_course(self, course):
         """
-        Validate the course.
+        Checks that a parsed course has valid field values.
         """
-        # check if the evaluation is valid
+        # Validate the evaluation type, so only known options are accepted.
         if course.evaluation not in EvalType:
             raise ValueError(f"Invalid evaluation: {course.evaluation}")
-        
-        # check if the course id is valid
-        if len(course.courseId) !=5 :
+
+        # Validate the course ID, so it matches the expected five-digit format.
+        if len(course.courseId) !=5 or not course.courseId.isdigit():
             raise ValueError(f"Invalid course ID: {course.courseId}")
-        
-        # check each program entry
+
+        # Require at least one program entry, so the course belongs to a program.
+        if not course.programEntries:
+            raise ValueError(f"Course '{course.courseId}' has no program entries.")
+
+        # Track program-year pairs, so duplicate entries inside one course are rejected.
+        seen_entries = set()
+
+        # Validate each program entry, so bad course data is rejected early.
         for entry in course.programEntries:
-            # check if the program id is 5 digits
+            # Build a program-year key, so the same pair cannot appear twice.
+            key = (entry.programId, entry.year)
+            if key in seen_entries:
+                raise ValueError(f"Duplicate program entry found for course '{course.courseId}': Program {entry.programId}, Year {entry.year}")
+            seen_entries.add(key)
+
+            # Validate the program ID, so it matches the expected five-digit format.
             if len(entry.programId) != 5:
                 raise ValueError(f"Invalid program ID: {entry.programId}")
-            # check if the semester is valid
+            # Validate the semester, so only known semester values are accepted.
             if entry.semester not in Semester:
                 raise ValueError(f"Invalid semester: {entry.semester}")
-            # check if the requirement is valid
+            # Validate the requirement, so only known requirement values are accepted.
             if entry.requirement not in Requirement:
                 raise ValueError(f"Invalid requirement: {entry.requirement}")
-            # check if the year is valid
+            # Validate the year, so it stays inside the supported study years.
             if entry.year not in [1,2,3,4]:
                 raise ValueError(f"Invalid year: {entry.year}")
 
     def _parse_course(self, record):
         """
-        Parse the course
+        Converts one text record into a Course object.
         """
-        # Split record by lines and remove empty lines
+        # Split the record into clean lines, so empty lines do not affect parsing.
         lines = [line.strip() for line in record.strip().split('\n') if line.strip()]
-        # A valid course must have at least Name, Number, Instructor, and Evaluation
+        # Require the basic fields, so incomplete course records are rejected.
         if len(lines) < 4:
-            return None  
-        
-        # Get the course name
+            raise ValueError(f"Course record is too short (must have at least 4 lines): {lines}")
+
+        # Read the course name from the first line.
         name = lines[0]
-        # Get the course id
+        # Read the course ID from the second line.
         course_id = lines[1]
-        # Get the instructor
+        # Read the instructor name from the third line.
         instructor = lines[2]
-        # Get the evaluation
+        # Read the evaluation type from the last line.
         evaluation_str = lines[-1].upper()
         try:
             evaluation = EvalType(evaluation_str)
         except ValueError:
-            evaluation = evaluation_str  # let validator handle it
-            
-        # List to store program entries
+            evaluation = evaluation_str  # Keep the raw value, so validation can report it.
+
+        # Collect program entries, so the course can be matched to programs.
         program_entries = []
-        # Get all program entries
+        # Parse each middle line as one program entry.
         for i in range(3, len(lines) - 1):
             parts = [p.strip() for p in lines[i].split(',')]
-            # A valid program entry must have 4 parts
+            # Require four fields, so each program entry has all needed data.
             if len(parts) == 4:
-                # Get the program id
+                # Read the program ID from the first field.
                 program_id = parts[0].strip()
-                # Get the year
+                # Read and validate the study year from the second field.
                 year_str = parts[1].strip()
                 if not year_str.isdigit():
                     raise ValueError(f"Year must be a digit, got: '{year_str}' in line: {lines[i]}")
                 year = int(year_str)
-                # Get the semester
+                # Read the semester from the third field.
                 semester_str = parts[2].upper()
                 try:
                     semester = Semester(semester_str)
                 except ValueError:
                     semester = semester_str
-                # Get the requirement
+                # Read the requirement from the fourth field.
                 req_str = parts[3].upper()
                 try:
                     requirement = Requirement(req_str)
                 except ValueError:
                     requirement = req_str
-                # Create the program entry
+                # Create a program entry, so it can be stored on the course.
                 entry = ProgramEntry(program_id, year, semester, requirement)
-                # Add the program entry to the list
+                # Store the program entry, so validation can check it later.
                 program_entries.append(entry)
             else:
                 raise ValueError(f"Invalid program entry format: {lines[i]}")
-                
-        # Return the course
+
+        # Return the parsed course object.
         return Course(course_id, name, instructor, evaluation, program_entries)
