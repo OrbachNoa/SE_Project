@@ -1,46 +1,57 @@
 from .fileParser import FileParser
-from typing import override
 
 """
-This is the program parser class.
+Parses selected program IDs from the programs file.
 """
 class ProgramsFileParser(FileParser):
 
     def parse(self, file_path):
         """
-        Parse the file and return the data.
+        Reads the programs file and returns selected program IDs.
         """
-        # Init list to store programs
+        # Start with an empty list, so empty files return no programs.
         programs = []
-        # Open the file
+        # Read the programs file, so selected IDs can be parsed.
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read().strip()
-            # If the file is empty, return an empty list
+            # Return an empty list when the file has no content.
             if not content:
                 return programs
-                
-            # Split the file content by commas
+
+            # Split by commas, so each token can be validated as one program ID.
             parts = [p.strip() for p in content.split(',')]
-            
-            # Iterate over all parts
+
+            # Track seen IDs, so duplicate selections are ignored.
+            seen = set()
             for part in parts:
                 if part:
-                    # Keep as string for tests
                     prog_id = part
-                    
-                    # Check if the program id is 5 digits
+
+                    # Reject newlines inside an ID, so the file uses comma separators.
+                    if '\n' in prog_id or '\r' in prog_id:
+                        raise ValueError(
+                            f"Program IDs must be separated by commas on a single line, "
+                            f"not by newlines. Got: '{prog_id.strip()}'. "
+                            f"Expected format: 83101, 83102, 83103"
+                        )
+
+                    # Validate the program ID, so it matches the expected five-digit format.
                     if len(prog_id) != 5 or not prog_id.isdigit():
-                        raise ValueError(f"Program ID must be 5 digits: {prog_id}")
-                    
-                    # Add the program code to the list of selected programs
+                        raise ValueError(f"Program ID must be exactly 5 digits, got: '{prog_id}'")
+
+                    # Skip duplicate IDs, so the same program is selected only once.
+                    if prog_id in seen:
+                        continue
+                    seen.add(prog_id)
+
+                    # Add the valid program ID to the selected programs list.
                     programs.append(prog_id)
-        
-        # Return the list of programs
+
+        # Return all selected program IDs.
         return programs
 
-    @override
     def _validate_separator(self, line):
         """
-        Override since the programs file uses commas as separators in this file, not $$$$
+        Checks that the programs file uses comma separators.
         """
         return "," in line

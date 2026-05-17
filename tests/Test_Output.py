@@ -142,3 +142,85 @@ def test_format_schedule_includes_instructor_name(
     output = TextFileWriter().formatSchedule(schedule)
     # Assert — Check that the name appears in the file.
     assert "Dr. Distinctive-Name" in output
+
+
+    # ===========================================================================
+# TC-OUT-007 — Semester sections in output appear in fixed enum order.
+# Regression test for bug #3a: when SPRI dates fall before FALL dates,
+# the output must still list FALL section before SPRI section
+# (REQ-2.3.3: "separation between semester A (FALL) and semester B (SPRING)").
+# ===========================================================================
+def test_format_schedule_orders_fall_before_spri_regardless_of_dates(
+    make_assignment, empty_schedule, make_course, make_program_entry,
+):
+    # Arrange — SPRI exam in Feb (earlier), FALL exam in July (later).
+    spring_course = make_course(
+        course_id="20001", name="Spring Course",
+        program_entries=[make_program_entry(semester=Semester.SPRI)],
+    )
+    fall_course = make_course(
+        course_id="20002", name="Fall Course",
+        program_entries=[make_program_entry(semester=Semester.FALL)],
+    )
+
+    schedule = empty_schedule
+    schedule.addAssignment(make_assignment(
+        course=spring_course, exam_date=date(2026, 2, 1), moed=Moed.ALEPH,
+    ))
+    schedule.addAssignment(make_assignment(
+        course=fall_course, exam_date=date(2026, 7, 1), moed=Moed.ALEPH,
+    ))
+
+    # Act
+    out = TextFileWriter().formatSchedule(schedule)
+
+    # Assert — FALL header must appear at a smaller index than SPRI header,
+    # i.e. FALL is rendered FIRST even though its date is later.
+    fall_pos = out.find("SEMESTER: FALL")
+    spri_pos = out.find("SEMESTER: SPRI")
+    assert fall_pos != -1, "FALL section missing from output"
+    assert spri_pos != -1, "SPRI section missing from output"
+    assert fall_pos < spri_pos, (
+        f"FALL must appear before SPRI in output order "
+        f"(got fall_pos={fall_pos}, spri_pos={spri_pos}).\n"
+        f"Output was:\n{out}"
+    )
+
+
+# ===========================================================================
+# TC-OUT-008 — Moed sections in output appear in fixed enum order
+# (ALEPH → BET → GIMEL), regardless of date order in the input.
+# Regression test for bug #3b.
+# ===========================================================================
+def test_format_schedule_orders_aleph_bet_gimel_regardless_of_dates(
+    make_assignment, empty_schedule, make_course,
+):
+    # Arrange — GIMEL in January (earliest), ALEPH in February, BET in March.
+    course = make_course(course_id="30001", name="Test Course")
+    schedule = empty_schedule
+    schedule.addAssignment(make_assignment(
+        course=course, exam_date=date(2026, 1, 15), moed=Moed.GIMEL,
+    ))
+    schedule.addAssignment(make_assignment(
+        course=course, exam_date=date(2026, 2, 15), moed=Moed.ALEPH,
+    ))
+    schedule.addAssignment(make_assignment(
+        course=course, exam_date=date(2026, 3, 15), moed=Moed.BET,
+    ))
+
+    # Act
+    out = TextFileWriter().formatSchedule(schedule)
+
+    # Assert — ALEPH then BET then GIMEL, even though chronological order
+    # would have placed GIMEL first.
+    aleph_pos = out.find("MOED: ALEPH")
+    bet_pos   = out.find("MOED: BET")
+    gimel_pos = out.find("MOED: GIMEL")
+    assert aleph_pos != -1 and bet_pos != -1 and gimel_pos != -1, (
+        "All three moed sections must appear"
+    )
+    assert aleph_pos < bet_pos < gimel_pos, (
+        f"Moed sections must appear in fixed order ALEPH→BET→GIMEL "
+        f"(got aleph={aleph_pos}, bet={bet_pos}, gimel={gimel_pos}).\n"
+        f"Output was:\n{out}"
+    )

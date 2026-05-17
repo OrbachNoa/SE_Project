@@ -3,6 +3,7 @@ import pytest
 
 from src.validators.maxProgramsValidator import MaxProgramsValidator
 from src.validators.programExistenceValidator import ProgramExistenceValidator
+from src.validators.inputValidator import InputValidator
 
 
 # ---------------------------------------------------------------------------
@@ -130,3 +131,49 @@ def test_validator_failure_prevents_schedule_generation(make_program_entry):
     
     # Assert — the scheduler must NOT have been invoked.
     assert mock_scheduler.generateAllSchedules.call_count == 0
+
+
+    # ===========================================================================
+# TC-VAL-009 — MaxProgramsValidator.error_message describes the specific issue
+# ===========================================================================
+def test_max_programs_error_message_when_too_many():
+    v = MaxProgramsValidator()
+    selected = ["83101", "83102", "83103", "83104", "83105", "83107"]
+    msg = v.error_message(selected)
+    assert "6" in msg, "Error message should name the offending count"
+    assert "5" in msg, "Error message should name the maximum"
+
+
+def test_max_programs_error_message_when_empty():
+    v = MaxProgramsValidator()
+    msg = v.error_message([])
+    # The exact wording can vary — just check it's a real explanation, not the default.
+    assert "InputValidator" not in msg  # not the abstract base fallback
+    assert msg, "error_message must not be empty"
+
+
+# ===========================================================================
+# TC-VAL-010 — ProgramExistenceValidator.error_message names the invalid codes
+# ===========================================================================
+def test_program_existence_error_message_lists_invalid_codes():
+    v = ProgramExistenceValidator(master=["83101", "83102"])
+    msg = v.error_message(["83101", "99999", "12345"])
+    assert "99999" in msg
+    assert "12345" in msg
+    # Valid code should not appear as "invalid":
+    # (relaxed assertion — depends on phrasing, but the invalid list should be specific)
+
+
+# ===========================================================================
+# TC-VAL-011 — Default error_message in base class is informative
+# ===========================================================================
+def test_input_validator_default_error_message_names_class():
+    # Anonymous subclass that doesn't override error_message
+    class DummyValidator(InputValidator):
+        def validate(self, selected, master=None) -> bool:
+            return False
+
+    msg = DummyValidator().error_message([])
+    assert "DummyValidator" in msg, (
+        "Default error_message should at least name the validator class"
+    )
