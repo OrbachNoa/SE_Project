@@ -400,3 +400,50 @@ def test_programs_parser_rejects_empty_file(tmp_path):
 
     # If it didn't raise an error, it must return an empty list.
     assert entries == [] or len(entries) == 0
+
+
+# ===========================================================================
+# TC-PARS-029 — Duplicate (semester, moed) period entries are rejected.
+# Regression test for bug #2 (silent absorption of duplicate period).
+# Each (semester, moed) pair must appear at most once in periods.txt;
+# multiple entries cause silent data loss in the Scheduler and must be
+# rejected at parse time.
+# ===========================================================================
+def test_periods_parser_rejects_duplicate_semester_moed(tmp_path):
+    # Arrange — two periods with identical (FALL, Aleph), different dates.
+    f = tmp_path / "periods_dup.txt"
+    f.write_text(
+        "FALL, Aleph\n"
+        "01-02-2026, 02-02-2026\n"
+        "$$$$\n"
+        "FALL, Aleph\n"
+        "05-02-2026, 06-02-2026\n",
+        encoding="utf-8",
+    )
+
+    # Act + Assert — parser must raise with a clear duplicate-related message.
+    with pytest.raises(ValueError) as exc_info:
+        ExamPeriodsFileParser().parse(str(f))
+    msg = str(exc_info.value).lower()
+    assert "duplicate" in msg, (
+        f"Error must say 'duplicate'; got: {exc_info.value!r}"
+    )
+    # The error should also identify which (semester, moed) is duplicated.
+    assert "fall" in msg
+    assert "aleph" in msg
+
+
+# TC-PARS-030 — A second moed (BET) for the same semester is allowed —
+# not a duplicate.
+def test_periods_parser_accepts_different_moed_same_semester(tmp_path):
+    f = tmp_path / "periods_diff_moed.txt"
+    f.write_text(
+        "FALL, Aleph\n"
+        "01-02-2026, 02-02-2026\n"
+        "$$$$\n"
+        "FALL, Bet\n"
+        "05-02-2026, 06-02-2026\n",
+        encoding="utf-8",
+    )
+    periods = ExamPeriodsFileParser().parse(str(f))
+    assert len(periods) == 2

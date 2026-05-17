@@ -1,24 +1,26 @@
-from typing import List
-from src.models.enums import Semester, Moed
+from typing import List, Set, Iterable
+from .enums import Semester, Moed
 from datetime import timedelta, date
 
 class ExamPeriod:
     """
-    Represents the timeframe for an exam session.
+    Represents the date range for one exam period.
     """
-    def __init__(self, semester: Semester, moed: Moed, start_date: date, end_date: date, excluded_dates: List[date]):
-        # Added a check for 'start_date' and 'end_date' to prevent creating an invalid object.
+    def __init__(self, semester: Semester, moed: Moed, start_date: date, end_date: date,
+                 excluded_dates: Iterable[date]):
+        # Reject invalid ranges, so every exam period has a real date window.
         if start_date >= end_date:
             raise ValueError("start date must be strictly less than end date")
         self.semester = semester
         self.moed = moed
         self.startDate = start_date
         self.endDate = end_date
-        self.excludedDates = excluded_dates
+        # Store excluded dates as a set, so date checks stay fast.
+        self.excludedDates: Set[date] = set(excluded_dates)
 
     def getAvailableDates(self) -> List[str]:
         """
-        Calculates and returns the list of dates available for exams.
+        Returns all dates in this period that are not excluded.
         """
         dates = []
         curr = self.startDate
