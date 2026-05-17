@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 
 from src.validators.fileValidator import validate_all_files
@@ -65,7 +66,7 @@ def _parse_args():
     parser.add_argument("courses")
     parser.add_argument("periods")
     parser.add_argument("programs")
-    parser.add_argument("--output", default="output.txt")
+    parser.add_argument("--output", default=None)
     return parser.parse_args()
 
 
@@ -75,12 +76,24 @@ def main():
     try:
         # Validate file paths first, so missing files fail with a clear error.
         validate_all_files([args.courses, args.periods, args.programs])
+
+        # Set default output path to the current user's Downloads folder, so there is a safe fallback location.
+        default_path = os.path.join(os.path.expanduser("~"), "Downloads", "exam_schedules.txt")
+
+        # Fetch path from Environment Variable, so custom system environments are supported.
+        env_path = os.environ.get('EXAM_OUTPUT_PATH', default_path)
+
+        # Choose the final output path based on priority, so manual flags override environment settings.
+        output_path = args.output or env_path
+
+        print(f"File validation successful. Output will be saved to: {output_path}")
+
         # Run the full scheduling flow, so output is created from the input files.
         run_pipeline(
             courses_file=args.courses,
             periods_file=args.periods,
             programs_file=args.programs,
-            output_file=args.output,
+            output_file=output_path,
         )
     except (FileNotFoundError, ValueError) as exc:
         # Print a clear error, so the user knows what went wrong.
