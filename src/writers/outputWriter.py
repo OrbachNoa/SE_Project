@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List
 from src.models.domain import ExamSchedule
 
-# Abstract base class for all output writers as defined in UML
+# Defines the export contract to decouple the Scheduler from specific storage formats.
 class OutputWriter(ABC):
     
     @abstractmethod
