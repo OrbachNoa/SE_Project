@@ -4,7 +4,7 @@ from ..models.enums import Requirement
 class ProgramYearConflictChecker(IConflictChecker):
     """
     Precomputes conflicts between courses sharing the same program and year,
-    allowing for O(1) conflict validation during the backtracking search.
+    allowing for efficient conflict validation during the backtracking search.
     """
     def __init__(self):
         self._conflict_graph = None
