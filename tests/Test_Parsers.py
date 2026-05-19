@@ -381,7 +381,7 @@ def test_programs_parser_accepts_non_contiguous_valid_code(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# TC-PRS-020 — Test that an empty programs file is handled properly.
+# TC-PRS-019 — Test that an empty programs file is handled properly.
 # ---------------------------------------------------------------------------
 # If the programs file is completely empty, the system must not crash.
 # It should safely reject it or return an empty list.
@@ -403,7 +403,7 @@ def test_programs_parser_rejects_empty_file(tmp_path):
 
 
 # ===========================================================================
-# TC-PARS-029 — Duplicate (semester, moed) period entries are rejected.
+# TC-PARS-020 — Duplicate (semester, moed) period entries are rejected.
 # Regression test for bug #2 (silent absorption of duplicate period).
 # Each (semester, moed) pair must appear at most once in periods.txt;
 # multiple entries cause silent data loss in the Scheduler and must be
@@ -433,7 +433,7 @@ def test_periods_parser_rejects_duplicate_semester_moed(tmp_path):
     assert "aleph" in msg
 
 
-# TC-PARS-030 — A second moed (BET) for the same semester is allowed —
+# TC-PARS-021 — A second moed (BET) for the same semester is allowed —
 # not a duplicate.
 def test_periods_parser_accepts_different_moed_same_semester(tmp_path):
     f = tmp_path / "periods_diff_moed.txt"

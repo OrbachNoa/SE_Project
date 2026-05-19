@@ -24,7 +24,6 @@ def _default_checkers(periods):
 
 # TC-ENG-001: Two OBLIGATORY courses, same program/year, with three
 # available dates — every pair of distinct dates is a valid schedule.
-# The number of valid schedules is 3 * 2 = 6 (ordered pairs).
 def test_generate_all_schedules_produces_expected_count(
     make_course, make_program_entry, make_period,
 ):
@@ -259,8 +258,7 @@ def test_only_exam_courses_are_scheduled(
 # TC-ENG-008 — Program with no EXAM courses returns empty schedule.
 # ---------------------------------------------------------------------------
 
-# If a study program only has 'Project' or 'Attendance' courses 
-# (and zero 'Exam' courses), the system should just return an empty 
+# If a study program only has 'Project' or 'Attendance' courses, the system should just return an empty
 # schedule. It must not crash.
 def test_program_with_only_non_exam_courses_returns_empty_schedule(
     make_course, make_program_entry, make_period,
