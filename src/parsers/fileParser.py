@@ -1,10 +1,11 @@
+# region Imports
 from abc import ABC, abstractmethod
-
-"""
-This is the base class for all file parsers.
-"""
+# endregion
 
 class FileParser(ABC):
+    """
+    Abstract base class for all file parsers.
+    """
 
     @abstractmethod
     def parse(self, file_path):
@@ -15,7 +16,9 @@ class FileParser(ABC):
 
     @staticmethod
     def validateSeparator(content):
-        """Validate the file separator."""
+        """
+        Validates the file separator.
+        """
         if "$$$$" not in content:
             raise ValueError("Separator $$$$ not found.")
         return True

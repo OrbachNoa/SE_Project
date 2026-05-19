@@ -1,9 +1,11 @@
+# region Imports
 from .fileParser import FileParser
+# endregion
 
-"""
-Parses selected program IDs from the programs file.
-"""
 class ProgramsFileParser(FileParser):
+    """
+    Parses selected program IDs from the programs file.
+    """
 
     def parse(self, file_path):
         """

@@ -1,17 +1,18 @@
+# region Imports
 from .fileParser import FileParser
-from ..models.enums import EvalType, Semester, Requirement, Moed
+from ..models.enums import EvalType, Semester, Requirement
 from ..models.course import Course, ProgramEntry
+# endregion
 
-"""
-Parses course records into course objects.
-"""
 class CoursesFileParser(FileParser):
-
     """
-    Reads the course file and returns course objects.
+    Parses course records into course objects.
     """
     def parse(self, file_path):
-        # Read the whole file, so records can be split by the separator.
+        """
+        Reads the course file and returns course objects.
+        """
+        # Open the file and read its content.
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
 
@@ -21,13 +22,17 @@ class CoursesFileParser(FileParser):
         except ValueError:
             pass
 
-        # Track parsed courses and IDs, so duplicate course IDs can be rejected.
+        # Initialize the list of courses.
         courses = []
+        # Track parsed courses and IDs, so duplicate course IDs can be rejected.
         seen_ids = set()
+
+        # Split the content into records based on the separator.
         records = content.split("$$$$")
         # Parse each non-empty record, so blank sections are ignored.
         for record in records:
             if record.strip():
+                # Parse the record.
                 course = self._parse_course(record)
                 if course is not None:
                     # Validate each course before adding it to the result.
@@ -35,6 +40,7 @@ class CoursesFileParser(FileParser):
                     # Reject duplicate IDs, so each course appears only once.
                     if course.courseId in seen_ids:
                         raise ValueError(f"Duplicate course ID found: {course.courseId}")
+                    # Add the course to the result if it's not a duplicate.
                     seen_ids.add(course.courseId)
                     # Add the valid course, so it can be scheduled later.
                     courses.append(course)
@@ -81,7 +87,7 @@ class CoursesFileParser(FileParser):
             if entry.year not in [1,2,3,4]:
                 raise ValueError(f"Invalid year: {entry.year}")
 
-    def _parse_course(self, record):
+    def _parse_course(self, record: str) -> Course:
         """
         Converts one text record into a Course object.
         """
@@ -102,10 +108,12 @@ class CoursesFileParser(FileParser):
         try:
             evaluation = EvalType(evaluation_str)
         except ValueError:
-            evaluation = evaluation_str  # Keep the raw value, so validation can report it.
+            # Keep the raw value, so validation can report it.
+            evaluation = evaluation_str
 
-        # Collect program entries, so the course can be matched to programs.
+        # Initialize the list of program entries.
         program_entries = []
+        
         # Parse each middle line as one program entry.
         for i in range(3, len(lines) - 1):
             parts = [p.strip() for p in lines[i].split(',')]
@@ -123,16 +131,18 @@ class CoursesFileParser(FileParser):
                 try:
                     semester = Semester(semester_str)
                 except ValueError:
+                    # Keep the raw value, so validation can report it.
                     semester = semester_str
                 # Read the requirement from the fourth field.
                 req_str = parts[3].upper()
                 try:
                     requirement = Requirement(req_str)
                 except ValueError:
+                    # Keep the raw value, so validation can report it.
                     requirement = req_str
                 # Create a program entry, so it can be stored on the course.
                 entry = ProgramEntry(program_id, year, semester, requirement)
-                # Store the program entry, so validation can check it later.
+                # Add the program entry to the list.
                 program_entries.append(entry)
             else:
                 raise ValueError(f"Invalid program entry format: {lines[i]}")
