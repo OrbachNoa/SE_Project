@@ -1,4 +1,6 @@
+# region Imports
 import os
+# endregion
 
 def validate_language(file_path):
     """

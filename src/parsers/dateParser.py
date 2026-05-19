@@ -1,18 +1,21 @@
+# region Imports
 from .fileParser import FileParser
 from ..models.enums import Moed, Semester
 from ..models.exam_period import ExamPeriod
 from datetime import datetime
 import re
+# endregion
 
-"""
-Parses exam-period records into ExamPeriod objects.
-"""
 class ExamPeriodsFileParser(FileParser):
+    """
+    Parses exam-period records into ExamPeriod objects.
+    """
 
     def parse(self, file_path):
         """
         Reads the exam-period file and returns exam periods.
         """
+        # Open the file and read its content.
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
 
@@ -22,17 +25,22 @@ class ExamPeriodsFileParser(FileParser):
         except ValueError:
             pass
 
-        # Track parsed periods and keys, so duplicates can be rejected.
+        # Initialize the list of exam periods.
         dates = []
+        # Track parsed periods and keys, so duplicates can be rejected.
         seen_combos = set()
+        # Split the content into records based on the separator.
         records = content.split("$$$$")
+
         # Parse each non-empty record, so blank sections are ignored.
         for record in records:
             if record.strip():
+                # Parse the record.
                 period = self._parse_date(record)
                 if period is not None:
                     # Validate each period before adding it to the result.
                     self._validate_exam_period(period)
+                    # Add the period to the result if it's not a duplicate.
                     combo = (period.semester, period.moed)
                     if combo in seen_combos:
                         raise ValueError(
@@ -46,7 +54,7 @@ class ExamPeriodsFileParser(FileParser):
         # Return all valid exam periods found in the file.
         return dates
 
-    def _validate_exam_period(self, period):
+    def _validate_exam_period(self, period: ExamPeriod) -> None:
         """
         Checks that a parsed exam period has valid field values.
         """
@@ -124,6 +132,7 @@ class ExamPeriodsFileParser(FileParser):
                 d1 = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
                 d2 = datetime.strptime(found_dates[1], "%d-%m-%Y").date()
                 if d1 > d2:
+                    # Reject reversed date ranges.
                     raise ValueError(
                         f"Excluded date range is reversed: {found_dates[0]} is after {found_dates[1]}. "
                         f"Range must be written as start, end (earlier date first)."
