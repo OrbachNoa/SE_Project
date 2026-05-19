@@ -144,16 +144,15 @@ def test_format_schedule_includes_instructor_name(
     assert "Dr. Distinctive-Name" in output
 
 
-    # ===========================================================================
+# ===========================================================================
 # TC-OUT-007 — Semester sections in output appear in fixed enum order.
-# Regression test for bug #3a: when SPRI dates fall before FALL dates,
-# the output must still list FALL section before SPRI section
-# (REQ-2.3.3: "separation between semester A (FALL) and semester B (SPRING)").
+# Regression test for bug: when SPRI dates fall before FALL dates,
+# the output must still list FALL section before SPRI section.
 # ===========================================================================
 def test_format_schedule_orders_fall_before_spri_regardless_of_dates(
     make_assignment, empty_schedule, make_course, make_program_entry,
 ):
-    # Arrange — SPRI exam in Feb (earlier), FALL exam in July (later).
+    # Arrange — SPRI exam in Feb, FALL exam in July.
     spring_course = make_course(
         course_id="20001", name="Spring Course",
         program_entries=[make_program_entry(semester=Semester.SPRI)],
@@ -174,8 +173,8 @@ def test_format_schedule_orders_fall_before_spri_regardless_of_dates(
     # Act
     out = TextFileWriter().formatSchedule(schedule)
 
-    # Assert — FALL header must appear at a smaller index than SPRI header,
-    # i.e. FALL is rendered FIRST even though its date is later.
+    # Assert — FALL appears before SPRING because semester order is used,
+    # even if FALL has a later date.
     fall_pos = out.find("SEMESTER: FALL")
     spri_pos = out.find("SEMESTER: SPRI")
     assert fall_pos != -1, "FALL section missing from output"
@@ -188,8 +187,7 @@ def test_format_schedule_orders_fall_before_spri_regardless_of_dates(
 
 
 # ===========================================================================
-# TC-OUT-008 — Moed sections in output appear in fixed enum order
-# (ALEPH → BET → GIMEL), regardless of date order in the input.
+# TC-OUT-008 — Moed sections in output appear in fixed enum order, regardless of date order in the input.
 # Regression test for bug #3b.
 # ===========================================================================
 def test_format_schedule_orders_aleph_bet_gimel_regardless_of_dates(

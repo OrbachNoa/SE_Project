@@ -133,7 +133,7 @@ def test_validator_failure_prevents_schedule_generation(make_program_entry):
     assert mock_scheduler.generateAllSchedules.call_count == 0
 
 
-    # ===========================================================================
+# ===========================================================================
 # TC-VAL-009 — MaxProgramsValidator.error_message describes the specific issue
 # ===========================================================================
 def test_max_programs_error_message_when_too_many():
@@ -160,8 +160,6 @@ def test_program_existence_error_message_lists_invalid_codes():
     msg = v.error_message(["83101", "99999", "12345"])
     assert "99999" in msg
     assert "12345" in msg
-    # Valid code should not appear as "invalid":
-    # (relaxed assertion — depends on phrasing, but the invalid list should be specific)
 
 
 # ===========================================================================
