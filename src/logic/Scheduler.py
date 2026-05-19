@@ -29,7 +29,7 @@ class Scheduler:
         self._selected_programs = selected_programs or []
 
     def filterCourses(self) -> list:
-        # Convert selected programs to a set, keep program lookups at O(1).
+        # Convert selected programs to a set, keeps program lookups efficient.
         selected_set = set(self._selected_programs)
 
         # Return only courses that have an exam and belong to the selected programs,
