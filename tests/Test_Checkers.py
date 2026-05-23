@@ -8,7 +8,7 @@ from src.logic.ExamPeriodBoundaryChecker import ExamPeriodBoundaryChecker
 
 
 # ===========================================================================
-# ProgramYearConflictChecker — Rules 1, 2, 3 from SCRUM-18.
+# ProgramYearConflictChecker TC-CHK-001..005.
 # ===========================================================================
 
 # TC-CHK-001: two OBLIGATORY courses from the same program AND same year on the same date must conflict.
@@ -36,7 +36,7 @@ def test_program_year_checker_detects_same_program_same_year_same_date_conflict(
     assert result is True
 
 
-# TC-CHK-002: courses from DIFFERENT programs on the same date do NOT conflict.
+# TC-CHK-002: courses from different programs on the same date do NOT conflict.
 def test_program_year_checker_no_conflict_for_different_programs(
     make_course, make_program_entry, make_assignment, empty_schedule,
 ):
@@ -152,7 +152,6 @@ def test_excluded_dates_checker_rejects_excluded_date(
         exam_date=date(2026, 6, 3),
         moed=Moed.ALEPH,
     )
-    # The checker must be aware of the exam period(s); construction
     # accepts either a single period or a list — adjust if needed.
     checker = ExcludedDatesChecker([period])
     # Act

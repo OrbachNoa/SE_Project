@@ -258,10 +258,9 @@ def test_beh_006_engine_backtracks_to_next_candidate(
         )
 
 
-        # ===========================================================================
-# TC-BEH-006 — Course in a semester with no matching period must raise.
-# Regression test for bug #1 (silent course-drop).
-# REQ-1.2: all required courses must be scheduled. The engine MUST NOT
+# ===========================================================================
+# TC-BEH-007 — Course in a semester with no matching period must raise.
+# all required courses must be scheduled. The engine MUST NOT
 # silently drop a course whose semester has no exam period defined.
 # ===========================================================================
 def test_course_with_no_matching_period_raises_clear_error(make_course, make_period, make_program_entry):
