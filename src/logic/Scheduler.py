@@ -1,3 +1,4 @@
+from ast import Dict
 from typing import List, Tuple
 from ..models.exam_schedule import ExamSchedule, ExamAssignment
 from ..models.enums import Moed, Requirement
@@ -17,38 +18,39 @@ class Scheduler:
         self._checkers          = conflictCheckers
         self._validators        = validators
         self._selected_programs = selected_programs or []
-
+        # Compute once — reused by filterCourses, _buildSlots, _score, _getCandidates.
+        self._selected_set = set(selected_programs) if selected_programs else set()
+        # O(1) period lookup instead of O(n) scan on every call.
+        self._period_map: Dict = {(p.semester, p.moed): p for p in periods}
+        
 
     def filterCourses(self) -> list:
-        selected_set = set(self._selected_programs)
         return [
             c for c in self._courses
             if c.hasExam() and (
-                not selected_set or
-                any(e.programId in selected_set for e in c.programEntries)
+                not self._selected_set or
+                any(e.programId in self._selected_set for e in c.programEntries)
             )
         ]
 
     def _periodExists(self, semester, moed) -> bool:
-        return any(p.semester == semester and p.moed == moed for p in self._periods)
+        return (semester, moed) in self._period_map
 
     def _score(self, course) -> int:
-        selected_set = set(self._selected_programs)
         score = 0
         for e in course.programEntries:
-            if not selected_set or e.programId in selected_set:
+            if not self._selected_set or e.programId in self._selected_set:
                 score += 1
                 if e.requirement == Requirement.OBLIGATORY:
                     score += 2
         return score
 
     def _buildSlots(self) -> List[Slot]:
-        selected_set = set(self._selected_programs)
         slots, seen  = [], set()
         for course in self.filterCourses():
             semesters = {
                 e.semester for e in course.programEntries
-                if not selected_set or e.programId in selected_set
+                if not self._selected_set or e.programId in self._selected_set
             }
             for sem in semesters:
                 moeds_with_period = [m for m in Moed if self._periodExists(sem, m)]
@@ -68,13 +70,13 @@ class Scheduler:
         return slots
 
     def _getCandidates(self, slot: Slot) -> List[Tuple]:
-        for period in self._periods:
-            if period.semester == slot.semester and period.moed == slot.moed:
-                if hasattr(period, 'getAvailableDates') and callable(period.getAvailableDates):
-                    dates = period.getAvailableDates()
-                    if dates:
-                        return [(d,) for d in dates]
-        return []
+        p = self._period_map.get((slot.semester, slot.moed))
+        if p is None:
+            return []
+        dates = p.availableDates
+        if not dates:
+            return []
+        return [(d,) for d in dates]
 
 
     def _backtrack(self, index: int, slots: List[Slot], candidates_cache: List[List[Tuple]], 
@@ -127,7 +129,7 @@ class Scheduler:
                 
         if py_checker and hasattr(py_checker, 'precompute_conflicts'):
             courses_set = {s.course for s in slots}
-            py_checker.precompute_conflicts(list(courses_set), self._selected_programs)
+            py_checker.precompute_conflicts(list(courses_set), list(self._selected_set))
 
         schedule = ExamSchedule()
         results  = []

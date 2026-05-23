@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 import os
 import sys
 
@@ -42,19 +43,27 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None, outpu
     if not scheduler:
         checkers = [
             ProgramYearConflictChecker(),
-            ExcludedDatesChecker(periods),
-            ExamPeriodBoundaryChecker(periods),
+            # ExcludedDatesChecker(periods),
+            # ExamPeriodBoundaryChecker(periods),
             MoedOrderChecker(),
         ]
         scheduler = Scheduler(courses, periods, checkers, validators, selected_programs=programs)
-
+    # timeGenerateStart = datetime.now()
+    # print(f"Starting to generate schedules at {timeGenerateStart.strftime('%Y-%m-%d %H:%M:%S')}")
     # Generate all valid schedules from the parsed input.
     schedules = scheduler.generateAllSchedules()
-
+    # timeGenerateEnd = datetime.now()
+    # print(f"Finished generating schedules at {timeGenerateEnd.strftime('%Y-%m-%d %H:%M:%S')}")
+    # print(f"Total time taken to generate schedules: {(timeGenerateEnd - timeGenerateStart).total_seconds()} seconds")
+    # timeWriteStart = datetime.now()
+    # print(f"Writing schedules to file at {timeWriteStart.strftime('%Y-%m-%d %H:%M:%S')}")
     # Write schedules to a file when an output path was given.
     writer = output_writer or TextFileWriter()
     if final_output_path:
         writer.write(schedules, final_output_path)
+        timeWriteEnd = datetime.now()
+        # print(f"Finished writing schedules to file at {timeWriteEnd.strftime('%Y-%m-%d %H:%M:%S')}.")
+        # print(f"Total writing time taken: {(timeWriteEnd - timeWriteStart).total_seconds()} seconds")
 
     # Return schedules, so tests or callers can inspect the result.
     return schedules
@@ -71,6 +80,7 @@ def _parse_args():
 
 
 def main():
+    # totalTimeStart = datetime.now()
     # Read command-line arguments, so the program knows the input files.
     args = _parse_args()
     try:
@@ -95,6 +105,8 @@ def main():
             programs_file=args.programs,
             output_file=output_path,
         )
+        # totalTimeEnd = datetime.now()
+        # print(f"Total execution time: {(totalTimeEnd - totalTimeStart).total_seconds()} seconds")
     except (FileNotFoundError, ValueError) as exc:
         # Print a clear error, so the user knows what went wrong.
         print(f"Error: {exc}", file=sys.stderr)
