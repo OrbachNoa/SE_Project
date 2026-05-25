@@ -1,5 +1,6 @@
 # region Imports
 import argparse
+from datetime import datetime
 import os
 import sys
 
@@ -48,19 +49,24 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None, outpu
     if not scheduler:
         checkers = [
             ProgramYearConflictChecker(),
-            ExcludedDatesChecker(periods),
-            ExamPeriodBoundaryChecker(periods),
             MoedOrderChecker(),
         ]
         scheduler = Scheduler(courses, periods, checkers, validators, selected_programs=programs)
 
     # Generate all valid schedules from the parsed input into the list of schedules.
     schedules = scheduler.generateAllSchedules()
-
+    # timeGenerateEnd = datetime.now()
+    # print(f"Finished generating schedules at {timeGenerateEnd.strftime('%Y-%m-%d %H:%M:%S')}")
+    # print(f"Total time taken to generate schedules: {(timeGenerateEnd - timeGenerateStart).total_seconds()} seconds")
+    # timeWriteStart = datetime.now()
+    # print(f"Writing schedules to file at {timeWriteStart.strftime('%Y-%m-%d %H:%M:%S')}")
     # Write schedules to a file when an output path was given.
     writer = output_writer or TextFileWriter()
     if final_output_path:
         writer.write(schedules, final_output_path)
+        timeWriteEnd = datetime.now()
+        # print(f"Finished writing schedules to file at {timeWriteEnd.strftime('%Y-%m-%d %H:%M:%S')}.")
+        # print(f"Total writing time taken: {(timeWriteEnd - timeWriteStart).total_seconds()} seconds")
 
     # Return schedules result.
     return schedules

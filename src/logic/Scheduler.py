@@ -1,3 +1,4 @@
+from ast import Dict
 from typing import List, Tuple
 from ..models.exam_schedule import ExamSchedule, ExamAssignment
 from ..models.enums import Moed, Requirement
@@ -27,46 +28,46 @@ class Scheduler:
         self._validators        = validators
         # Default to an empty list if no programs are provided, so filtering logic doesn't crash.
         self._selected_programs = selected_programs or []
-
-    def filterCourses(self) -> list:
-        # Convert selected programs to a set, keeps program lookups efficient.
-        selected_set = set(self._selected_programs)
-
+        # Set of selected program IDs for efficient membership checks when filtering courses and calculating scores.
+        self._selected_set = set(selected_programs) if selected_programs else set()
+        # Efficient period lookup instead of scanning a list on every call.
+        self._period_map: Dict = {(p.semester, p.moed): p for p in periods}
+        
         # Return only courses that have an exam and belong to the selected programs,
         # ignore all others.
+    def filterCourses(self) -> list:
         return [
             c for c in self._courses
             if c.hasExam() and (
-                not selected_set or
-                any(e.programId in selected_set for e in c.programEntries)
+                not self._selected_set or
+                any(e.programId in self._selected_set for e in c.programEntries)
             )
         ]
 
+    # Check if a matching period exists, so that scheduling will be possible.
     def _periodExists(self, semester, moed) -> bool:
-        # Check if a matching period exists, so that scheduling will be possible.
-        return any(p.semester == semester and p.moed == moed for p in self._periods)
+        return (semester, moed) in self._period_map
 
+    # Score a course based on how many of its program entries are relevant to the selected programs,
     def _score(self, course) -> int:
-        # Calculate a difficulty score based on program entries, so harder courses can be prioritized.
-        selected_set = set(self._selected_programs)
         score = 0
         for e in course.programEntries:
-            if not selected_set or e.programId in selected_set:
+            if not self._selected_set or e.programId in self._selected_set:
                 score += 1
                 # Give higher weight to obligatory courses.
                 if e.requirement == Requirement.OBLIGATORY:
                     score += 2
         return score
 
+    # Build a list of scheduling slots based on the filtered courses, their relevant semesters, and moeds.
     def _buildSlots(self) -> List[Slot]:
-        selected_set = set(self._selected_programs)
         # Track seen combinations (course, sem, moed), so duplicate slots are not created.
         slots, seen  = [], set()
         for course in self.filterCourses():
             # Collect all relevant semesters for the course.
             semesters = {
                 e.semester for e in course.programEntries
-                if not selected_set or e.programId in selected_set
+                if not self._selected_set or e.programId in self._selected_set
             }
             # For each semester, find the relevant moeds and create the combination.
             for sem in semesters:
@@ -89,18 +90,18 @@ class Scheduler:
         slots.sort(key=lambda s: self._score(s.course), reverse=True)
         return slots
 
+    # Get candidate dates for a slot by looking up the corresponding period and extracting its available dates.
     def _getCandidates(self, slot: Slot) -> List[Tuple]:
-        # Find the specific exam period and extract its available dates.
-        for period in self._periods:
-            if period.semester == slot.semester and period.moed == slot.moed:
-                if hasattr(period, 'getAvailableDates') and callable(period.getAvailableDates):
-                    dates = period.getAvailableDates()
-                    if dates:
-                        # Wrap dates in single-item tuples, so they match the expected generic constraint format.
-                        return [(d,) for d in dates]
-        return []
+        p = self._period_map.get((slot.semester, slot.moed))
+        if p is None:
+            return []
+        dates = p.availableDates
+        if not dates:
+            return []
+        # Wrap dates in single-item tuples, so they match the expected generic constraint format.
+        return [(d,) for d in dates]
 
-
+    # The core backtracking function that recursively builds valid schedules by trying candidate dates for each slot and checking for conflicts.
     def _backtrack(self, index: int, slots: List[Slot], candidates_cache: List[List[Tuple]], 
                    schedule: ExamSchedule, results: list, max_results: int) -> None:
 
@@ -140,6 +141,7 @@ class Scheduler:
                 # Remove the assignment from the schedule.
                 schedule.removeAssignment(assignment)
 
+    # The main function to generate all valid schedules. It builds the slots, precomputes candidates, and triggers the backtracking search.
     def generateAllSchedules(self, max_results: int = 1000000) -> list:
         # Build and sort slots, creating a prioritized list of exams to schedule.
         slots = self._buildSlots()
@@ -160,7 +162,7 @@ class Scheduler:
                 
         if py_checker and hasattr(py_checker, 'precompute_conflicts'):
             courses_set = {s.course for s in slots}
-            py_checker.precompute_conflicts(list(courses_set), self._selected_programs)
+            py_checker.precompute_conflicts(list(courses_set), list(self._selected_set))
 
         # Create an empty schedule.
         schedule = ExamSchedule()
