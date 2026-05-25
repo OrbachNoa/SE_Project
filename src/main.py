@@ -49,8 +49,6 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None, outpu
     if not scheduler:
         checkers = [
             ProgramYearConflictChecker(),
-            # ExcludedDatesChecker(periods),
-            # ExamPeriodBoundaryChecker(periods),
             MoedOrderChecker(),
         ]
         scheduler = Scheduler(courses, periods, checkers, validators, selected_programs=programs)
