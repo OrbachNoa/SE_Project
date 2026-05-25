@@ -94,6 +94,7 @@ class Scheduler:
         dates = p.availableDates
         if not dates:
             return []
+        # Wrap dates in single-item tuples, so they match the expected generic constraint format.
         return [(d,) for d in dates]
 
 
