@@ -28,9 +28,9 @@ class Scheduler:
         self._validators        = validators
         # Default to an empty list if no programs are provided, so filtering logic doesn't crash.
         self._selected_programs = selected_programs or []
-        # Compute once — reused by filterCourses, _buildSlots, _score, _getCandidates.
+        # Set of selected program IDs for efficient membership checks when filtering courses and calculating scores.
         self._selected_set = set(selected_programs) if selected_programs else set()
-        # O(1) period lookup instead of O(n) scan on every call.
+        # Efficient period lookup instead of scanning a list on every call.
         self._period_map: Dict = {(p.semester, p.moed): p for p in periods}
         
         # Return only courses that have an exam and belong to the selected programs,
