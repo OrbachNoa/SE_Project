@@ -44,9 +44,11 @@ class Scheduler:
             )
         ]
 
+    # Check if a matching period exists, so that scheduling will be possible.
     def _periodExists(self, semester, moed) -> bool:
         return (semester, moed) in self._period_map
 
+    # Score a course based on how many of its program entries are relevant to the selected programs,
     def _score(self, course) -> int:
         score = 0
         for e in course.programEntries:
@@ -57,6 +59,7 @@ class Scheduler:
                     score += 2
         return score
 
+    # Build a list of scheduling slots based on the filtered courses, their relevant semesters, and moeds.
     def _buildSlots(self) -> List[Slot]:
         # Track seen combinations (course, sem, moed), so duplicate slots are not created.
         slots, seen  = [], set()
@@ -87,6 +90,7 @@ class Scheduler:
         slots.sort(key=lambda s: self._score(s.course), reverse=True)
         return slots
 
+    # Get candidate dates for a slot by looking up the corresponding period and extracting its available dates.
     def _getCandidates(self, slot: Slot) -> List[Tuple]:
         p = self._period_map.get((slot.semester, slot.moed))
         if p is None:
@@ -97,7 +101,7 @@ class Scheduler:
         # Wrap dates in single-item tuples, so they match the expected generic constraint format.
         return [(d,) for d in dates]
 
-
+    # The core backtracking function that recursively builds valid schedules by trying candidate dates for each slot and checking for conflicts.
     def _backtrack(self, index: int, slots: List[Slot], candidates_cache: List[List[Tuple]], 
                    schedule: ExamSchedule, results: list, max_results: int) -> None:
 
@@ -137,6 +141,7 @@ class Scheduler:
                 # Remove the assignment from the schedule.
                 schedule.removeAssignment(assignment)
 
+    # The main function to generate all valid schedules. It builds the slots, precomputes candidates, and triggers the backtracking search.
     def generateAllSchedules(self, max_results: int = 1000000) -> list:
         # Build and sort slots, creating a prioritized list of exams to schedule.
         slots = self._buildSlots()
