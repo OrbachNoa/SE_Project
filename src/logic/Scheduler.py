@@ -1,132 +1,74 @@
-from ast import Dict
-from typing import List, Tuple
+from typing import List
 from ..models.exam_schedule import ExamSchedule, ExamAssignment
-from ..models.enums import Moed, Requirement
+from .SlotBuilder import Slot
+from .IConflictChecker import IConflictChecker
 
-class Slot:
-    """
-    Represents a single exam event that needs to be scheduled.
-    """
-
-    def __init__(self, course, semester, moed):
-        self.course   = course
-        self.semester = semester
-        self.moed     = moed
 
 class Scheduler:
     """
-    Manages the exam scheduling process by transforming course requirements
-    into a prioritized sequence of scheduling slots, precomputing constraint data,
-    and executing a backtracking search to generate valid exam timetables.
+    Pure backtracking search engine.
+
+    Consumes a list of self-contained Slots (each carrying its own
+    candidate dates) and a list of conflict checkers. Knows nothing
+    about courses, programs, exam periods, or how slots were built.
+    Performs no precomputation on the checkers - the caller is
+    responsible for preparing both inputs.
+
+    This decoupling means the algorithm is generic and testable in
+    isolation against synthetic slots.
     """
 
-    def __init__(self, courses: list, periods: list, conflictCheckers: list,
-                 validators: list, selected_programs: List[str] = None):
-        self._courses           = courses
-        self._periods           = periods
-        self._checkers          = conflictCheckers
-        self._validators        = validators
-        # Default to an empty list if no programs are provided, so filtering logic doesn't crash.
-        self._selected_programs = selected_programs or []
-        # Set of selected program IDs for efficient membership checks when filtering courses and calculating scores.
-        self._selected_set = set(selected_programs) if selected_programs else set()
-        # Efficient period lookup instead of scanning a list on every call.
-        self._period_map: Dict = {(p.semester, p.moed): p for p in periods}
-        
-        # Return only courses that have an exam and belong to the selected programs,
-        # ignore all others.
-    def filterCourses(self) -> list:
-        return [
-            c for c in self._courses
-            if c.hasExam() and (
-                not self._selected_set or
-                any(e.programId in self._selected_set for e in c.programEntries)
-            )
-        ]
+    def __init__(self, checkers: List[IConflictChecker]):
+        self._checkers = checkers
 
-    # Check if a matching period exists, so that scheduling will be possible.
-    def _periodExists(self, semester, moed) -> bool:
-        return (semester, moed) in self._period_map
-
-    # Score a course based on how many of its program entries are relevant to the selected programs,
-    def _score(self, course) -> int:
-        score = 0
-        for e in course.programEntries:
-            if not self._selected_set or e.programId in self._selected_set:
-                score += 1
-                # Give higher weight to obligatory courses.
-                if e.requirement == Requirement.OBLIGATORY:
-                    score += 2
-        return score
-
-    # Build a list of scheduling slots based on the filtered courses, their relevant semesters, and moeds.
-    def _buildSlots(self) -> List[Slot]:
-        # Track seen combinations (course, sem, moed), so duplicate slots are not created.
-        slots, seen  = [], set()
-        for course in self.filterCourses():
-            # Collect all relevant semesters for the course.
-            semesters = {
-                e.semester for e in course.programEntries
-                if not self._selected_set or e.programId in self._selected_set
-            }
-            # For each semester, find the relevant moeds and create the combination.
-            for sem in semesters:
-                moeds_with_period = [m for m in Moed if self._periodExists(sem, m)]
-                # Fail early if a course has no valid exam period.
-                if not moeds_with_period:
-                    raise ValueError(
-                        f"Course '{course.name}' ({course.courseId}) belongs to "
-                        f"semester {sem.name} but no exam period is defined for "
-                        f"that semester. Cannot generate a schedule that includes "
-                        f"all required courses."
-                    )
-                # Check is combination exists, otherwise create it and add it to seen.
-                for moed in moeds_with_period:
-                    key = (course.courseId, sem, moed)
-                    if key not in seen:
-                        seen.add(key)
-                        slots.append(Slot(course, sem, moed))
-        # Sort slots by score descending, so the backtracking tackles the hardest courses first.
-        slots.sort(key=lambda s: self._score(s.course), reverse=True)
-        return slots
-
-    # Get candidate dates for a slot by looking up the corresponding period and extracting its available dates.
-    def _getCandidates(self, slot: Slot) -> List[Tuple]:
-        p = self._period_map.get((slot.semester, slot.moed))
-        if p is None:
+    def generateSchedules(self, slots: List[Slot], max_results: int = 1_000_000) -> List[ExamSchedule]:
+        """
+        Runs the backtracking search over the given slots. Returns every
+        valid schedule found, up to max_results.
+        """
+        if not slots:
             return []
-        dates = p.availableDates
-        if not dates:
-            return []
-        # Wrap dates in single-item tuples, so they match the expected generic constraint format.
-        return [(d,) for d in dates]
 
-    # The core backtracking function that recursively builds valid schedules by trying candidate dates for each slot and checking for conflicts.
-    def _backtrack(self, index: int, slots: List[Slot], candidates_cache: List[List[Tuple]], 
+        # Fast-path: if any slot has zero candidates, no schedule can include
+        # it, so the whole problem is infeasible. Stop before any recursion.
+        if any(not s.candidateDates for s in slots):
+            return []
+
+        schedule = ExamSchedule()
+        results: List[ExamSchedule] = []
+        self._backtrack(0, slots, schedule, results, max_results)
+        return results
+
+    def _backtrack(self, index: int, slots: List[Slot],
                    schedule: ExamSchedule, results: list, max_results: int) -> None:
-
-        # Stop recursion if the max limit is reached.
+        # Stop recursion early if max_results was reached.
         if len(results) >= max_results:
             return
 
-        # Check if all slots are scheduled, so we can save the successful board state.
+        # Base case: every slot has an assignment - save a snapshot. Deep-copy
+        # the date index so later backtracking mutations don't corrupt the
+        # saved result.
         if index == len(slots):
             new_sched = ExamSchedule()
-            # Copy the assignments, so further backtracking doesn't erase this successful result.
             new_sched.assignments = list(schedule.assignments)
+            new_sched._date_to_course_ids = {
+                k: set(v) for k, v in schedule._date_to_course_ids.items()
+            }
             results.append(new_sched)
             return
 
         slot = slots[index]
-
-        # Iterate over precomputed dates from the cache to avoid recalculating candidates in every step.
-        for (date,) in candidates_cache[index]:
+        # Read candidates directly from the slot - no lookup, no period_map.
+        for date in slot.candidateDates:
             if len(results) >= max_results:
                 return
 
-            assignment = ExamAssignment(course=slot.course, date=date, moed=slot.moed, semester=slot.semester)
+            assignment = ExamAssignment(
+                course=slot.course, date=date, moed=slot.moed, semester=slot.semester
+            )
 
-            # Use a direct loop, so conflict checks avoid extra generator work.
+            # Direct loop instead of any() with a generator, avoiding generator
+            # overhead in the hot path.
             conflict = False
             for ck in self._checkers:
                 if ck.check(assignment, schedule):
@@ -134,41 +76,6 @@ class Scheduler:
                     break
 
             if not conflict:
-                # Add the assignment to the schedule.
                 schedule.addAssignment(assignment)
-                # Move forward to the next slot (recursive step).
-                self._backtrack(index + 1, slots, candidates_cache, schedule, results, max_results)
-                # Remove the assignment from the schedule.
+                self._backtrack(index + 1, slots, schedule, results, max_results)
                 schedule.removeAssignment(assignment)
-
-    # The main function to generate all valid schedules. It builds the slots, precomputes candidates, and triggers the backtracking search.
-    def generateAllSchedules(self, max_results: int = 1000000) -> list:
-        # Build and sort slots, creating a prioritized list of exams to schedule.
-        slots = self._buildSlots()
-        if not slots:
-            return []
-
-        # Precompute all candidate dates for all slots.
-        candidates_cache = []
-        for slot in slots:
-            candidates_cache.append(self._getCandidates(slot))
-
-        # Trigger the pre-computations once.
-        py_checker = None
-        for ck in self._checkers:
-            if type(ck).__name__ == "ProgramYearConflictChecker":
-                py_checker = ck
-                break
-                
-        if py_checker and hasattr(py_checker, 'precompute_conflicts'):
-            courses_set = {s.course for s in slots}
-            py_checker.precompute_conflicts(list(courses_set), list(self._selected_set))
-
-        # Create an empty schedule.
-        schedule = ExamSchedule()
-        # Create an empty list for the results.
-        results  = []
-
-        # Start the recursive backtracking process and find all valid schedules.
-        self._backtrack(0, slots, candidates_cache, schedule, results, max_results)
-        return results

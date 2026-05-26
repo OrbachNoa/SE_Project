@@ -18,7 +18,7 @@ class ExamPeriod:
         # Store excluded dates as a set, so date checks stay fast.
         self.excludedDates: Set[date] = set(excluded_dates)
         # Precompute available dates, so we don't have to recalculate them every time.
-        self.availableDates: List[str] = self._getAvailableDates()
+        self.availableDates: List[date] = self._getAvailableDates()
 
     def _getAvailableDates(self) -> List[str]:
         """
