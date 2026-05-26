@@ -51,9 +51,6 @@ class Scheduler:
         if index == len(slots):
             new_sched = ExamSchedule()
             new_sched.assignments = list(schedule.assignments)
-            new_sched._date_to_course_ids = {
-                k: set(v) for k, v in schedule._date_to_course_ids.items()
-            }
             results.append(new_sched)
             return
 

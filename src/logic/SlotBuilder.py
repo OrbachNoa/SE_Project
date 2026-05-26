@@ -63,7 +63,6 @@ class SlotBuilder:
         combination, with candidate dates from the matching period.
         """
         slots: List[Slot] = []
-        seen: Set[Tuple] = set()
 
         for course in self._filterRelevantCourses(courses):
             semesters = {
@@ -83,13 +82,7 @@ class SlotBuilder:
                         f"all required courses."
                     )
                 for moed, period in periods_for_sem:
-                    key = (course.courseId, sem, moed)
-                    if key not in seen:
-                        seen.add(key)
-                        # Pass the period's availableDates list by reference -
-                        # all slots from the same period share the same list,
-                        # no copies are made.
-                        slots.append(Slot(course, sem, moed, period.availableDates))
+                    slots.append(Slot(course, sem, moed, period.availableDates))
         return slots
 
     def _filterRelevantCourses(self, courses: List[Course]) -> List[Course]:

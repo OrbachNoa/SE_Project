@@ -16,28 +16,29 @@ class MoedOrderChecker(IConflictChecker):
     def check(self, assignment, schedule) -> bool:
         new_course_id = assignment.course.courseId
         new_moed_rank = self._moed_rank.get(assignment.moed, 0)
-
+        same_course = schedule._course_to_assignments.get(assignment.course.courseId)
+        if not same_course:
+            return False
         # Compare the new assignment with exams already placed in the schedule.
-        for existing in schedule.assignments:
+        for existing in same_course:
             # Check only exams that belong to the same course.
-            if existing.course.courseId == new_course_id:
-                existing_moed_rank = self._moed_rank.get(existing.moed, 0)
+            existing_moed_rank = self._moed_rank.get(existing.moed, 0)
 
-                # If the existing moed is earlier, it must also have an earlier date.
-                if existing_moed_rank < new_moed_rank:
-                    # Reject equal or reversed dates, because the moed order is broken.
-                    if existing.date >= assignment.date:
-                        return True
-
-                # If the existing moed is later, it must also have a later date.
-                elif existing_moed_rank > new_moed_rank:
-                    # Reject equal or reversed dates, because the moed order is broken.
-                    if existing.date <= assignment.date:
-                        return True
-
-                # Reject the same moed twice, so a course cannot be scheduled twice.
-                elif existing_moed_rank == new_moed_rank:
+            # If the existing moed is earlier, it must also have an earlier date.
+            if existing_moed_rank < new_moed_rank:
+                # Reject equal or reversed dates, because the moed order is broken.
+                if existing.date >= assignment.date:
                     return True
+
+            # If the existing moed is later, it must also have a later date.
+            elif existing_moed_rank > new_moed_rank:
+                # Reject equal or reversed dates, because the moed order is broken.
+                if existing.date <= assignment.date:
+                    return True
+
+            # Reject the same moed twice, so a course cannot be scheduled twice.
+            elif existing_moed_rank == new_moed_rank:
+                return True
 
         # Return no conflict after all existing exams pass the checks.
         return False

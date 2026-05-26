@@ -51,9 +51,3 @@ class ProgramsFileParser(FileParser):
 
         # Return all selected program IDs.
         return programs
-
-    def _validate_separator(self, line):
-        """
-        Checks that the programs file uses comma separators.
-        """
-        return "," in line

@@ -1,5 +1,71 @@
 Calculus 1
 10001
 Prof. Math
-83101,1,FALL,Obligatory
-Exam
+83101,1,FALL,OBLIGATORY
+EXAM
+$$$$
+Linear Algebra 1
+10002
+Dr. Matrix
+83101,1,FALL,OBLIGATORY
+EXAM
+$$$$
+Introduction to CS
+10003
+Prof. Turing
+83102,1,FALL,OBLIGATORY
+EXAM
+$$$$
+Discrete Mathematics
+10004
+Dr. Logic
+83102,1,FALL,OBLIGATORY
+EXAM
+$$$$
+Physics 1
+10005
+Prof. Newton
+83103,1,FALL,OBLIGATORY
+EXAM
+$$$$
+Data Structures
+10006
+Dr. Tree
+83101,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Computer Architecture
+10007
+Prof. Gates
+83101,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Algorithms
+10008
+Dr. Graph
+83102,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Operating Systems
+10009
+Prof. Linux
+83102,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Databases
+10010
+Dr. Relational
+83103,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Calculus 2
+10011
+Prof. Math
+83101,1,SPRI,OBLIGATORY
+EXAM
+$$$$
+Linear Algebra 2
+10012
+Dr. Matrix
+83101,1,SPRI,OBLIGATORY
+EXAM

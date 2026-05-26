@@ -2,6 +2,7 @@
 import argparse
 import os
 import sys
+import time
 
 from src.validators.fileValidator import validate_all_files
 from src.parsers.courseParser import CoursesFileParser
@@ -89,15 +90,16 @@ def main():
     """Main entry point of the program."""
     args = _parse_args()
     try:
-        # Validate file paths first, so missing files fail with a clear error.
+        # Validate file paths first
         validate_all_files([args.courses, args.periods, args.programs])
 
-        # Pick the output path: CLI flag > env var > Downloads folder fallback.
         default_path = os.path.join(os.path.expanduser("~"), "Downloads", "exam_schedules.txt")
         env_path = os.environ.get('EXAM_OUTPUT_PATH', default_path)
         output_path = args.output or env_path
 
         print(f"File validation successful. Output will be saved to: {output_path}")
+
+        start_time = time.perf_counter()
 
         run_pipeline(
             courses_file=args.courses,
@@ -105,10 +107,15 @@ def main():
             programs_file=args.programs,
             output_file=output_path,
         )
+
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        
+        print(f"Total execution time: {total_time:.4f} seconds")
+
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

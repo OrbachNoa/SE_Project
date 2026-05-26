@@ -56,7 +56,7 @@ class CoursesFileParser(FileParser):
             raise ValueError(f"Invalid evaluation: {course.evaluation}")
 
         # Validate the course ID, so it matches the expected five-digit format.
-        if len(course.courseId) !=5 or not course.courseId.isdigit():
+        if len(course.courseId) != 5 or not course.courseId.isdigit():
             raise ValueError(f"Invalid course ID: {course.courseId}")
 
         # Require at least one program entry, so the course belongs to a program.
@@ -73,19 +73,6 @@ class CoursesFileParser(FileParser):
             if key in seen_entries:
                 raise ValueError(f"Duplicate program entry found for course '{course.courseId}': Program {entry.programId}, Year {entry.year}")
             seen_entries.add(key)
-
-            # Validate the program ID, so it matches the expected five-digit format.
-            if len(entry.programId) != 5:
-                raise ValueError(f"Invalid program ID: {entry.programId}")
-            # Validate the semester, so only known semester values are accepted.
-            if entry.semester not in Semester:
-                raise ValueError(f"Invalid semester: {entry.semester}")
-            # Validate the requirement, so only known requirement values are accepted.
-            if entry.requirement not in Requirement:
-                raise ValueError(f"Invalid requirement: {entry.requirement}")
-            # Validate the year, so it stays inside the supported study years.
-            if entry.year not in [1,2,3,4]:
-                raise ValueError(f"Invalid year: {entry.year}")
 
     def _parse_course(self, record: str) -> Course:
         """
@@ -108,12 +95,11 @@ class CoursesFileParser(FileParser):
         try:
             evaluation = EvalType(evaluation_str)
         except ValueError:
-            # Keep the raw value, so validation can report it.
-            evaluation = evaluation_str
+            raise ValueError(f"Invalid evaluation type: '{evaluation_str}'")
 
         # Initialize the list of program entries.
         program_entries = []
-        
+
         # Parse each middle line as one program entry.
         for i in range(3, len(lines) - 1):
             parts = [p.strip() for p in lines[i].split(',')]
@@ -126,20 +112,20 @@ class CoursesFileParser(FileParser):
                 if not year_str.isdigit():
                     raise ValueError(f"Year must be a digit, got: '{year_str}' in line: {lines[i]}")
                 year = int(year_str)
-                # Read the semester from the third field.
+                # Read the semester from the third field. Fail fast on unknown
+                # values, so downstream code never sees a raw string here.
                 semester_str = parts[2].upper()
                 try:
                     semester = Semester(semester_str)
                 except ValueError:
-                    # Keep the raw value, so validation can report it.
-                    semester = semester_str
-                # Read the requirement from the fourth field.
+                    raise ValueError(f"Invalid semester '{semester_str}' in line: {lines[i]}")
+                # Read the requirement from the fourth field. Fail fast on
+                # unknown values, so downstream code never sees a raw string.
                 req_str = parts[3].upper()
                 try:
                     requirement = Requirement(req_str)
                 except ValueError:
-                    # Keep the raw value, so validation can report it.
-                    requirement = req_str
+                    raise ValueError(f"Invalid requirement '{req_str}' in line: {lines[i]}")
                 # Create a program entry, so it can be stored on the course.
                 entry = ProgramEntry(program_id, year, semester, requirement)
                 # Add the program entry to the list.
