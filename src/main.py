@@ -22,14 +22,7 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
                  output_file=None, courses=None, periods=None, programs=None,
                  validators=None, slot_builder=None, scheduler=None,
                  output_writer=None, output_path=None):
-    """
-    Three-step scheduling pipeline:
-        1. SlotBuilder  - turn courses+periods+programs into self-contained
-                          slots (each slot carries its own candidate dates).
-        2. Checker prep - precompute the program-year conflict graph once.
-        3. Scheduler    - run backtracking using only slots and checkers.
-    SlotBuilder and Scheduler are injectable, so tests can replace either.
-    """
+    """Runs parsing, validation, scheduling, and output writing."""
 
     # Parse input files when paths were provided.
     if courses_file:
@@ -48,16 +41,12 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
         if not v.validate(programs):
             raise ValueError(v.error_message(programs))
 
-    # Step 1: build self-contained slots (domain -> search problem).
-    # Each slot carries its own candidate dates, so the Scheduler does not
-    # need any reference to periods.
+    # Build slots first, so the scheduler gets a simple search problem.
     if slot_builder is None:
         slot_builder = SlotBuilder(periods, selected_programs=programs)
     slots = slot_builder.build(courses)
 
-    # Step 2: prepare conflict checkers. The program-year checker needs a
-    # one-time precomputation of the conflict graph. Done here (not in
-    # Scheduler) so Scheduler stays a pure algorithm.
+    # Prepare conflict checkers, so scheduling can test assignments quickly.
     if scheduler is None:
         py_checker = ProgramYearConflictChecker()
         courses_in_slots = list({s.course for s in slots})
@@ -65,7 +54,7 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
         checkers = [py_checker, MoedOrderChecker()]
         scheduler = Scheduler(checkers)
 
-    # Step 3: run the backtracking search.
+    # Run the backtracking search, so valid schedules can be found.
     schedules = scheduler.generateSchedules(slots)
 
     # Write schedules to a file when an output path was provided.
@@ -90,7 +79,7 @@ def main():
     """Main entry point of the program."""
     args = _parse_args()
     try:
-        # Validate file paths first
+        # Validate file paths first, so missing files fail before scheduling.
         validate_all_files([args.courses, args.periods, args.programs])
 
         default_path = os.path.join(os.path.expanduser("~"), "Downloads", "exam_schedules.txt")

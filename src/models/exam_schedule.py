@@ -3,9 +3,7 @@ from .course import Course
 from .enums import Moed, Semester
 
 class ExamAssignment:
-    """
-    Represents a specific exam placement for a course.
-    """
+    """Represents one exam placement for a course."""
     __slots__ = ['course', 'date', 'moed', 'semester']
     def __init__(self, course: Course, date: str, moed: Moed, semester: Semester):
         self.course = course

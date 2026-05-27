@@ -7,20 +7,10 @@ import re
 # endregion
 
 class ExamPeriodsFileParser(FileParser):
-    """
-    Parses exam-period records into ExamPeriod objects.
-
-    All field-level validation lives in _parse_date (the parser fails fast
-    on invalid input), and structural invariants like startDate < endDate
-    live in ExamPeriod.__init__. No separate _validate_exam_period method
-    is needed - every check it used to perform is now guaranteed earlier
-    in the pipeline.
-    """
+    """Parses exam-period records into ExamPeriod objects."""
 
     def parse(self, file_path):
-        """
-        Reads the exam-period file and returns exam periods.
-        """
+        """Reads the exam-period file and returns exam periods."""
         # Open the file and read its content.
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
@@ -44,8 +34,7 @@ class ExamPeriodsFileParser(FileParser):
                 # Parse the record.
                 period = self._parse_date(record)
                 if period is not None:
-                    # Reject duplicate (semester, moed) combinations, so each
-                    # combo appears at most once in the file.
+                    # Reject duplicate semester-moed combos, so each appears once.
                     combo = (period.semester, period.moed)
                     if combo in seen_combos:
                         raise ValueError(
@@ -60,11 +49,7 @@ class ExamPeriodsFileParser(FileParser):
         return dates
 
     def _parse_date(self, record):
-        """
-        Converts one text record into an ExamPeriod object. Raises ValueError
-        with a precise message on any malformed field, so failures are easy
-        to trace back to the source line.
-        """
+        """Converts one text record into an ExamPeriod object."""
         # Split the record into clean lines, so empty lines do not affect parsing.
         lines = [line.strip() for line in record.strip().split('\n') if line.strip()]
         # Skip records that do not contain the minimum required lines.
@@ -78,13 +63,13 @@ class ExamPeriodsFileParser(FileParser):
 
         semester_str = parts[0].upper()
         moed_str = parts[1].upper()
-        # Parse the semester value, fail fast on unknown values.
+        # Parse the semester, so unknown values fail early.
         try:
             semester = Semester(semester_str)
         except ValueError:
             raise ValueError(f"Invalid semester: '{semester_str}' in line: {lines[0]}")
 
-        # Parse the moed value, fail fast on unknown values.
+        # Parse the moed, so unknown values fail early.
         try:
             moed = Moed(moed_str)
         except ValueError:
@@ -114,11 +99,11 @@ class ExamPeriodsFileParser(FileParser):
                 d = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
                 excluded_dates.add(d)
             elif len(found_dates) >= 2:
-                # Expand a date range, so every date in the range is excluded.
+                # Expand the range, so every date in it is excluded.
                 d1 = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
                 d2 = datetime.strptime(found_dates[1], "%d-%m-%Y").date()
                 if d1 > d2:
-                    # Reject reversed date ranges.
+                    # Reject reversed ranges, so input order stays clear.
                     raise ValueError(
                         f"Excluded date range is reversed: {found_dates[0]} is after {found_dates[1]}. "
                         f"Range must be written as start, end (earlier date first)."
@@ -131,6 +116,5 @@ class ExamPeriodsFileParser(FileParser):
                 # Reject unclear excluded-date lines, so invalid input fails loudly.
                 raise ValueError(f"Invalid excluded date format in line: '{lines[i]}'")
 
-        # Build the ExamPeriod. Its constructor enforces startDate < endDate,
-        # so no extra validation pass is needed here.
+        # Build the ExamPeriod, so its constructor can validate the range.
         return ExamPeriod(semester, moed, start_date, end_date, excluded_dates)

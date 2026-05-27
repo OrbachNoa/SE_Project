@@ -3,14 +3,10 @@ from .fileParser import FileParser
 # endregion
 
 class ProgramsFileParser(FileParser):
-    """
-    Parses selected program IDs from the programs file.
-    """
+    """Parses selected program IDs from the programs file."""
 
     def parse(self, file_path):
-        """
-        Reads the programs file and returns selected program IDs.
-        """
+        """Reads the programs file and returns selected program IDs."""
         # Start with an empty list, so empty files return no programs.
         programs = []
         # Read the programs file, so selected IDs can be parsed.

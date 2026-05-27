@@ -5,13 +5,9 @@ from ..models.course import Course, ProgramEntry
 # endregion
 
 class CoursesFileParser(FileParser):
-    """
-    Parses course records into course objects.
-    """
+    """Parses course records into course objects."""
     def parse(self, file_path):
-        """
-        Reads the course file and returns course objects.
-        """
+        """Reads the course file and returns course objects."""
         # Open the file and read its content.
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
@@ -48,9 +44,7 @@ class CoursesFileParser(FileParser):
         return courses
 
     def _validate_course(self, course):
-        """
-        Checks that a parsed course has valid field values.
-        """
+        """Checks that a parsed course has valid field values."""
         # Validate the evaluation type, so only known options are accepted.
         if course.evaluation not in EvalType:
             raise ValueError(f"Invalid evaluation: {course.evaluation}")
@@ -75,9 +69,7 @@ class CoursesFileParser(FileParser):
             seen_entries.add(key)
 
     def _parse_course(self, record: str) -> Course:
-        """
-        Converts one text record into a Course object.
-        """
+        """Converts one text record into a Course object."""
         # Split the record into clean lines, so empty lines do not affect parsing.
         lines = [line.strip() for line in record.strip().split('\n') if line.strip()]
         # Require the basic fields, so incomplete course records are rejected.
@@ -112,15 +104,13 @@ class CoursesFileParser(FileParser):
                 if not year_str.isdigit():
                     raise ValueError(f"Year must be a digit, got: '{year_str}' in line: {lines[i]}")
                 year = int(year_str)
-                # Read the semester from the third field. Fail fast on unknown
-                # values, so downstream code never sees a raw string here.
+                # Read the semester, so bad values fail before scheduling.
                 semester_str = parts[2].upper()
                 try:
                     semester = Semester(semester_str)
                 except ValueError:
                     raise ValueError(f"Invalid semester '{semester_str}' in line: {lines[i]}")
-                # Read the requirement from the fourth field. Fail fast on
-                # unknown values, so downstream code never sees a raw string.
+                # Read the requirement, so bad values fail before scheduling.
                 req_str = parts[3].upper()
                 try:
                     requirement = Requirement(req_str)

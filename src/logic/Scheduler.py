@@ -5,32 +5,17 @@ from .IConflictChecker import IConflictChecker
 
 
 class Scheduler:
-    """
-    Pure backtracking search engine.
-
-    Consumes a list of self-contained Slots (each carrying its own
-    candidate dates) and a list of conflict checkers. Knows nothing
-    about courses, programs, exam periods, or how slots were built.
-    Performs no precomputation on the checkers - the caller is
-    responsible for preparing both inputs.
-
-    This decoupling means the algorithm is generic and testable in
-    isolation against synthetic slots.
-    """
+    """Builds valid schedules with backtracking."""
 
     def __init__(self, checkers: List[IConflictChecker]):
         self._checkers = checkers
 
     def generateSchedules(self, slots: List[Slot], max_results: int = 1_000_000) -> List[ExamSchedule]:
-        """
-        Runs the backtracking search over the given slots. Returns every
-        valid schedule found, up to max_results.
-        """
+        """Runs the search and returns valid schedules."""
         if not slots:
             return []
 
-        # Fast-path: if any slot has zero candidates, no schedule can include
-        # it, so the whole problem is infeasible. Stop before any recursion.
+        # Stop early if any slot has no dates, so useless recursion is avoided.
         if any(not s.candidateDates for s in slots):
             return []
 
@@ -45,9 +30,7 @@ class Scheduler:
         if len(results) >= max_results:
             return
 
-        # Base case: every slot has an assignment - save a snapshot. Deep-copy
-        # the date index so later backtracking mutations don't corrupt the
-        # saved result.
+        # Save a schedule when every slot was assigned.
         if index == len(slots):
             new_sched = ExamSchedule()
             new_sched.assignments = list(schedule.assignments)
@@ -55,7 +38,7 @@ class Scheduler:
             return
 
         slot = slots[index]
-        # Read candidates directly from the slot - no lookup, no period_map.
+        # Use slot dates directly, so no period lookup is needed.
         for date in slot.candidateDates:
             if len(results) >= max_results:
                 return
@@ -64,8 +47,7 @@ class Scheduler:
                 course=slot.course, date=date, moed=slot.moed, semester=slot.semester
             )
 
-            # Direct loop instead of any() with a generator, avoiding generator
-            # overhead in the hot path.
+            # Check all conflict rules, so only valid assignments are kept.
             conflict = False
             for ck in self._checkers:
                 if ck.check(assignment, schedule):
