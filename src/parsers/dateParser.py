@@ -2,28 +2,26 @@
 from .fileParser import FileParser
 from ..models.enums import Moed, Semester
 from ..models.exam_period import ExamPeriod
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 # endregion
 
 class ExamPeriodsFileParser(FileParser):
-    """
-    Parses exam-period records into ExamPeriod objects.
-    """
+    """Parses exam-period records into ExamPeriod objects."""
 
     def parse(self, file_path):
-        """
-        Reads the exam-period file and returns exam periods.
-        """
+        """Reads the exam-period file and returns exam periods."""
         # Open the file and read its content.
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
 
         # Validate the separator, so badly formatted multi-record files are caught.
         try:
-            FileParser.validateSeparator(content)
+            FileParser.validateSeparator(content, separator="$$$$")
         except ValueError:
-            pass
+            lines = [line for line in content.split('\n') if line.strip()]
+            if len(lines) > 5:
+                raise ValueError("Exam periods file is missing the '$$$$' separator between records.")
 
         # Initialize the list of exam periods.
         dates = []
@@ -38,9 +36,7 @@ class ExamPeriodsFileParser(FileParser):
                 # Parse the record.
                 period = self._parse_date(record)
                 if period is not None:
-                    # Validate each period before adding it to the result.
-                    self._validate_exam_period(period)
-                    # Add the period to the result if it's not a duplicate.
+                    # Reject duplicate semester-moed combos, so each appears once.
                     combo = (period.semester, period.moed)
                     if combo in seen_combos:
                         raise ValueError(
@@ -54,30 +50,8 @@ class ExamPeriodsFileParser(FileParser):
         # Return all valid exam periods found in the file.
         return dates
 
-    def _validate_exam_period(self, period: ExamPeriod) -> None:
-        """
-        Checks that a parsed exam period has valid field values.
-        """
-        # Reject raw date strings, so only parsed date objects are accepted.
-        if isinstance(period.startDate, str) or isinstance(period.endDate, str):
-            raise ValueError("Dates must be valid DD-MM-YYYY formats.")
-
-        # Require the start date to be before the end date.
-        if period.startDate >= period.endDate:
-            raise ValueError(f"Start date must be strictly before end date")
-
-        # Validate the moed, so only known moed values are accepted.
-        if period.moed not in Moed:
-            raise ValueError(f"Invalid moed: {period.moed}")
-
-        # Validate the semester, so only known semester values are accepted.
-        if period.semester not in Semester:
-            raise ValueError(f"Invalid semester: {period.semester}")
-
     def _parse_date(self, record):
-        """
-        Converts one text record into an ExamPeriod object.
-        """
+        """Converts one text record into an ExamPeriod object."""
         # Split the record into clean lines, so empty lines do not affect parsing.
         lines = [line.strip() for line in record.strip().split('\n') if line.strip()]
         # Skip records that do not contain the minimum required lines.
@@ -91,17 +65,17 @@ class ExamPeriodsFileParser(FileParser):
 
         semester_str = parts[0].upper()
         moed_str = parts[1].upper()
-        # Parse the semester value, so valid strings become enum values.
+        # Parse the semester, so unknown values fail early.
         try:
             semester = Semester(semester_str)
         except ValueError:
-            semester = semester_str
+            raise ValueError(f"Invalid semester: '{semester_str}' in line: {lines[0]}")
 
-        # Parse the moed value, so valid strings become enum values.
+        # Parse the moed, so unknown values fail early.
         try:
             moed = Moed(moed_str)
         except ValueError:
-            moed = moed_str
+            raise ValueError(f"Invalid moed: '{moed_str}' in line: {lines[0]}")
 
         # Split the start and end dates, so each date can be parsed.
         dates_parts = [p.strip() for p in lines[1].split(',')]
@@ -114,12 +88,11 @@ class ExamPeriodsFileParser(FileParser):
             start_date = datetime.strptime(dates_parts[0], "%d-%m-%Y").date()
             end_date = datetime.strptime(dates_parts[1], "%d-%m-%Y").date()
         except ValueError:
-            start_date = dates_parts[0]
-            end_date = dates_parts[1]
+            raise ValueError(f"Dates must be valid DD-MM-YYYY format: '{dates_parts[0]}', '{dates_parts[1]}'")
 
         # Collect excluded dates, so unavailable days are not used for exams.
         excluded_dates = set()
-        from datetime import timedelta
+
         for i in range(2, len(lines)):
             # Find one-digit or two-digit day and month values, so flexible dates work.
             found_dates = re.findall(r"\d{1,2}-\d{1,2}-\d{4}", lines[i])
@@ -128,11 +101,11 @@ class ExamPeriodsFileParser(FileParser):
                 d = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
                 excluded_dates.add(d)
             elif len(found_dates) >= 2:
-                # Expand a date range, so every date in the range is excluded.
+                # Expand the range, so every date in it is excluded.
                 d1 = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
                 d2 = datetime.strptime(found_dates[1], "%d-%m-%Y").date()
                 if d1 > d2:
-                    # Reject reversed date ranges.
+                    # Reject reversed ranges, so input order stays clear.
                     raise ValueError(
                         f"Excluded date range is reversed: {found_dates[0]} is after {found_dates[1]}. "
                         f"Range must be written as start, end (earlier date first)."
@@ -145,5 +118,5 @@ class ExamPeriodsFileParser(FileParser):
                 # Reject unclear excluded-date lines, so invalid input fails loudly.
                 raise ValueError(f"Invalid excluded date format in line: '{lines[i]}'")
 
-        # Return the exam period with its excluded dates.
+        # Build the ExamPeriod, so its constructor can validate the range.
         return ExamPeriod(semester, moed, start_date, end_date, excluded_dates)

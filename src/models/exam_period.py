@@ -3,9 +3,7 @@ from .enums import Semester, Moed
 from datetime import timedelta, date
 
 class ExamPeriod:
-    """
-    Represents the date range for one exam period.
-    """
+    """Represents the date range for one exam period."""
     def __init__(self, semester: Semester, moed: Moed, start_date: date, end_date: date,
                  excluded_dates: Iterable[date]):
         # Reject invalid ranges, so every exam period has a real date window.
@@ -18,12 +16,10 @@ class ExamPeriod:
         # Store excluded dates as a set, so date checks stay fast.
         self.excludedDates: Set[date] = set(excluded_dates)
         # Precompute available dates, so we don't have to recalculate them every time.
-        self.availableDates: List[str] = self._getAvailableDates()
+        self.availableDates: List[date] = self._getAvailableDates()
 
-    def _getAvailableDates(self) -> List[str]:
-        """
-        Returns all dates in this period that are not excluded.
-        """
+    def _getAvailableDates(self) -> List[date]:
+        """Returns all dates in this period that are not excluded."""
         dates = []
         curr = self.startDate
         while curr <= self.endDate:

@@ -3,14 +3,10 @@ from .fileParser import FileParser
 # endregion
 
 class ProgramsFileParser(FileParser):
-    """
-    Parses selected program IDs from the programs file.
-    """
+    """Parses selected program IDs from the programs file."""
 
     def parse(self, file_path):
-        """
-        Reads the programs file and returns selected program IDs.
-        """
+        """Reads the programs file and returns selected program IDs."""
         # Start with an empty list, so empty files return no programs.
         programs = []
         # Read the programs file, so selected IDs can be parsed.
@@ -20,6 +16,11 @@ class ProgramsFileParser(FileParser):
             if not content:
                 return programs
 
+            try:
+                FileParser.validateSeparator(content, separator=",")
+            except ValueError:
+                if len(content) != 5:
+                    raise ValueError("Programs file must contain comma-separated IDs, or a single valid 5-digit ID.")
             # Split by commas, so each token can be validated as one program ID.
             parts = [p.strip() for p in content.split(',')]
 
@@ -51,9 +52,3 @@ class ProgramsFileParser(FileParser):
 
         # Return all selected program IDs.
         return programs
-
-    def _validate_separator(self, line):
-        """
-        Checks that the programs file uses comma separators.
-        """
-        return "," in line
