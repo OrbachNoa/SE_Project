@@ -17,9 +17,11 @@ class ExamPeriodsFileParser(FileParser):
 
         # Validate the separator, so badly formatted multi-record files are caught.
         try:
-            FileParser.validateSeparator(content)
+            FileParser.validateSeparator(content, separator="$$$$")
         except ValueError:
-            pass
+            lines = [line for line in content.split('\n') if line.strip()]
+            if len(lines) > 5:
+                raise ValueError("Exam periods file is missing the '$$$$' separator between records.")
 
         # Initialize the list of exam periods.
         dates = []

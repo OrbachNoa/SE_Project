@@ -15,10 +15,10 @@ class FileParser(ABC):
         pass
 
     @staticmethod
-    def validateSeparator(content):
+    def validateSeparator(content, separator="$$$$"):
         """
         Validates the file separator.
         """
-        if "$$$$" not in content:
-            raise ValueError("Separator $$$$ not found.")
+        if separator not in content:
+            raise ValueError(f"Separator '{separator}' not found.")
         return True

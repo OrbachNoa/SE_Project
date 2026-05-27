@@ -16,6 +16,11 @@ class ProgramsFileParser(FileParser):
             if not content:
                 return programs
 
+            try:
+                FileParser.validateSeparator(content, separator=",")
+            except ValueError:
+                if len(content) != 5:
+                    raise ValueError("Programs file must contain comma-separated IDs, or a single valid 5-digit ID.")
             # Split by commas, so each token can be validated as one program ID.
             parts = [p.strip() for p in content.split(',')]
 
