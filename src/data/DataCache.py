@@ -1,7 +1,7 @@
 """Persistence-only DTO for the on-disk data snapshot.
 
-This module defines :class:`DataCache`, the serializable representation of the
-parsed application data as it is stored on disk. It exists ONLY at the I/O
+This module defines the serializable representation of the
+parsed application data as it is stored on disk. It exists only at the I/O
 boundary and carries no runtime behavior.
 """
 from __future__ import annotations
