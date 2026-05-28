@@ -4,19 +4,23 @@ import pytest
 from src.models.enums import EvalType, Semester, Moed, Requirement
 from src.logic.Scheduler import Scheduler
 from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
-from src.logic.ExcludedDatesChecker import ExcludedDatesChecker
-from src.logic.ExamPeriodBoundaryChecker import ExamPeriodBoundaryChecker
+from src.logic.MoedOrderChecker import MoedOrderChecker
+from src.logic.SlotBuilder import SlotBuilder
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-# Helper: Create the standard checkers and give them the exam dates.
-def _default_checkers(periods):
+# Helper: Creates the standard checkers used in the tests.
+def _default_checkers(periods, courses):
+    py_checker = ProgramYearConflictChecker()
+    py_checker.precompute_conflicts(courses)
     return [
-        ProgramYearConflictChecker(),
-        ExcludedDatesChecker(periods),
-        ExamPeriodBoundaryChecker(periods),
+        py_checker,
+        MoedOrderChecker()
     ]
 
-
+# Helper: Creates a unique 'fingerprint' for a schedule.
 def _schedule_signature(schedule):
     """
     Helper: Creates a unique 'fingerprint' for a schedule. 
@@ -30,10 +34,9 @@ def _schedule_signature(schedule):
 
 # ===========================================================================
 # TC-BEH-001 — Test that the system does not return duplicate schedules.
+# The system must never return the exact same schedule twice.
 # ===========================================================================
-
-# TC-BEH-001: The system must never return the exact same schedule twice.
-def test_beh_001_no_duplicate_schedules_in_result(
+def test_no_duplicate_schedules_in_result(
     make_course, make_program_entry, make_period,
 ):
     # Arrange — 2 mandatory courses and 3 available days. 
@@ -48,15 +51,11 @@ def test_beh_001_no_duplicate_schedules_in_result(
     period = make_period(
         start=date(2026, 6, 1), end=date(2026, 6, 3), excluded=[]
     )
-    scheduler = Scheduler(
-        courses=courses,
-        periods=[period],
-        conflictCheckers=_default_checkers([period]),
-        validators=[],
-    )
+    slots = SlotBuilder([period]).build(courses)
+    scheduler = Scheduler(_default_checkers([period], courses))
 
     # Act — Run the scheduler.
-    schedules = scheduler.generateAllSchedules()
+    schedules = scheduler.generateSchedules(slots)
 
     # Assert — Check that every schedule has a different fingerprint.
     signatures = [_schedule_signature(s) for s in schedules]
@@ -68,10 +67,9 @@ def test_beh_001_no_duplicate_schedules_in_result(
 
 # ===========================================================================
 # TC-BEH-002 — Test that every single schedule is truly conflict-free.
+# Make sure that no bad schedules slipped into the final results.
 # ===========================================================================
-
-# TC-BEH-002: Make sure that no bad schedules slipped into the final results.
-def test_beh_002_every_schedule_passes_all_conflict_checks(
+def test_every_schedule_passes_all_conflict_checks(
     make_course, make_program_entry, make_period,
 ):
     # Arrange — 3 courses and 5 days, mixing mandatory and elective courses.
@@ -87,16 +85,12 @@ def test_beh_002_every_schedule_passes_all_conflict_checks(
     period = make_period(
         start=date(2026, 6, 1), end=date(2026, 6, 5), excluded=[]
     )
-    checkers = _default_checkers([period])
-    scheduler = Scheduler(
-        courses=courses,
-        periods=[period],
-        conflictCheckers=checkers,
-        validators=[],
-    )
+    slots = SlotBuilder([period]).build(courses)
+    checkers = _default_checkers([period], courses)
+    scheduler = Scheduler(checkers)
 
     # Act
-    schedules = scheduler.generateAllSchedules()
+    schedules = scheduler.generateSchedules(slots)
 
     # Assert — Go through every exam in every schedule and ask the 
     # checkers if there is a conflict. None of them should fail.
@@ -118,10 +112,9 @@ def test_beh_002_every_schedule_passes_all_conflict_checks(
 
 # ===========================================================================
 # TC-BEH-004 — Test that elective courses across programs CAN share a date.
+# Two elective courses from different programs ARE allowed to be on the same day.
 # ===========================================================================
-
-# TC-BEH-004: Two elective courses from different programs ARE allowed to be on the same day.
-def test_beh_004_elective_courses_across_programs_may_share_date(
+def test_elective_courses_across_programs_may_share_date(
     make_course, make_program_entry, make_period,
 ):
     # Arrange — Two elective courses in year 2, different programs.
@@ -134,15 +127,12 @@ def test_beh_004_elective_courses_across_programs_may_share_date(
     period = make_period(
         start=date(2026, 6, 1), end=date(2026, 6, 3), excluded=[]
     )
-    scheduler = Scheduler(
-        courses=[course_a, course_b],
-        periods=[period],
-        conflictCheckers=_default_checkers([period]),
-        validators=[],
-    )
+    courses = [course_a, course_b]
+    slots = SlotBuilder([period]).build(courses)
+    scheduler = Scheduler(_default_checkers([period], courses))
 
     # Act
-    schedules = scheduler.generateAllSchedules()
+    schedules = scheduler.generateSchedules(slots)
 
     # Assert — Make sure there is at least one schedule where both 
     # electives are on the exact same day.
@@ -162,11 +152,9 @@ def test_beh_004_elective_courses_across_programs_may_share_date(
 
 # ===========================================================================
 # TC-BEH-005 — Test that Moed Aleph and Moed Bet do not affect each other.
+# If a date is blocked in Aleph, it can still be used in Bet.
 # ===========================================================================
-
-# Moed Aleph and Moed Bet are completely separate. If a date is blocked 
-# in Aleph, it can still be used in Bet.
-def test_beh_005_cross_moed_independence(
+def test_cross_moed_independence(
     make_course, make_program_entry, make_period,
 ):
     # Arrange — Exclude June 5 in Aleph, but ALLOW it in Bet.
@@ -184,16 +172,11 @@ def test_beh_005_cross_moed_independence(
         start=date(2026, 6, 1), end=date(2026, 6, 10),
         excluded=[],                    # June 5 ALLOWED in BET
     )
-
-    scheduler = Scheduler(
-        courses=[course],
-        periods=[period_aleph, period_bet],
-        conflictCheckers=_default_checkers([period_aleph, period_bet]),
-        validators=[],
-    )
+    slots = SlotBuilder([period_aleph, period_bet]).build([course])
+    scheduler = Scheduler(_default_checkers([period_aleph, period_bet], [course]))
 
     # Act
-    schedules = scheduler.generateAllSchedules()
+    schedules = scheduler.generateSchedules(slots)
 
     # Assert — Check that June 5 is used in Bet, but NEVER used in Aleph.
     aleph_june5 = [
@@ -217,11 +200,10 @@ def test_beh_005_cross_moed_independence(
 
 # ===========================================================================
 # TC-BEH-006 — Test that the system tries other days (Backtracking).
-# ===========================================================================
-
-# TC-BEH-006: The system must not give up if the first try fails. It must go back 
+# The system must not give up if the first try fails. It must go back 
 # and try other dates until it finds a solution.
-def test_beh_006_engine_backtracks_to_next_candidate(
+# ===========================================================================
+def test_engine_backtracks_to_next_candidate(
     make_course, make_program_entry, make_period,
 ):
     # Arrange — 2 mandatory courses and 2 days. The system might try to 
@@ -233,15 +215,12 @@ def test_beh_006_engine_backtracks_to_next_candidate(
     period = make_period(
         start=date(2026, 6, 1), end=date(2026, 6, 2), excluded=[]
     )
-    scheduler = Scheduler(
-        courses=[course_a, course_b],
-        periods=[period],
-        conflictCheckers=_default_checkers([period]),
-        validators=[],
-    )
+    courses = [course_a, course_b]
+    slots = SlotBuilder([period]).build(courses)
+    scheduler = Scheduler(_default_checkers([period], courses))
 
     # Act
-    schedules = scheduler.generateAllSchedules()
+    schedules = scheduler.generateSchedules(slots)
 
     # Assert — Make sure it found the solutions and didn't crash.
     assert len(schedules) >= 1, (
@@ -286,17 +265,9 @@ def test_course_with_no_matching_period_raises_clear_error(make_course, make_per
         start=date(2026, 2, 1), end=date(2026, 2, 3),
     )
 
-    scheduler = Scheduler(
-        courses=[fall_course, spring_course],
-        periods=[fall_period],
-        conflictCheckers=_default_checkers([fall_period]),
-        validators=[],
-        selected_programs=["83101"],
-    )
-
     # Act + Assert — must raise, must name the orphan course and semester.
     with pytest.raises(ValueError) as exc_info:
-        scheduler.generateAllSchedules()
+        SlotBuilder([fall_period], selected_programs=["83101"]).build([fall_course, spring_course])
     msg = str(exc_info.value)
     assert "10002" in msg or "Spring Course" in msg, (
         f"Error must identify the orphan course; got: {msg!r}"

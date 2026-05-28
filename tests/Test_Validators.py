@@ -10,7 +10,9 @@ from src.validators.inputValidator import InputValidator
 # MaxProgramsValidator — TC-VAL-001..004 (boundary value tests)
 # ---------------------------------------------------------------------------
 
+# ===========================================================================
 # TC-VAL-001: Exactly 5 programs (the upper boundary) must be accepted.
+# ===========================================================================
 def test_max_programs_validator_accepts_exactly_five(make_program_entry):
     # Arrange — 5 distinct program entries, codes 83101..83105.
     selected = [f"8310{i}" for i in range(1, 6)]
@@ -19,8 +21,9 @@ def test_max_programs_validator_accepts_exactly_five(make_program_entry):
     # Assert
     assert result is True
 
-
+# ===========================================================================
 # TC-VAL-002: 6 programs (one over the max) must be rejected.
+# ===========================================================================
 def test_max_programs_validator_rejects_six(make_program_entry):
     # Arrange — 6 distinct program entries.
     selected = [f"8310{i}" for i in range(1, 7)]
@@ -29,8 +32,9 @@ def test_max_programs_validator_rejects_six(make_program_entry):
     # Assert
     assert result is False
 
-
+# ===========================================================================
 # TC-VAL-003: 1 program (the minimum viable input) must be accepted.
+# ===========================================================================
 def test_max_programs_validator_accepts_one(make_program_entry):
     # Arrange — exactly one program entry.
     selected = ["83101"]
@@ -39,9 +43,10 @@ def test_max_programs_validator_accepts_one(make_program_entry):
     # Assert
     assert result is True
 
-
+# ===========================================================================
 # TC-VAL-004: 0 programs (empty selection) must be rejected.
 # The system cannot schedule anything with no programs selected.
+# ===========================================================================
 def test_max_programs_validator_rejects_zero():
     # Arrange — empty selection.
     selected = []
@@ -55,7 +60,9 @@ def test_max_programs_validator_rejects_zero():
 # ProgramExistenceValidator — TC-VAL-005..007
 # ---------------------------------------------------------------------------
 
+# ===========================================================================
 # TC-VAL-005: When every selected program code is present in the master list, the validator must return True. 
+# ===========================================================================
 def test_program_existence_validator_accepts_when_all_in_master(make_program_entry):
     # Arrange
     master = ["83101", "83102", "83103"]
@@ -65,8 +72,9 @@ def test_program_existence_validator_accepts_when_all_in_master(make_program_ent
     # Assert
     assert result is True
 
-
+# ===========================================================================
 # TC-VAL-006: A single unknown program code must cause the validator to return false.
+# ===========================================================================
 def test_program_existence_validator_rejects_unknown_code(make_program_entry):
     # Arrange — '99999' is not in the master list.
     master = ["83101", "83102"]
@@ -77,7 +85,9 @@ def test_program_existence_validator_rejects_unknown_code(make_program_entry):
     assert result is False
 
 
+# ===========================================================================
 # TC-VAL-007: Substring/prefix matching is NOT allowed — '8310' is not a valid match for '83101'.
+# ===========================================================================
 def test_program_existence_validator_rejects_prefix_match(make_program_entry):
     # Arrange — '8310' is a prefix of '83101' but not equal to it.
     master = ["83101"]
@@ -91,24 +101,22 @@ def test_program_existence_validator_rejects_prefix_match(make_program_entry):
     # Assert
     assert result is False
 
-
 # ---------------------------------------------------------------------------
-# TC-VAL-008 — Validator failure halts the pipeline before Phase 3.
-# This is the critical architectural test that mirrors the sequence
-# diagram's Phase 2 'alt' branch: when validation fails, the scheduler
-# must not be invoked at all.
+# IInputValidator — TC-VAL-008..012
 # ---------------------------------------------------------------------------
 
+# ===========================================================================
 # TC-VAL-008: When any IInputValidator returns False, the orchestration
-# must NOT call Scheduler.generateAllSchedules().
+# must NOT call Scheduler.generateSchedules().
+# ===========================================================================
 def test_validator_failure_prevents_schedule_generation(make_program_entry):
     # Arrange — a mock validator that fails, and a mock scheduler whose
-    # generateAllSchedules() we will assert was never called.
+    # generateSchedules() we will assert was never called.
     failing_validator = MagicMock()
     failing_validator.validate.return_value = False
 
     mock_scheduler = MagicMock()
-    mock_scheduler.generateAllSchedules = MagicMock()
+    mock_scheduler.generateSchedules = MagicMock()
 
     # We import the orchestration entry point lazily so this test can
     # still load even if the module is renamed during development.
@@ -130,11 +138,11 @@ def test_validator_failure_prevents_schedule_generation(make_program_entry):
         pass
     
     # Assert — the scheduler must NOT have been invoked.
-    assert mock_scheduler.generateAllSchedules.call_count == 0
+    assert mock_scheduler.generateSchedules.call_count == 0
 
 
 # ===========================================================================
-# TC-VAL-009 — MaxProgramsValidator.error_message describes the specific issue
+# TC-VAL-009: MaxProgramsValidator.error_message describes the specific issue
 # ===========================================================================
 def test_max_programs_error_message_when_too_many():
     v = MaxProgramsValidator()
@@ -143,7 +151,9 @@ def test_max_programs_error_message_when_too_many():
     assert "6" in msg, "Error message should name the offending count"
     assert "5" in msg, "Error message should name the maximum"
 
-
+# ===========================================================================
+# TC-VAL-010: MaxProgramsValidator.error_message describes the specific issue
+# ===========================================================================
 def test_max_programs_error_message_when_empty():
     v = MaxProgramsValidator()
     msg = v.error_message([])
@@ -153,7 +163,7 @@ def test_max_programs_error_message_when_empty():
 
 
 # ===========================================================================
-# TC-VAL-010 — ProgramExistenceValidator.error_message names the invalid codes
+# TC-VAL-011: ProgramExistenceValidator.error_message names the invalid codes
 # ===========================================================================
 def test_program_existence_error_message_lists_invalid_codes():
     v = ProgramExistenceValidator(master=["83101", "83102"])
@@ -163,7 +173,7 @@ def test_program_existence_error_message_lists_invalid_codes():
 
 
 # ===========================================================================
-# TC-VAL-011 — Default error_message in base class is informative
+# TC-VAL-012: Default error_message in base class is informative
 # ===========================================================================
 def test_input_validator_default_error_message_names_class():
     # Anonymous subclass that doesn't override error_message

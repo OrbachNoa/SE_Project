@@ -5,27 +5,31 @@ import pytest
 from src.models.enums import EvalType, Semester, Moed, Requirement
 from src.logic.Scheduler import Scheduler
 from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
-from src.logic.ExcludedDatesChecker import ExcludedDatesChecker
-from src.logic.ExamPeriodBoundaryChecker import ExamPeriodBoundaryChecker
+from src.logic.MoedOrderChecker import MoedOrderChecker
+from src.logic.SlotBuilder import SlotBuilder
 
+# ---------------------------------------------------------------------------
+# Helper functions and constants used in the tests.
+# ---------------------------------------------------------------------------
 
 # The maximum time allowed to run the algorithm (30 seconds).
 MAX_EXECUTION_SECONDS = 30.0
 
-
+# ===========================================================================
 # Helper: Create the standard checkers and give them the exam dates.
-def _default_checkers(periods):
+# ===========================================================================
+def _default_checkers(periods, courses):
+    py_checker = ProgramYearConflictChecker()
+    py_checker.precompute_conflicts(courses)
     return [
-        ProgramYearConflictChecker(),
-        ExcludedDatesChecker(periods),
-        ExamPeriodBoundaryChecker(periods),
+        py_checker,
+        MoedOrderChecker(),
     ]
 
 
 # ===========================================================================
 # Functions to build fake data for the tests.
 # ===========================================================================
-
 def _build_courses(
     make_course, make_program_entry,
     *, num_programs, courses_per_program,
@@ -92,11 +96,10 @@ def _build_period(
 
 # ===========================================================================
 # TC-PER-001 — Normal load: 5 programs, 10 courses each, 30 days.
+# Test that the system finishes in under 30 seconds for a normal amount of courses.
 # ===========================================================================
-
-# TC-PER-001: # Test that the system finishes in under 30 seconds for a normal amount of courses.
 @pytest.mark.performance
-def test_per_001_typical_load_under_30_seconds(make_course, make_program_entry,
+def test_typical_load_under_30_seconds(make_course, make_program_entry,
                                                 make_period):
     # Arrange — Create 50 exam courses and a 30-day test period.
     courses = _build_courses(
@@ -108,16 +111,12 @@ def test_per_001_typical_load_under_30_seconds(make_course, make_program_entry,
         start=date(2026, 6, 1), end=date(2026, 6, 30),
         num_excluded=0,
     )
-    scheduler = Scheduler(
-        courses=courses,
-        periods=[period],
-        conflictCheckers=_default_checkers([period]),
-        validators=[],
-    )
+    slots = SlotBuilder([period]).build(courses)
+    scheduler = Scheduler(_default_checkers([period], courses))
 
     # Act — Run the scheduler and measure how much time it takes.
     start_time = time.perf_counter()
-    schedules = scheduler.generateAllSchedules()
+    schedules = scheduler.generateSchedules(slots)
     elapsed = time.perf_counter() - start_time
 
     # Assert — Check that it took less than 30 seconds.
@@ -133,11 +132,10 @@ def test_per_001_typical_load_under_30_seconds(make_course, make_program_entry,
 
 # ===========================================================================
 # TC-PER-002 — Heavy load: 5 programs, 20 courses each, 60 days, 10 excluded dates.
+# Test that the system finishes in under 30 seconds for a heavy amount of courses.
 # ===========================================================================
-
-# TC-PER-002: Verify performance under maximum expected load.
 @pytest.mark.performance
-def test_per_002_maximum_load_under_30_seconds(make_course, make_program_entry,
+def test_maximum_load_under_30_seconds(make_course, make_program_entry,
                                                 make_period):
     # Arrange — Create 100 exam courses and a 60-day period with 10 empty days.
     courses = _build_courses(
@@ -149,16 +147,12 @@ def test_per_002_maximum_load_under_30_seconds(make_course, make_program_entry,
         start=date(2026, 6, 1), end=date(2026, 7, 30),
         num_excluded=10,
     )
-    scheduler = Scheduler(
-        courses=courses,
-        periods=[period],
-        conflictCheckers=_default_checkers([period]),
-        validators=[],
-    )
+    slots = SlotBuilder([period]).build(courses)
+    scheduler = Scheduler(_default_checkers([period], courses))
 
     # Act — Run the scheduler and measure how much time it takes.
     start_time = time.perf_counter()
-    schedules = scheduler.generateAllSchedules()
+    schedules = scheduler.generateSchedules(slots)
     elapsed = time.perf_counter() - start_time
 
     # Assert — Check that it took less than 30 seconds. If it fails, the code needs to be faster.
