@@ -4,15 +4,14 @@ import pytest
 # Import the main pipeline function.
 from src.main import run_pipeline
 
-
 # Set the path to the folder where the test files (fixtures) are located.
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-INT-001 — Test that valid input files create a correct output file.
-# ---------------------------------------------------------------------------
-def test_int_001_full_pipeline_valid_input_produces_output_file(tmp_path):
+# ===========================================================================
+def test_full_pipeline_valid_input_produces_output_file(tmp_path):
     # Arrange — Use three valid files (courses, periods, and programs).
     courses_path = FIXTURES / "courses_valid.txt"
     periods_path = FIXTURES / "periods_valid.txt"
@@ -36,10 +35,10 @@ def test_int_001_full_pipeline_valid_input_produces_output_file(tmp_path):
         "Output file does not contain any DD-MM-YYYY dates"
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-INT-002 — Test that an invalid program code stops the system.
-# ---------------------------------------------------------------------------
-def test_int_002_invalid_program_code_produces_error_no_output(tmp_path):
+# ===========================================================================
+def test_invalid_program_code_produces_error_no_output(tmp_path):
     # Arrange — Use a programs file with a bad code ('99999').
     courses_path = FIXTURES / "courses_valid.txt"
     periods_path = FIXTURES / "periods_valid.txt"
@@ -67,10 +66,10 @@ def test_int_002_invalid_program_code_produces_error_no_output(tmp_path):
     )
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-INT-003 — Test that selecting more than 5 programs causes an error.
-# ---------------------------------------------------------------------------
-def test_int_003_too_many_programs_produces_validation_error(tmp_path):
+# ===========================================================================
+def test_too_many_programs_produces_validation_error(tmp_path):
     # Arrange — Use a file with 6 programs (the limit is 5).
     courses_path = FIXTURES / "courses_valid.txt"
     periods_path = FIXTURES / "periods_valid.txt"
@@ -93,10 +92,10 @@ def test_int_003_too_many_programs_produces_validation_error(tmp_path):
         "Output file should not be created when > 5 programs are selected"
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-INT-004 — Test that the system works even if there are no exams to schedule.
-# ---------------------------------------------------------------------------
-def test_int_004_no_exam_courses_completes_with_empty_schedule(tmp_path):
+# ===========================================================================
+def test_no_exam_courses_completes_with_empty_schedule(tmp_path):
     # Arrange — Use a file with zero "Exam" type courses (only Projects).
     courses_path = FIXTURES / "courses_no_exams.txt"
     periods_path = FIXTURES / "periods_valid.txt"
@@ -117,10 +116,10 @@ def test_int_004_no_exam_courses_completes_with_empty_schedule(tmp_path):
         assert isinstance(content, str)
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-INT-005 — Test that conflicts are detected correctly in a full run.
-# ---------------------------------------------------------------------------
-def test_int_005_multi_program_conflict_detection_end_to_end(tmp_path):
+# ===========================================================================
+def test_multi_program_conflict_detection_end_to_end(tmp_path):
     # Arrange — Use courses that must be on the same day (impossible to schedule).
     courses_path = FIXTURES / "courses_conflict.txt"
     periods_path = FIXTURES / "periods_one_day.txt"
