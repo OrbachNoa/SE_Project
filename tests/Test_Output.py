@@ -7,11 +7,10 @@ from src.models.domain import ExamSchedule
 from src.writers.textFileWriter import TextFileWriter
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-OUT-001 — Test that the date uses the DD-MM-YYYY format.
-# ---------------------------------------------------------------------------
-
-# TC-OUT-001: The date June 5, 2026 should look like '05-06-2026' in the output file.
+# The date June 5, 2026 should look like '05-06-2026' in the output file.
+# ===========================================================================
 def test_format_schedule_uses_dd_mm_yyyy_date_format(
     make_assignment, empty_schedule,
 ):
@@ -26,11 +25,10 @@ def test_format_schedule_uses_dd_mm_yyyy_date_format(
     assert "06-05-2026" not in output or "05-06-2026" in output
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-OUT-002 — Test that headers for Semester and Moed are in the output.
-# ---------------------------------------------------------------------------
-
-# TC-OUT-002: The output file should show the names of the Semester and the Moed as headers.
+# The output file should show the names of the Semester and the Moed as headers.
+# ===========================================================================
 def test_format_schedule_contains_semester_and_moed_section_headers(
     make_course, make_program_entry, make_assignment, empty_schedule,
 ):
@@ -60,25 +58,24 @@ def test_format_schedule_contains_semester_and_moed_section_headers(
     assert "BET" in out_upper
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-OUT-003 — Test that an empty schedule does not crash the system.
-# ---------------------------------------------------------------------------
-
-# TC-OUT-003: If a schedule has no exams, the system should still return a string.
+# If a schedule has no exams, the system should still return a string.
+# ===========================================================================
 def test_format_schedule_handles_empty_schedule_without_crashing(empty_schedule):
-    # Arrange — already an empty schedule.
-    # Act
-    output = TextFileWriter().formatSchedule(empty_schedule)
+    # Arrange — Create an empty schedule.
+    schedule = empty_schedule
+    # Act — Try to format the empty schedule.
+    output = TextFileWriter().formatSchedule(schedule)
     # Assert — Output should be a string, not None.
     assert output is not None
     assert isinstance(output, str)
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-OUT-004 — Test that the system creates a file on the computer.
-# ---------------------------------------------------------------------------
-
-# TC-OUT-004: Verify that the write() function actually creates a file at the given path.
+# Verify that the write() function actually creates a file at the given path.
+# ===========================================================================
 def test_write_creates_file_at_specified_path(
     tmp_path, make_assignment, empty_schedule,
 ):
@@ -96,11 +93,10 @@ def test_write_creates_file_at_specified_path(
     assert "05-06-2026" in content
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-OUT-005 — formatSchedule sorts assignments by date within section.
-# ---------------------------------------------------------------------------
-
 # Inside each section, the dates should appear in order (earliest first).
+# ===========================================================================
 def test_format_schedule_sorts_assignments_by_date_within_section(
     make_course, make_program_entry, make_assignment, empty_schedule,
 ):
@@ -123,12 +119,10 @@ def test_format_schedule_sorts_assignments_by_date_within_section(
     assert i5 < i12 < i20
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # TC-OUT-006 — formatSchedule includes instructor name.
-# ---------------------------------------------------------------------------
-
-
 # The output file must show the name of the teacher for each exam.
+# ===========================================================================
 def test_format_schedule_includes_instructor_name(
     make_course, make_assignment, empty_schedule,
 ):
