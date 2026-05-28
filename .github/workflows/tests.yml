@@ -34,11 +34,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # If requirements.txt exists, install from it
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # If pyproject.toml exists, install the package in editable mode
-          if [ -f pyproject.toml ]; then pip install -e .; fi
-          # Always install pytest, coverage, and linting tools
+          pip install -r requirements.txt
           pip install pytest pytest-cov flake8
 
       # Step 3.5 — Run Linters and Static Code Analysis
@@ -53,167 +49,21 @@ jobs:
       # Performance tests run separately so a slow run doesn't block PR feedback.
       - name: Run unit, integration & behavioural tests
         run: |
-          pytest tests/ -m "not performance" -v --tb=short --junitxml=report_fast.xml
+          pytest tests/ -m "not performance" -v --tb=short
 
       # Step 5 — Run performance tests (only on Pull Requests on Python 3.12 to save CI time/cost)
       # Performance tests must complete within 30 seconds per SRS §5.1.
       - name: Run performance tests
         if: matrix.python-version == '3.12' && github.event_name == 'pull_request'
         run: |
-          pytest tests/ -m performance -v --tb=short --junitxml=report_perf.xml
-
-      # Step 5b — Generate a beautiful Markdown report for GITHUB_STEP_SUMMARY
-      - name: Generate Test Summary Report
-        if: always()
-        shell: python
-        run: |
-          import sys, os, glob
-          import xml.etree.ElementTree as ET
-
-          xml_files = glob.glob("report*.xml")
-          if not xml_files:
-              print("No report*.xml files found.")
-              sys.exit(0)
-
-          total_tests = 0
-          total_failures = 0
-          total_errors = 0
-          total_skipped = 0
-          total_time = 0.0
-          suite_results = {}
-
-          for xml_path in sorted(xml_files):
-              try:
-                  tree = ET.parse(xml_path)
-                  root = tree.getroot()
-              except Exception as e:
-                  print(f"Error parsing XML file {xml_path}: {e}")
-                  continue
-
-              testsuites = []
-              if root.tag == "testsuites":
-                  testsuites = list(root.findall("testsuite"))
-              elif root.tag == "testsuite":
-                  testsuites = [root]
-
-              for suite in testsuites:
-                  total_tests += int(suite.get("tests", 0))
-                  total_failures += int(suite.get("failures", 0))
-                  total_errors += int(suite.get("errors", 0))
-                  total_skipped += int(suite.get("skipped", 0))
-                  total_time += float(suite.get("time", 0.0))
-
-                  for case in suite.findall("testcase"):
-                      classname = case.get("classname", "unknown")
-                      parts = classname.split(".")
-                      group_name = parts[-1] if parts else classname
-
-                      if group_name not in suite_results:
-                          suite_results[group_name] = {
-                              "passed": 0,
-                              "failed": 0,
-                              "skipped": 0,
-                              "tests": []
-                          }
-
-                      name = case.get("name", "unknown")
-                      time_taken = float(case.get("time", 0.0))
-                      
-                      failure = case.find("failure")
-                      error = case.find("error")
-                      skipped = case.find("skipped")
-
-                      if failure is not None or error is not None:
-                          status = "failed"
-                          msg = ""
-                          if failure is not None:
-                              msg = failure.get("message", "") or failure.text or ""
-                          elif error is not None:
-                              msg = error.get("message", "") or error.text or ""
-                          suite_results[group_name]["failed"] += 1
-                      elif skipped is not None:
-                          status = "skipped"
-                          msg = skipped.get("message", "") or skipped.text or ""
-                          suite_results[group_name]["skipped"] += 1
-                      else:
-                          status = "passed"
-                          msg = ""
-                          suite_results[group_name]["passed"] += 1
-
-                      suite_results[group_name]["tests"].append({
-                          "name": name,
-                          "status": status,
-                          "time": time_taken,
-                          "message": msg
-                      })
-
-          failed_count = total_failures + total_errors
-          passed_count = total_tests - failed_count - total_skipped
-
-          markdown = []
-          markdown.append("# 🧪 Pytest Suite Execution Report\n")
-          markdown.append("### 📊 Metrics Summary\n")
-          markdown.append("| Status | Count | Percentage |")
-          markdown.append("| :--- | :---: | :---: |")
-          markdown.append(f"| ✅ **Passed** | {passed_count} | {passed_count / total_tests * 100:.1f}% |" if total_tests > 0 else "| ✅ **Passed** | 0 | 0% |")
-          markdown.append(f"| ❌ **Failed** | {failed_count} | {failed_count / total_tests * 100:.1f}% |" if total_tests > 0 else "| ❌ **Failed** | 0 | 0% |")
-          markdown.append(f"| ⏭️ **Skipped** | {total_skipped} | {total_skipped / total_tests * 100:.1f}% |" if total_tests > 0 else "| ⏭️ **Skipped** | 0 | 0% |")
-          markdown.append(f"| ⏱️ **Duration** | **{total_time:.2f}s** | - |\n")
-
-          if failed_count > 0:
-              markdown.append("> [!CAUTION]")
-              markdown.append(f"> **Build contains {failed_count} test failures!** Please check the details below.\n")
-          else:
-              markdown.append("> [!NOTE]")
-              markdown.append("> **All tests passed successfully!** Excellent code quality.\n")
-
-          markdown.append("### 📂 Test Suites Breakdown\n")
-          for group, data in sorted(suite_results.items()):
-              total = len(data["tests"])
-              passed = data["passed"]
-              failed = data["failed"]
-              skipped = data["skipped"]
-
-              emoji = "✅"
-              if failed > 0:
-                  emoji = "❌"
-              elif skipped > 0 and passed == 0:
-                  emoji = "⏭️"
-
-              markdown.append(f"#### {emoji} `{group}` ({passed}/{total} Passed)")
-              markdown.append("<details>")
-              markdown.append(f"<summary>Click to view all {total} test cases</summary>\n")
-              markdown.append("| Status | Test Case Name | Time | Details |")
-              markdown.append("| :---: | :--- | :---: | :--- |")
-              
-              for t in data["tests"]:
-                  st_emoji = "✅"
-                  if t["status"] == "failed":
-                      st_emoji = "❌"
-                  elif t["status"] == "skipped":
-                      st_emoji = "⏭️"
-                  
-                  detail = ""
-                  if t["message"]:
-                      clean_msg = t["message"].split("\n")[0][:100].replace("|", "\\|")
-                      detail = f"<code>{clean_msg}</code>"
-                      
-                  markdown.append(f"| {st_emoji} | `{t['name']}` | {t['time']:.3f}s | {detail} |")
-                  
-              markdown.append("</details>\n")
-
-          report_content = "\n".join(markdown)
-
-          summary_env = os.environ.get("GITHUB_STEP_SUMMARY")
-          if summary_env:
-              with open(summary_env, "a", encoding="utf-8") as f:
-                  f.write(report_content)
+          pytest tests/ -m performance -v --tb=short
 
       # Step 6 — Generate coverage report (only on Python 3.12)
       - name: Generate coverage report
         if: matrix.python-version == '3.12'
+        continue-on-error: true
         run: |
-          pytest tests/ -m "not performance" --cov=src --cov-report=term-missing --cov-report=xml || true
+          pytest tests/ -m "not performance" --cov=src --cov-report=term-missing --cov-report=xml
 
       # Step 7 — Upload coverage XML as a build artefact (Python 3.12 only)
       - name: Upload coverage report
