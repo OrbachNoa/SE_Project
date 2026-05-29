@@ -6,7 +6,7 @@ from threading import Event
 from typing import Any
 
 from src.logic.IScheduleObserver import IScheduleObserver
-from src.application.dto_viewmodel.ScheduleDTO import ScheduleDTO
+from src.application.dto_viewmodel.schedule_dto import ScheduleDTO, AssignmentDTO
 
 
 class QueueScheduleObserver(IScheduleObserver):
@@ -55,16 +55,15 @@ class QueueScheduleObserver(IScheduleObserver):
 
     def _to_schedule_dto(self, schedule: Any) -> ScheduleDTO:
         """Maps the domain model to a DTO, converting objects to pure primitives for safe IPC."""
-        dto = ScheduleDTO()
         
-        for assignment in schedule.assignments:
-            dto_item = {
-                "course_id": assignment.course.courseId,
-                "course_name": assignment.course.name,
-                "date_str": assignment.date.isoformat() if assignment.date else "",
-                "moed": assignment.moed.value if hasattr(assignment.moed, 'value') else assignment.moed,
-                "semester": assignment.semester.value if hasattr(assignment.semester, 'value') else assignment.semester
-            }
-            dto.add_assignment(dto_item) 
-            
-        return dto
+        assignments = [
+            AssignmentDTO(
+                course_id=assignment.course.courseId,
+                course_name=assignment.course.name,
+                date=assignment.date.isoformat() if assignment.date else "",
+                semester=assignment.semester.value if hasattr(assignment.semester, 'value') else assignment.semester,
+                moed=assignment.moed.value if hasattr(assignment.moed, 'value') else assignment.moed
+            )
+            for assignment in schedule.assignments
+        ]
+        return ScheduleDTO(assignments=assignments, total_assignments=len(assignments))
