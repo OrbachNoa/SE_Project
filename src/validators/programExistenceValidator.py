@@ -1,17 +1,16 @@
 # region Imports
 from .inputValidator import InputValidator
-from data.programs import programs_data
 # endregion
 
 class ProgramExistenceValidator(InputValidator):
     """
     Validates that all selected program codes exist in the system.
     """
-    def __init__(self, master=None):
+    def __init__(self, valid_ids):
         """
         Initialize the validator.
         """
-        self._valid_ids = set(master) if master is not None else set(programs_data.keys())
+        self._valid_ids = set(valid_ids)
 
     def validate(self, selected_programs, master=None) -> bool:
         """
