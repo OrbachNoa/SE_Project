@@ -1,7 +1,6 @@
 """Service for importing course and exam-period files into application state.
 
-The service validates the file, parses it, and applies the results to state per the requested mode (replace or update).,
-which includes success.
+The service validates the file, parses it, and applies the results to state per the requested mode (replace or update).
 """
 from __future__ import annotations
 
