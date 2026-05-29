@@ -25,6 +25,29 @@ The scheduling engine uses recursive backtracking with heuristic-based pruning t
 The engine is designed to operate within the project performance constraints.
 * **`src/writers/` (Output):** Generates human-readable text files containing the final scheduled assignments (`TextFileWriter`).
 
+## Threading & Concurrency Model
+
+Long-running operations (like the backtracking algorithm) run in a separate CPU process to avoid freezing the main GUI thread.
+
+**Core Components:**
+- `SchedulerProcessRunner` — Executes the heavy search in an isolated subprocess.
+- `SchedulerWorker` (`QThread`) — Listens to the subprocess via IPC (Queue) and safely emits PyQt signals to the GUI.
+
+**Usage Example:**
+```python
+# 1. Initialize the worker with IPC channels and the background process
+self.worker = SchedulerWorker(queue, cancel_event, process)
+
+# 2. Connect worker signals to GUI callbacks (Thread-safe UI updates)
+self.worker.schedule_found.connect(self.on_schedule_found)
+self.worker.search_finished.connect(self.on_finished)
+
+# 3. Start the listener (which in turn starts the background process)
+self.worker.start()
+
+# To gracefully stop the search and prevent zombie processes:
+self.worker.cancel()
+
 ## Error Handling
 
 The system validates:
