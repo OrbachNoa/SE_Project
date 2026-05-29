@@ -28,7 +28,7 @@ class SlotBuilder:
     def build(self, courses: List[Course]) -> List[Slot]:
         """Builds and sorts slots for the scheduler."""
         slots = self._buildRaw(courses)
-        slots.sort(key=self._score, reverse=True)
+        slots.sort(key=lambda s: (-self._score(s), len(s.candidateDates)))
         return slots
 
     def _buildRaw(self, courses: List[Course]) -> List[Slot]:
