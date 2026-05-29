@@ -2,6 +2,7 @@ from typing import List
 from ..models.exam_schedule import ExamSchedule, ExamAssignment
 from .SlotBuilder import Slot
 from .IConflictChecker import IConflictChecker
+from .IScheduleObserver import IScheduleObserver
 
 
 class Scheduler:
@@ -10,37 +11,58 @@ class Scheduler:
     def __init__(self, checkers: List[IConflictChecker]):
         self._checkers = checkers
 
-    def generateSchedules(self, slots: List[Slot], max_results: int = 1_000_000) -> List[ExamSchedule]:
-        """Runs the search and returns valid schedules."""
+    def generateSchedules(self, slots: List[Slot], observer: IScheduleObserver, max_results: int = 1_000_000) -> None:
+        """Runs the search and streams valid schedules via observer."""
         if not slots:
-            return []
+            return
 
         # Stop early if any slot has no dates, so useless recursion is avoided.
         if any(not s.candidateDates for s in slots):
-            return []
-
-        schedule = ExamSchedule()
-        results: List[ExamSchedule] = []
-        self._backtrack(0, slots, schedule, results, max_results)
-        return results
-
-    def _backtrack(self, index: int, slots: List[Slot],
-                   schedule: ExamSchedule, results: list, max_results: int) -> None:
-        # Stop recursion early if max_results was reached.
-        if len(results) >= max_results:
             return
 
-        # Save a schedule when every slot was assigned.
+        schedule = ExamSchedule()
+        
+        # Uses a list for the counter to pass it by reference during recursion.
+        found_count = [0]
+        self._backtrack(0, slots, schedule, observer, found_count, max_results)
+
+    def _backtrack(
+        self, 
+        index: int, 
+        slots: List[Slot], 
+        schedule: ExamSchedule, 
+        observer: IScheduleObserver, 
+        found_count: List[int], 
+        max_results: int
+    ) -> None:
+        
+        # Checks cancellation on every iteration to stop recursion immediately if the user clicked cancel.
+        if observer.should_cancel():
+            return
+            
+        # Stop recursion early if max_results was reached.
+        if found_count[0] >= max_results:
+            return
+
+        # Stream a schedule when every slot was assigned.
         if index == len(slots):
-            new_sched = ExamSchedule()
-            new_sched.assignments = list(schedule.assignments)
-            results.append(new_sched)
+            # Passes the original schedule directly because the Observer immediately maps it to a safe DTO.
+            # This saves CPU cycles by avoiding unnecessary object and list copying.
+            observer.on_schedule_found(schedule)
+            found_count[0] += 1
+            
+            # Updates progress every 10 schedules to prevent flooding the IPC queue and GUI thread.
+            if found_count[0] % 10 == 0:
+                progress = int((found_count[0] / max_results) * 100)
+                observer.on_progress(progress)
+                
             return
 
         slot = slots[index]
         # Use slot dates directly, so no period lookup is needed.
         for date in slot.candidateDates:
-            if len(results) >= max_results:
+            # Check maximum results inside the loop because a deep branch might have reached the limit.
+            if found_count[0] >= max_results:
                 return
 
             assignment = ExamAssignment(
@@ -54,7 +76,8 @@ class Scheduler:
                     conflict = True
                     break
 
+            # Proceed with the recursive search because no checker found a conflict.
             if not conflict:
                 schedule.addAssignment(assignment)
-                self._backtrack(index + 1, slots, schedule, results, max_results)
+                self._backtrack(index + 1, slots, schedule, observer, found_count, max_results)
                 schedule.removeAssignment(assignment)
