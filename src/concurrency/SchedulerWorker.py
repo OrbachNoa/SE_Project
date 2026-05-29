@@ -45,7 +45,7 @@ class SchedulerWorker(QThread):
                 if not self._process.is_alive():
                     # Exitcode 0 means normal termination. Anything else means an OS-level crash.
                     if self._process.exitcode is not None and self._process.exitcode != 0:
-                        self.error_occurred.emit(f"מנוע השיבוץ קרס במפתיע (קוד שגיאה: {self._process.exitcode})")
+                        self.error_occurred.emit(f"The scheduling engine crashed unexpectedly (Exit code: {self._process.exitcode})")
                     else:
                         # Fallback: process died normally but didn't send FINISHED (or we missed it).
                         self.search_finished.emit()
@@ -53,7 +53,7 @@ class SchedulerWorker(QThread):
                 continue
             except Exception as e:
                 # Catching real unexpected IPC errors so they don't crash the GUI thread silently.
-                self.error_occurred.emit(f"שגיאת תקשורת עם מנוע השיבוץ: {str(e)}")
+                self.error_occurred.emit(f"IPC communication error with the scheduling engine: {str(e)}")
                 break
             
             handler = self._dispatch.get(msg_type)
