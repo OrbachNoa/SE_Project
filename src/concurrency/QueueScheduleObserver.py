@@ -60,6 +60,7 @@ class QueueScheduleObserver(IScheduleObserver):
             AssignmentDTO(
                 course_id=assignment.course.courseId,
                 course_name=assignment.course.name,
+                instructor=assignment.course.instructor,
                 date=assignment.date.isoformat() if assignment.date else "",
                 semester=assignment.semester.value if hasattr(assignment.semester, 'value') else assignment.semester,
                 moed=assignment.moed.value if hasattr(assignment.moed, 'value') else assignment.moed

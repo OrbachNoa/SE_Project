@@ -16,6 +16,8 @@ class AssignmentDTO:
     # Human-readable course name
     course_name: str
 
+    instructor: str
+
     # ISO date string of the exam
     date: str
 
