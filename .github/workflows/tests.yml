@@ -1,11 +1,10 @@
 name: Run Tests
 
-# When does this workflow run?
 on:
   push:
-    branches: [ "**" ]      # Run on push to ANY branch
+    branches: [ "**" ] 
   pull_request:
-    branches: [ main ]      # Run on PRs targeting main
+    branches: [ "**" ] 
 
 jobs:
   test:
