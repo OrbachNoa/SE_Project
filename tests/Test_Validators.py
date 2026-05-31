@@ -65,10 +65,11 @@ def test_max_programs_validator_rejects_zero():
 # ===========================================================================
 def test_program_existence_validator_accepts_when_all_in_master(make_program_entry):
     # Arrange
-    master = ["83101", "83102", "83103"]
+    valid_ids = ["83101", "83102", "83103"]
+    v = ProgramExistenceValidator(valid_ids)
     selected = ["83101", "83102"]
     # Act
-    result = ProgramExistenceValidator().validate(selected, master)
+    result = v.validate(selected)
     # Assert
     assert result is True
 
@@ -77,10 +78,11 @@ def test_program_existence_validator_accepts_when_all_in_master(make_program_ent
 # ===========================================================================
 def test_program_existence_validator_rejects_unknown_code(make_program_entry):
     # Arrange — '99999' is not in the master list.
-    master = ["83101", "83102"]
+    valid_ids = ["83101", "83102"]
+    v = ProgramExistenceValidator(valid_ids)
     selected = ["83101", "99999"]
     # Act
-    result = ProgramExistenceValidator().validate(selected, master)
+    result = v.validate(selected)
     # Assert
     assert result is False
 
@@ -90,11 +92,12 @@ def test_program_existence_validator_rejects_unknown_code(make_program_entry):
 # ===========================================================================
 def test_program_existence_validator_rejects_prefix_match(make_program_entry):
     # Arrange — '8310' is a prefix of '83101' but not equal to it.
-    master = ["83101"]
+    valid_ids = ["83101"]
+    v = ProgramExistenceValidator(valid_ids)
     selected = ["8310"]
     # Act
     try:
-        result = ProgramExistenceValidator().validate(selected, master)
+        result = v.validate(selected)
     except ValueError:
         result = False
 
@@ -145,9 +148,12 @@ def test_validator_failure_prevents_schedule_generation(make_program_entry):
 # TC-VAL-009: MaxProgramsValidator.error_message describes the specific issue
 # ===========================================================================
 def test_max_programs_error_message_when_too_many():
+    # Arrange
     v = MaxProgramsValidator()
     selected = ["83101", "83102", "83103", "83104", "83105", "83107"]
+    # Act
     msg = v.error_message(selected)
+    # Assert
     assert "6" in msg, "Error message should name the offending count"
     assert "5" in msg, "Error message should name the maximum"
 
@@ -155,10 +161,13 @@ def test_max_programs_error_message_when_too_many():
 # TC-VAL-010: MaxProgramsValidator.error_message describes the specific issue
 # ===========================================================================
 def test_max_programs_error_message_when_empty():
+    # Arrange
     v = MaxProgramsValidator()
+    # Act
     msg = v.error_message([])
-    # The exact wording can vary — just check it's a real explanation, not the default.
-    assert "InputValidator" not in msg  # not the abstract base fallback
+    # Assert
+    # Check for real explanation, not default.
+    assert "InputValidator" not in msg  
     assert msg, "error_message must not be empty"
 
 
@@ -166,8 +175,12 @@ def test_max_programs_error_message_when_empty():
 # TC-VAL-011: ProgramExistenceValidator.error_message names the invalid codes
 # ===========================================================================
 def test_program_existence_error_message_lists_invalid_codes():
-    v = ProgramExistenceValidator(master=["83101", "83102"])
+    # Arrange
+    valid_ids = ["83101", "83102"]
+    v = ProgramExistenceValidator(valid_ids)
+    # Act
     msg = v.error_message(["83101", "99999", "12345"])
+    # Assert
     assert "99999" in msg
     assert "12345" in msg
 
@@ -176,12 +189,14 @@ def test_program_existence_error_message_lists_invalid_codes():
 # TC-VAL-012: Default error_message in base class is informative
 # ===========================================================================
 def test_input_validator_default_error_message_names_class():
+    # Arrange
     # Anonymous subclass that doesn't override error_message
     class DummyValidator(InputValidator):
         def validate(self, selected, master=None) -> bool:
             return False
-
+    # Act
     msg = DummyValidator().error_message([])
+    # Assert
     assert "DummyValidator" in msg, (
         "Default error_message should at least name the validator class"
     )

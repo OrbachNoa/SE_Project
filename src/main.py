@@ -3,6 +3,7 @@ import os
 import sys
 import time
 
+from data.programs import programs_data
 from src.validators.fileValidator import validate_all_files
 from src.parsers.courseParser import CoursesFileParser
 from src.parsers.dateParser import ExamPeriodsFileParser
