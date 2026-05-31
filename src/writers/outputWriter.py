@@ -12,3 +12,11 @@ class OutputWriter(ABC):
         Must be implemented by concrete subclasses like TextFileWriter.
         """
         pass
+
+    @abstractmethod
+    def formatSchedule(self, schedule: ExamSchedule) -> str:
+        """
+        Return one schedule as a readable string (for on-disk output and GUI preview).
+        Must be implemented by concrete subclasses like TextFileWriter.
+        """
+        pass
