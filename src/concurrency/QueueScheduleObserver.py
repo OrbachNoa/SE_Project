@@ -2,7 +2,7 @@
 """
 from __future__ import annotations
 from multiprocessing import Queue
-from threading import Event
+from multiprocessing.synchronize import Event
 from typing import Any
 
 from src.logic.IScheduleObserver import IScheduleObserver

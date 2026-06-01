@@ -3,7 +3,7 @@
 from __future__ import annotations
 import queue  # Required to catch the specific queue.Empty exception
 from multiprocessing import Queue, Process
-from threading import Event 
+from multiprocessing.synchronize import Event
 from PyQt6.QtCore import QThread, pyqtSignal 
 
 
