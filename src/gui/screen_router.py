@@ -18,10 +18,16 @@ class ScreenRouter:
     def show(self, name: str) -> None:
         if name not in self._screens:
             raise KeyError(f"Screen '{name}' is not registered.")
+        current_name = self._current_name()
+        # If the target is already the current screen (e.g. the first show() call at
+        # startup, where Qt made the first addWidget() result current automatically),
+        # skip on_leave() and history push — just call on_enter() to initialise it.
+        if current_name == name:
+            self._screens[name].on_enter()
+            return
         current = self._current_screen()
         if current is not None:
             current.on_leave()
-            current_name = self._current_name()
             if current_name:
                 self._history.append(current_name)
         target = self._screens[name]
