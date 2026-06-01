@@ -63,7 +63,14 @@ tests/
 ├── Test_Integration.py      
 ├── Test_Main.py             
 ├── Test_Behavioural.py      
-├── Test_Performance.py     
+├── Test_Performance.py  
+├── Test_Application_State.py  
+├── Test_Boundary_DTOs.py
+├── Test_Data_Cache.py
+├── Test_Scheduling_Service.py
+├── Test_Screen_Router.py
+├── Test_Workers.py
+├── Test_Navigation.py
 └── fixtures/            
     ├── courses_valid.txt
     ├── courses_no_exams.txt
