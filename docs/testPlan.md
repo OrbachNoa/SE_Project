@@ -31,38 +31,51 @@ Tests the three IConflictChecker implementations: ProgramYearConflictChecker, Ex
 ### 3.5 Scheduler Engine Tests
 Tests the Scheduler class — the core backtracking engine that generates all valid schedules.
 
-### 3.6 Output Formatter Tests
+### 3.6 SlotBuilder Tests
+Tests the SlotBuilder class — builds slots for scheduling.
+
+### 3.7 Output Formatter Tests
 Tests TextFileWriter — formatting and writing the final schedule output.
 
-### 3.7 Integration Tests
+### 3.8 Integration Tests
 Full end-to-end pipeline tests using real fixture files. No mocks.
 
-### 3.8 Main Entry Point Tests
+### 3.9 Main Entry Point Tests
 Tests the CLI main() function — correct exit codes, clean stderr, no Python tracebacks.
 
-### 3.9 Behavioural & Completeness Tests
+### 3.10 Behavioural & Completeness Tests
 High-level correctness tests for the scheduling algorithm. Verify properties that span multiple classes.
 
-### 3.10 Performance Tests
+### 3.11 Performance Tests
 Verify the 30-second SRS constraint under realistic and maximum load scenarios.
 
 # Test File Structure
+```bash
 tests/
 |── Conftest.py
-├── Test_Parsers.py          # TC-PRS-001 – TC-PARS-021
-├── Test_Domain.py           # TC-DOM-001 – TC-DOM-014
-├── Test_Validators.py       # TC-VAL-001 – TC-VAL-011
-├── Test_Checkers.py         # TC-CHK-001 – TC-CHK-009
-├── Test_Scheduler_Engine.py # TC-ENG-001 – TC-ENG-005
-├── Test_Output.py           # TC-OUT-001 – TC-OUT-008
-├── Test_Integration.py      # TC-INT-001 – TC-INT-005
-├── Test_Main.py             # TC-MAIN-001 – TC-MAIN-006
-├── Test_Behavioural.py      # TC-BEH-001 – TC-BEH-007
-├── Test_Performance.py      # TC-PER-001 – TC-PER-002
-└── fixtures/                # Sample input files used by all tests
+├── Test_Parsers.py          
+├── Test_Domain.py           
+├── Test_Validators.py       
+├── Test_Checkers.py         
+├── Test_Scheduler_Engine.py 
+├── Test_SlotBuilder.py
+├── Test_Output.py
+├── Test_Integration.py      
+├── Test_Main.py             
+├── Test_Behavioural.py      
+├── Test_Performance.py  
+├── Test_Application_State.py  
+├── Test_Boundary_DTOs.py
+├── Test_Data_Cache.py
+├── Test_Scheduling_Service.py
+├── Test_Workers.py
+├── Test_Navigation.py
+├── Test_Observers.py
+└── fixtures/            
     ├── courses_valid.txt
     ├── courses_no_exams.txt
     ├── periods_valid.txt
     ├── programs_valid.txt
     ├── programs_bad.txt
     └── programs_too_many.txt
+```

@@ -5,7 +5,7 @@ is very heavy and would freeze the main GUI thread.
 """
 from __future__ import annotations
 from multiprocessing import Queue
-from threading import Event
+from multiprocessing.synchronize import Event
 from typing import List
 
 from .QueueScheduleObserver import QueueScheduleObserver

@@ -102,3 +102,99 @@ def make_assignment(make_course):
 def empty_schedule():
     """Returns a new schedule with zero exams, used to start tests."""
     return ExamSchedule()
+
+
+@pytest.fixture
+def collector_observer():
+    """Provides a fresh observer to collect schedules in test cases."""
+    # to be implemented under src by someone else
+    pass
+
+
+@pytest.fixture(scope="session")
+def qapp():
+    """Ensures a single QApplication instance exists for all PyQt tests."""
+    from PyQt6.QtWidgets import QApplication
+    import sys
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    yield app
+
+
+@pytest.fixture
+def make_assignment_dto(make_assignment):
+    """Provides a factory to build AssignmentDTOs with default values matched to the domain fixtures."""
+    from src.application.dto_viewmodel.schedule_dto import AssignmentDTO
+    def _make(
+        course_id=None,
+        course_name=None,
+        instructor=None,
+        date=None,
+        semester=None,
+        moed=None
+    ):
+        domain_a = make_assignment()
+        return AssignmentDTO(
+            course_id=course_id or domain_a.course.courseId,
+            course_name=course_name or domain_a.course.name,
+            instructor=instructor or domain_a.course.instructor,
+            date=date or domain_a.date.isoformat(),
+            semester=semester or (domain_a.semester.value if hasattr(domain_a.semester, 'value') else domain_a.semester),
+            moed=moed or (domain_a.moed.value if hasattr(domain_a.moed, 'value') else domain_a.moed)
+        )
+    return _make
+
+
+@pytest.fixture
+def make_schedule_dto(make_assignment_dto):
+    """Provides a factory to build ScheduleDTOs with default values."""
+    from src.application.dto_viewmodel.schedule_dto import ScheduleDTO
+    def _make(assignments=None, total_assignments=None):
+        if assignments is None:
+            assignments = []
+        if total_assignments is None:
+            total_assignments = len(assignments)
+        return ScheduleDTO(assignments=assignments, total_assignments=total_assignments)
+    return _make
+
+
+@pytest.fixture
+def make_data_cache(make_course, make_period):
+    """Provides a factory to build DataCaches with default values matched to domain fixtures."""
+    from src.data.DataCache import DataCache
+    def _make(courses=None, periods=None, source_hashes=None):
+        if courses is None:
+            c = make_course()
+            courses = [{
+                "courseId": c.courseId,
+                "name": c.name,
+                "instructor": c.instructor,
+                "evaluation": c.evaluation.value if hasattr(c.evaluation, 'value') else c.evaluation,
+                "programEntries": [{
+                    "programId": pe.programId,
+                    "year": pe.year,
+                    "semester": pe.semester.value if hasattr(pe.semester, 'value') else pe.semester,
+                    "requirement": pe.requirement.value if hasattr(pe.requirement, 'value') else pe.requirement
+                } for pe in c.programEntries]
+            }]
+        if periods is None:
+            p = make_period(
+                start=date(2026, 6, 1),
+                end=date(2026, 6, 3),
+                excluded=[date(2026, 6, 2)]
+            )
+            periods = [{
+                "semester": p.semester.value if hasattr(p.semester, 'value') else p.semester,
+                "moed": p.moed.value if hasattr(p.moed, 'value') else p.moed,
+                "startDate": p.startDate.isoformat(),
+                "endDate": p.endDate.isoformat(),
+                "excludedDates": [d.isoformat() for d in p.excludedDates]
+            }]
+        return DataCache(
+            courses=courses,
+            periods=periods,
+            source_hashes=source_hashes or {}
+        )
+    return _make
+

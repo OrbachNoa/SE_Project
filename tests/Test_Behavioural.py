@@ -6,6 +6,7 @@ from src.logic.Scheduler import Scheduler
 from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
 from src.logic.MoedOrderChecker import MoedOrderChecker
 from src.logic.SlotBuilder import SlotBuilder
+from src.logic.CollectingScheduleObserver import CollectingScheduleObserver
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,9 +54,11 @@ def test_no_duplicate_schedules_in_result(
     )
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
+    observer = CollectingScheduleObserver()
 
     # Act — Run the scheduler.
-    schedules = scheduler.generateSchedules(slots)
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
 
     # Assert — Check that every schedule has a different fingerprint.
     signatures = [_schedule_signature(s) for s in schedules]
@@ -88,9 +91,11 @@ def test_every_schedule_passes_all_conflict_checks(
     slots = SlotBuilder([period]).build(courses)
     checkers = _default_checkers([period], courses)
     scheduler = Scheduler(checkers)
+    observer = CollectingScheduleObserver()
 
     # Act
-    schedules = scheduler.generateSchedules(slots)
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
 
     # Assert — Go through every exam in every schedule and ask the 
     # checkers if there is a conflict. None of them should fail.
@@ -130,9 +135,11 @@ def test_elective_courses_across_programs_may_share_date(
     courses = [course_a, course_b]
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
+    observer = CollectingScheduleObserver()
 
     # Act
-    schedules = scheduler.generateSchedules(slots)
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
 
     # Assert — Make sure there is at least one schedule where both 
     # electives are on the exact same day.
@@ -174,9 +181,11 @@ def test_cross_moed_independence(
     )
     slots = SlotBuilder([period_aleph, period_bet]).build([course])
     scheduler = Scheduler(_default_checkers([period_aleph, period_bet], [course]))
+    observer = CollectingScheduleObserver()
 
     # Act
-    schedules = scheduler.generateSchedules(slots)
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
 
     # Assert — Check that June 5 is used in Bet, but NEVER used in Aleph.
     aleph_june5 = [
@@ -218,9 +227,11 @@ def test_engine_backtracks_to_next_candidate(
     courses = [course_a, course_b]
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
+    observer = CollectingScheduleObserver()
 
     # Act
-    schedules = scheduler.generateSchedules(slots)
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
 
     # Assert — Make sure it found the solutions and didn't crash.
     assert len(schedules) >= 1, (

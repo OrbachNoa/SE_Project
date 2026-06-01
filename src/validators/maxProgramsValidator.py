@@ -1,8 +1,8 @@
 # region Imports
-from .inputValidator import InputValidator
+from .inputValidator import IInputValidator
 # endregion
 
-class MaxProgramsValidator(InputValidator):
+class MaxProgramsValidator(IInputValidator):
     """
     Validates that the number of selected programs does not exceed the maximum allowed.
     """
