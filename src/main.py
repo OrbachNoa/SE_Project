@@ -5,9 +5,7 @@ import time
 
 from data.programs import programs_data
 from src.validators.fileValidator import validate_all_files
-from src.parsers.courseParser import CoursesFileParser
-from src.parsers.dateParser import ExamPeriodsFileParser
-from src.parsers.programParser import ProgramsFileParser
+from src.parsers.ParserFactory import ParserFactory
 from src.logic.SlotBuilder import SlotBuilder
 from src.logic.Scheduler import Scheduler
 from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
@@ -20,6 +18,8 @@ from src.writers.textFileWriter import TextFileWriter
 from src.data.DiskCacheRepository import DiskCacheRepository
 from src.data.FileChangeDetector import FileChangeDetector
 from src.data.CachedInputLoader import CachedInputLoader
+from src.validators.ValidatorPipeline import ValidatorPipeline
+
 
 
 def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
@@ -29,32 +29,30 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
     """Executes the complete flow of parsing, validation, scheduling, and output generation."""
 
     # Parse input files if paths are provided
-    if courses_file:
-        courses = CoursesFileParser().parse(courses_file)
-    if periods_file:
-        periods = ExamPeriodsFileParser().parse(periods_file)
-    if programs_file:
-        programs = ProgramsFileParser().parse(programs_file)
+    parsed = ParserFactory.parse_files({
+        "courses": courses_file,
+        "periods": periods_file,
+        "programs": programs_file
+    })
+    courses = parsed.get("courses", courses)
+    periods = parsed.get("periods", periods)
+    programs = parsed.get("programs", programs)
 
     # Resolve the final output path
     final_output_path = output_file or output_path
 
-    # Initialize validators dynamically based on loaded courses if not provided
+    # Initialize validators
     if validators is None:
-        valid_program_ids = {
-            entry.programId
-            for course in (courses or [])
-            for entry in course.programEntries
-        }
         validators = [
             MaxProgramsValidator(),
-            ProgramExistenceValidator(valid_ids=valid_program_ids),
+            ProgramExistenceValidator(valid_ids=programs_data),
         ]
 
     # Execute early validation on selected programs
-    for v in validators:
-        if not v.validate(programs):
-            raise ValueError(v.error_message(programs))
+    pipeline = ValidatorPipeline(validators)
+    result = pipeline.validate(programs)
+    if not result.is_valid:
+        raise ValueError("\n".join(result.errors))
 
     # Build scheduling slots
     if slot_builder is None:
@@ -122,8 +120,8 @@ def main():
         loader = CachedInputLoader(
             repository=DiskCacheRepository(),
             detector=FileChangeDetector(),
-            course_parser=CoursesFileParser(),
-            period_parser=ExamPeriodsFileParser(),
+            course_parser=ParserFactory.create("courses"),
+            period_parser=ParserFactory.create("periods"),
         )
         courses, periods = loader.load(args.courses, args.periods)
 

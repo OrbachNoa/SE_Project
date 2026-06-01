@@ -115,17 +115,22 @@ def test_program_existence_validator_rejects_prefix_match(make_program_entry):
 # must NOT call Scheduler.generateSchedules().
 # ===========================================================================
 def test_validator_failure_prevents_schedule_generation(make_program_entry):
-    # Arrange — a mock validator that fails, and a mock scheduler whose
-    # generateSchedules() we will assert was never called.
-    failing_validator = MagicMock()
-    failing_validator.validate.return_value = False
+    # Arrange — a dummy validator that fails, and a mock scheduler whose
+    # generateSchedules() we will assert was never called.    
+    class DummyFailingValidator(IInputValidator):
+        def validate(self, selected, master=None) -> bool:
+            return False
+        def error_message(self, selected) -> str:
+            return "Dummy validation failure"
+
+    failing_validator = DummyFailingValidator()
 
     mock_scheduler = MagicMock()
     mock_scheduler.generateSchedules = MagicMock()
 
     # We import the orchestration entry point lazily so this test can
     # still load even if the module is renamed during development.
-    from src.main import run_pipeline  # type: ignore
+    from src.main import run_pipeline 
     selected = ["83101"]
     # Act — run the pipeline with the failing validator injected.
     try:

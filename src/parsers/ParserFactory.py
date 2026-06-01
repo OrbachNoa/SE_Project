@@ -41,6 +41,15 @@ class ParserFactory:
         return sorted(cls._REGISTRY)
 
     @classmethod
+    def parse_files(cls, file_mappings: Dict[str, str | None]) -> Dict[str, Any]:
+        """Parses multiple files using their registered file-type keys."""
+        return {
+            key: cls.create(key).parse(path)
+            for key, path in file_mappings.items()
+            if path is not None
+        }
+
+    @classmethod
     def register(cls, file_type: str, parser_cls: Type[FileParser]) -> None:
         """Registers a new parser class under a given file type key to extend supported formats dynamically."""
         

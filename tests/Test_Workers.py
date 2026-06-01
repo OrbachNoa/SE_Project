@@ -92,7 +92,7 @@ def test_worker_cancel_graceful_and_terminate():
     
     # Assert
     assert mock_cancel_event.set.call_count == 1
-    assert any(call[1].get("timeout") == 0.5 for call in mock_process.join.mock_calls)
+    assert any(kwargs.get("timeout") == 0.5 for _, _, kwargs in mock_process.join.mock_calls)
     assert mock_process.terminate.call_count == 1
     assert mock_queue.get_nowait.call_count == 2
 

@@ -68,9 +68,9 @@ tests/
 ├── Test_Boundary_DTOs.py
 ├── Test_Data_Cache.py
 ├── Test_Scheduling_Service.py
-├── Test_Screen_Router.py
 ├── Test_Workers.py
 ├── Test_Navigation.py
+├── Test_Observers.py
 └── fixtures/            
     ├── courses_valid.txt
     ├── courses_no_exams.txt
