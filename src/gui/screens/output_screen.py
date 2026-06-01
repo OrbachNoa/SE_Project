@@ -1,136 +1,204 @@
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QWidget
+"""OutputScreen — displays generated schedule results.
+
+SCRUM-147 : on_enter loads results from controller
+SCRUM-93  : year-calendar widget replaces content area (Yuval)
+SCRUM-96  : export button (Yuval)
+"""
+from __future__ import annotations
+
+from PyQt6.QtWidgets import (
+    QLabel, QVBoxLayout, QHBoxLayout, QPushButton,
+    QFrame, QScrollArea, QWidget,
+)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence
+
 from src.gui.screen import Screen
 
 
+def _divider(parent=None) -> QFrame:
+    f = QFrame(parent)
+    f.setObjectName("divider")
+    f.setFrameShape(QFrame.Shape.HLine)
+    f.setFixedHeight(1)
+    return f
+
+
 class OutputScreen(Screen):
-    """Output screen: shows a schedule solution with back and solution navigation."""
+    """Output screen: schedule results with navigation."""
 
     def __init__(self, controller, router) -> None:
         super().__init__()
         self._controller = controller
         self._router = router
 
-        # Navigation state
         self._current_index: int = 0
         self._total: int = 0
 
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(8, 8, 8, 8)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # Top bar: back button on the left, solution navigator on the right
-        top_bar = QHBoxLayout()
+        # ── Header ────────────────────────────────────────────────────
+        header = QFrame()
+        header.setObjectName("header")
+        header.setFixedHeight(72)
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(28, 0, 28, 0)
+
+        title = QLabel("EXAM SCHEDULER")
+        title.setObjectName("app-title")
+        subtitle = QLabel("Generated schedules")
+        subtitle.setObjectName("app-subtitle")
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        title_col.addWidget(title)
+        title_col.addWidget(subtitle)
+        h_layout.addLayout(title_col)
+        h_layout.addStretch()
+        root.addWidget(header)
+
+        # ── Navigation bar ────────────────────────────────────────────
+        nav_bar = QFrame()
+        nav_bar.setObjectName("nav-bar")
+        nav_bar.setFixedHeight(52)
+        nav_layout = QHBoxLayout(nav_bar)
+        nav_layout.setContentsMargins(20, 0, 20, 0)
+        nav_layout.setSpacing(8)
 
         self._back_btn = QPushButton("← Back")
+        self._back_btn.setObjectName("btn-ghost")
         self._back_btn.setShortcut(QKeySequence("Alt+Left"))
         self._back_btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._back_btn.setToolTip("Back to input screen (Alt+Left)")
+        self._back_btn.setFixedHeight(36)
         self._back_btn.clicked.connect(self._on_back)
-        top_bar.addWidget(self._back_btn)
+        nav_layout.addWidget(self._back_btn)
 
-        top_bar.addStretch()
+        nav_layout.addStretch()
 
-        # Solution navigator
-        self._prev_btn = QPushButton("◀ Prev")
-        self._prev_btn.setToolTip("Go to previous solution")
+        self._prev_btn = QPushButton("◀")
+        self._prev_btn.setObjectName("btn-secondary")
+        self._prev_btn.setToolTip("Previous solution")
+        self._prev_btn.setFixedSize(36, 36)
         self._prev_btn.clicked.connect(self.on_prev)
 
         self._counter_label = QLabel()
+        self._counter_label.setObjectName("counter-label")
         self._counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._next_btn = QPushButton("Next ▶")
-        self._next_btn.setToolTip("Go to next solution")
+        self._next_btn = QPushButton("▶")
+        self._next_btn.setObjectName("btn-secondary")
+        self._next_btn.setToolTip("Next solution")
+        self._next_btn.setFixedSize(36, 36)
         self._next_btn.clicked.connect(self.on_next)
 
-        top_bar.addWidget(self._prev_btn)
-        top_bar.addWidget(self._counter_label)
-        top_bar.addWidget(self._next_btn)
+        nav_layout.addWidget(self._prev_btn)
+        nav_layout.addWidget(self._counter_label)
+        nav_layout.addWidget(self._next_btn)
 
-        root_layout.addLayout(top_bar)
+        root.addWidget(nav_bar)
+        root.addWidget(_divider())
 
-        # Placeholder content area; will be replaced by the calendar widget.
-        content = QWidget()
-        content_layout = QVBoxLayout(content)
-        self._content_label = QLabel("Output Screen — SCRUM-137")
-        self._content_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        content_layout.addWidget(self._content_label)
-        root_layout.addWidget(content, stretch=1)
+        # ── Content area ──────────────────────────────────────────────
+        body = QVBoxLayout()
+        body.setContentsMargins(28, 20, 28, 20)
+        body.setSpacing(0)
+
+        content_card = QFrame()
+        content_card.setObjectName("content-area")
+        content_layout = QVBoxLayout(content_card)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Scroll area — the calendar widget (SCRUM-93) will live here
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setStyleSheet("background: transparent;")
+
+        self._content_widget = QWidget()
+        self._content_widget.setStyleSheet("background: transparent;")
+        content_inner = QVBoxLayout(self._content_widget)
+        content_inner.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self._content_label = QLabel()
+        self._content_label.setObjectName("schedule-text")
+        self._content_label.setWordWrap(True)
+        self._content_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self._content_label.setContentsMargins(20, 16, 20, 16)
+        content_inner.addWidget(self._content_label)
+
+        self._scroll.setWidget(self._content_widget)
+        content_layout.addWidget(self._scroll)
+
+        body.addWidget(content_card)
+        root.addLayout(body)
 
         self._refresh_counter()
 
-    # ------------------------------------------------------------------
-    # Internal display helpers
-    # ------------------------------------------------------------------
+    # ── Display helpers ────────────────────────────────────────────────
 
     def _refresh_counter(self) -> None:
-        """Update the counter label and nav button states."""
         if self._total == 0:
             self._counter_label.setText("No solutions")
         else:
             self._counter_label.setText(
-                f"Solution {self._current_index + 1} / {self._total}"
+                f"Solution  {self._current_index + 1} / {self._total}"
             )
-        self._update_nav_buttons()
-
-    def _update_nav_buttons(self) -> None:
-        """Grey out Prev/Next at the boundaries."""
         self._prev_btn.setEnabled(self._current_index > 0)
         self._next_btn.setEnabled(self._current_index < self._total - 1)
 
     def _show_current(self) -> None:
-        """Render the solution at _current_index into the content area.
-
-        Delegates to controller.get_schedule_view(index) when available.
-        Falls back to a text placeholder until calendar_widget (SCRUM-93) is wired.
-        """
+        """Render solution at _current_index. CalendarWidget (SCRUM-93) replaces this."""
         if self._total == 0:
-            self._content_label.setText("No solutions to display.")
+            self._content_label.setText(
+                "No solutions to display.\n\n"
+                "Go back and adjust your selections."
+            )
             return
-        if hasattr(self._controller, "get_schedule_view"):
-            view_model = self._controller.get_schedule_view(self._current_index)
-            self._content_label.setText(str(view_model))
-        else:
-            # Controller method not yet implemented — show a text fallback
-            self._content_label.setText(f"Solution {self._current_index + 1}")
+        try:
+            vm = self._controller.get_schedule_view(self._current_index)
+            lines = [
+                f"Schedule {self._current_index + 1} of {vm.total}\n",
+                "─" * 48,
+            ]
+            for item in vm.items:
+                lines.append(f"  {item.date}   {item.title}")
+                lines.append(f"             {item.subtitle}\n")
+            self._content_label.setText("\n".join(lines))
+        except Exception as e:
+            self._content_label.setText(f"Error displaying schedule:\n{e}")
 
     def _on_back(self) -> None:
-        """Navigate back to the previous screen via the router history."""
         self._router.back()
 
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
-
-    def show_schedules(self, total: int) -> None:
-        """Set the number of available solutions and display the first one."""
-        self._total = total
-        self._current_index = 0
-        self._show_current()
-        self._refresh_counter()
+    # ── Navigation ─────────────────────────────────────────────────────
 
     def on_next(self) -> None:
-        """Advance to the next solution if one exists."""
         if self._current_index < self._total - 1:
             self._current_index += 1
             self._show_current()
             self._refresh_counter()
 
     def on_prev(self) -> None:
-        """Go back to the previous solution if one exists."""
         if self._current_index > 0:
             self._current_index -= 1
             self._show_current()
             self._refresh_counter()
 
-    # ------------------------------------------------------------------
-    # Screen lifecycle
-    # ------------------------------------------------------------------
+    # ── Lifecycle (SCRUM-147) ──────────────────────────────────────────
 
     def on_enter(self) -> None:
-        # No state to restore — InputScreen object is persistent and retains its own selections.
+        self._current_index = 0
+        try:
+            vm = self._controller.get_schedule_view(0)
+            self._total = vm.total
+        except IndexError:
+            self._total = 0
+        self._show_current()
+        self._refresh_counter()
         self._back_btn.setFocus()
 
     def on_leave(self) -> None:
-        # No teardown needed — output data lives in the controller, not in this widget.
         pass
