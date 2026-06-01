@@ -111,7 +111,7 @@ def collector_observer():
     pass
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def qapp():
     """Ensures a single QApplication instance exists for all PyQt tests."""
     from PyQt6.QtWidgets import QApplication

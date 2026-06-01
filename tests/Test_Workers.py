@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 from src.concurrency.SchedulerWorker import SchedulerWorker
 from src.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
 
+pytestmark = pytest.mark.usefixtures("qapp")
+
 # ===========================================================================
 # TC-SCHED-WORK-001: Test that SchedulerWorker dispatches queue messages to corresponding signals.
 # ===========================================================================
