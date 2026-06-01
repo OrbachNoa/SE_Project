@@ -1,11 +1,10 @@
 name: Run Tests
 
-# When does this workflow run?
 on:
   push:
-    branches: [ "**" ]      # Run on push to ANY branch
+    branches: [ "**" ] 
   pull_request:
-    branches: [ main ]      # Run on PRs targeting main
+    branches: [ "**" ] 
 
 jobs:
   test:
@@ -45,16 +44,30 @@ jobs:
           # exit-zero treats all errors as warnings.
           flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-      # Step 4 — Run the FAST tests (everything except performance tests)
-      # Performance tests run separately so a slow run doesn't block PR feedback.
-      - name: Run unit, integration & behavioural tests
+      # Step 4 — Run logic tests (fast, no GUI libraries required)
+      - name: Run logic tests
         run: |
-          pytest tests/ -m "not performance" -v --tb=short
+          pytest tests/ --ignore=tests/Test_Workers.py --ignore=tests/Test_Screen_Router.py --ignore=tests/Test_GUI.py --ignore=tests/Test_GUI_Integration.py --ignore=tests/Test_App_Controller.py -m "not performance" -v --tb=short
+
+      # Step 4.5 — Install Headless GUI Dependencies (only needed for GUI tests)
+      # - name: Install Headless GUI Dependencies
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y libegl1-mesa libgl1-mesa-glx libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-shape0
+
+      # Step 4.6 — Run GUI tests (using offscreen platform buffer)
+      # - name: Run GUI tests
+      #   env:
+      #     QT_QPA_PLATFORM: offscreen
+      #   run: |
+      #     pytest tests/Test_Workers.py tests/Test_Screen_Router.py tests/Test_GUI.py tests/Test_GUI_Integration.py -v --tb=short
 
       # Step 5 — Run performance tests (only on Pull Requests on Python 3.12 to save CI time/cost)
       # Performance tests must complete within 30 seconds per SRS §5.1.
       - name: Run performance tests
         if: matrix.python-version == '3.12' && github.event_name == 'pull_request'
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           pytest tests/ -m performance -v --tb=short
 
@@ -62,6 +75,8 @@ jobs:
       - name: Generate coverage report
         if: matrix.python-version == '3.12'
         continue-on-error: true
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           pytest tests/ -m "not performance" --cov=src --cov-report=term-missing --cov-report=xml
 

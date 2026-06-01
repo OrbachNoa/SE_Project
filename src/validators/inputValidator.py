@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from .validationResult import ValidationResult
 # endregion
 
-class InputValidator(ABC):
+class IInputValidator(ABC):
     """
     Defines the abstract base class for input validators.
     """
@@ -22,6 +22,10 @@ class InputValidator(ABC):
         return f"Validation failed in {type(self).__name__}"
     
     def validate_as_result(self, selected) -> ValidationResult:
+        """
+        Validate the input and return a ValidationResult object.
+        This method is a wrapper around the validate method.
+        """
         result = ValidationResult()
         if not self.validate(selected):
             result.add_error(self.error_message(selected))

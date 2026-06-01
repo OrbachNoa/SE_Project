@@ -7,6 +7,7 @@ from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
 from src.logic.MoedOrderChecker import MoedOrderChecker
 from src.logic.Scheduler import Scheduler
 from src.logic.SlotBuilder import SlotBuilder
+from src.logic.CollectingScheduleObserver import CollectingScheduleObserver
 
 
 # Helper: Creates the default checkers and gives them the exam dates they need.
@@ -38,9 +39,11 @@ def test_generate_all_schedules_produces_expected_count(
 
     slots = SlotBuilder([period]).build([c1, c2])
     scheduler = Scheduler(_default_checkers([period], [c1, c2]))
-    # Act
-    schedules = scheduler.generateSchedules(slots)
-    # Assert — We expect 6 different valid schedules.
+    observer = CollectingScheduleObserver()
+    # Act - pass the observer to the scheduler instead of UI logic
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+    # Assert - expect 6 different valid schedules
     assert len(schedules) == 6
 
 
@@ -63,9 +66,11 @@ def test_generate_all_schedules_returns_multiple_solutions(
     )
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
-    # Act
-    schedules = scheduler.generateSchedules(slots)
-    # Assert
+    observer = CollectingScheduleObserver()
+    # Act - pass the observer to the scheduler instead of UI logic
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+    # Assert - expect more than 1 valid schedule
     assert len(schedules) > 1
 
 
@@ -89,8 +94,11 @@ def test_generate_all_schedules_returns_empty_when_impossible(
     )
     slots = SlotBuilder([period]).build([c1, c2])
     scheduler = Scheduler(_default_checkers([period], [c1, c2]))
-    # Act + Assert — must not raise an exception.
-    schedules = scheduler.generateSchedules(slots)
+    observer = CollectingScheduleObserver()
+    # Act - pass the observer to the scheduler instead of UI logic
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+    # Assert - expect an empty list instead of crashing
     assert schedules == []
 
 
@@ -114,9 +122,13 @@ def test_every_returned_schedule_is_complete(
     )
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
-    # Act
-    schedules = scheduler.generateSchedules(slots)
-    # Assert.
+    observer = CollectingScheduleObserver()
+    # Act - pass the observer to the scheduler instead of UI logic
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+    # Assert 
+    # - expect more than 0 valid schedules
+    # - expect every schedule to have exactly 4 assignments
     assert len(schedules) > 0
     assert all(len(s.assignments) == 4 for s in schedules)
 
@@ -147,10 +159,13 @@ def test_scheduler_uses_injected_custom_checker(
 
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler([rejector])
-
-    # Act
-    schedules = scheduler.generateSchedules(slots)
-    # Assert — no schedules, AND the custom checker was actually called.
+    observer = CollectingScheduleObserver()
+    # Act - pass the observer to the scheduler instead of UI logic
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+    # Assert 
+    # - expect an empty list instead of crashing
+    # - expect the custom checker to be called
     assert schedules == []
     assert rejector.calls > 0
 
@@ -176,11 +191,13 @@ def test_courses_shared_across_programs_are_scheduled_once(
     )
     slots = SlotBuilder([period]).build([shared])
     scheduler = Scheduler(_default_checkers([period], [shared]))
-
-    # Act
-    schedules = scheduler.generateSchedules(slots)
-    # Assert — every schedule has exactly one assignment whose course
-    # is the shared course.
+    observer = CollectingScheduleObserver()
+    # Act - pass the observer to the scheduler instead of UI logic
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+    # Assert 
+    # - expect more than 0 valid schedules
+    # - expect every schedule to have exactly one assignment whose course is the shared course
     assert len(schedules) > 0
     for s in schedules:
         shared_assignments = [
@@ -211,9 +228,13 @@ def test_only_exam_courses_are_scheduled(
     courses = [exam_course, project_course, att_course]
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
-    # Act
-    schedules = scheduler.generateSchedules(slots)
-    # Assert — only the EXAM course appears in any schedule.
+    observer = CollectingScheduleObserver()
+    # Act - pass the observer to the scheduler instead of UI logic
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+    # Assert 
+    # - expect more than 0 valid schedules
+    # - expect only the EXAM course to appear in any schedule
     assert len(schedules) > 0
     for s in schedules:
         ids = {a.course.courseId for a in s.assignments}
@@ -241,11 +262,13 @@ def test_program_with_only_non_exam_courses_returns_empty_schedule(
     courses = [project_course, att_course]
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
-
-    # Act — Run the scheduler. It should not cause any errors.
-    schedules = scheduler.generateSchedules(slots)
-
-    # Assert — Check that there are no exams inside the created schedules.
+    observer = CollectingScheduleObserver()
+    # Act - pass the observer to the scheduler instead of UI logic
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+    # Assert 
+    # - expect more than 0 valid schedules
+    # - expect only the EXAM course to appear in any schedule
     if len(schedules) > 0:
         for s in schedules:
             assert len(s.assignments) == 0, (

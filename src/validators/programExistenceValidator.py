@@ -1,8 +1,8 @@
 # region Imports
-from .inputValidator import InputValidator
+from .inputValidator import IInputValidator
 # endregion
 
-class ProgramExistenceValidator(InputValidator):
+class ProgramExistenceValidator(IInputValidator):
     """
     Validates that all selected program codes exist in the system.
     """

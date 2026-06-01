@@ -7,6 +7,7 @@ from src.logic.Scheduler import Scheduler
 from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
 from src.logic.MoedOrderChecker import MoedOrderChecker
 from src.logic.SlotBuilder import SlotBuilder
+from src.logic.CollectingScheduleObserver import CollectingScheduleObserver
 
 # ---------------------------------------------------------------------------
 # Helper functions and constants used in the tests.
@@ -113,10 +114,12 @@ def test_typical_load_under_30_seconds(make_course, make_program_entry,
     )
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
+    observer = CollectingScheduleObserver()
 
     # Act — Run the scheduler and measure how much time it takes.
     start_time = time.perf_counter()
-    schedules = scheduler.generateSchedules(slots)
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
     elapsed = time.perf_counter() - start_time
 
     # Assert — Check that it took less than 30 seconds.
@@ -149,10 +152,12 @@ def test_maximum_load_under_30_seconds(make_course, make_program_entry,
     )
     slots = SlotBuilder([period]).build(courses)
     scheduler = Scheduler(_default_checkers([period], courses))
+    observer = CollectingScheduleObserver()
 
     # Act — Run the scheduler and measure how much time it takes.
     start_time = time.perf_counter()
-    schedules = scheduler.generateSchedules(slots)
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
     elapsed = time.perf_counter() - start_time
 
     # Assert — Check that it took less than 30 seconds. If it fails, the code needs to be faster.
