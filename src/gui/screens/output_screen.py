@@ -6,8 +6,11 @@ SCRUM-96  : export button (Yuval)
 """
 from __future__ import annotations
 
+# Import your custom calendar view component safely
+from src.gui.widgets.calendar_widget import CalendarWidget
+
 from PyQt6.QtWidgets import (
-    QLabel, QVBoxLayout, QHBoxLayout, QPushButton,
+    QLabel, QMessageBox, QVBoxLayout, QHBoxLayout, QPushButton,
     QFrame, QScrollArea, QWidget,
 )
 from PyQt6.QtCore import Qt
@@ -122,12 +125,8 @@ class OutputScreen(Screen):
         content_inner = QVBoxLayout(self._content_widget)
         content_inner.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self._content_label = QLabel()
-        self._content_label.setObjectName("schedule-text")
-        self._content_label.setWordWrap(True)
-        self._content_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._content_label.setContentsMargins(20, 16, 20, 16)
-        content_inner.addWidget(self._content_label)
+        self.calendar_grid = CalendarWidget()
+        content_inner.addWidget(self.calendar_grid)
 
         self._scroll.setWidget(self._content_widget)
         content_layout.addWidget(self._scroll)
@@ -158,17 +157,15 @@ class OutputScreen(Screen):
             )
             return
         try:
+            # Fetch the structured data transfer view model token from backend core
             vm = self._controller.get_schedule_view(self._current_index)
-            lines = [
-                f"Schedule {self._current_index + 1} of {vm.total}\n",
-                "─" * 48,
-            ]
-            for item in vm.items:
-                lines.append(f"  {item.date}   {item.title}")
-                lines.append(f"             {item.subtitle}\n")
-            self._content_label.setText("\n".join(lines))
+            # Map dynamic ISO string bounds to prepare the skeleton coordinates
+            active_dates = sorted(list({item.date for item in vm.items}))
+            self.calendar_grid.setup_month_grid(active_dates)
+            # Render visual details directly using pre-composed data row packages
+            self.calendar_grid.display_assignments(vm.items)
         except Exception as e:
-            self._content_label.setText(f"Error displaying schedule:\n{e}")
+            QMessageBox.critical(self, "Display Error", f"Failed to paint calendar: {str(e)}")
 
     def _on_back(self) -> None:
         self._router.back()
