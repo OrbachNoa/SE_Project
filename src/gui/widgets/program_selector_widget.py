@@ -23,19 +23,19 @@ from PyQt6.QtWidgets import (
 # Internal helper: one row in the program list
 
 class _ProgramRow(QWidget):
-    """A single clickable row representing one study program."""
+    """A single unified clickable card representing one study program."""
 
     SELECTED_STYLE = (
-        "background-color: #dbeafe; border: 2px solid #2563eb; "
-        "border-radius: 6px; padding: 4px;"
+        "background-color: #f0fdf4; border: 1px solid #16a34a; "
+        "border-radius: 6px; padding: 0px;"
     )
     DEFAULT_STYLE = (
-        "background-color: #f8fafc; border: 2px solid #e2e8f0; "
-        "border-radius: 6px; padding: 4px;"
+        "background-color: #ffffff; border: 1px solid #f1f5f9; "
+        "border-radius: 6px; padding: 0px;"
     )
     HOVER_STYLE = (
-        "background-color: #eff6ff; border: 2px solid #93c5fd; "
-        "border-radius: 6px; padding: 4px;"
+        "background-color: #f8fafc; border: 1px solid #e2e8f0; "
+        "border-radius: 6px; padding: 0px;"
     )
 
     def __init__(self, program_id: str, display_name: str, parent=None):
@@ -44,54 +44,49 @@ class _ProgramRow(QWidget):
         self.display_name = display_name
         self._selected = False
 
+        # Single unified horizontal layout for the entire card
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setContentsMargins(12, 4, 12, 4)
+        layout.setSpacing(12)
 
-        # Checkbox indicator
-        self._check_label = QLabel("☐")
-        self._check_label.setFixedWidth(24)
-        self._check_label.setFont(QFont("Arial", 14))
-        layout.addWidget(self._check_label)
+        # 1. Program ID Code Block
+        self._id_label = QLabel(program_id)
+        self._id_label.setFixedWidth(55)
+        self._id_label.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
+        self._id_label.setStyleSheet("color: #64748b; background: transparent;")
+        layout.addWidget(self._id_label)
 
-        # ID label
-        id_label = QLabel(program_id)
-        id_label.setFixedWidth(64)
-        id_label.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
-        id_label.setStyleSheet("color: #475569;")
-        layout.addWidget(id_label)
-
-        # Name label
+        # 2. Program Name Label
         self._name_label = QLabel(display_name)
-        self._name_label.setFont(QFont("Arial", 11))
+        self._name_label.setFont(QFont("Arial", 11, QFont.Weight.Medium if hasattr(QFont.Weight, 'Medium') else QFont.Weight.Normal))
+        self._name_label.setStyleSheet("color: #1e293b; background: transparent;")
         self._name_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self._name_label)
 
+        # Setup base container styling
         self.setStyleSheet(self.DEFAULT_STYLE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-    # Selection state
-
-    @property
-    def selected(self) -> bool:
-        return self._selected
-
     def set_selected(self, value: bool) -> None:
+        """Flips the entire card color scheme contextually upon selection."""
         self._selected = value
-        self._check_label.setText("☑" if value else "☐")
-        self.setStyleSheet(self.SELECTED_STYLE if value else self.DEFAULT_STYLE)
+        if value:
+            self.setStyleSheet(self.SELECTED_STYLE)
+            self._id_label.setStyleSheet("color: #16a34a; font-weight: bold; background: transparent;")
+            self._name_label.setStyleSheet("color: #14532d; font-weight: bold; background: transparent;")
+        else:
+            self.setStyleSheet(self.DEFAULT_STYLE)
+            self._id_label.setStyleSheet("color: #64748b; background: transparent;")
+            self._name_label.setStyleSheet("color: #334155; background: transparent;")
 
-    # Mouse events -> parent handles via mousePressEvent override
-
-    def mousePressEvent(self, event):  # noqa: N802
-        """Bubble up so ProgramSelectorWidget can intercept the click."""
+    # Keep mouse and hover events exactly as they were below...
+    def mousePressEvent(self, event):
         super().mousePressEvent(event)
 
-    # PyQt6 enter event requires type hints or distinct override syntax
     def enterEvent(self, event):
         if not self._selected:
             self.setStyleSheet(self.HOVER_STYLE)
 
-    # PyQt6 leave event override for returning styling to defaults
     def leaveEvent(self, event):
         self.setStyleSheet(self.SELECTED_STYLE if self._selected else self.DEFAULT_STYLE)
 
@@ -136,8 +131,49 @@ class ProgramSelectorWidget(QWidget):
         # Scrollable program list
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFixedHeight(320)
-        scroll.setStyleSheet("QScrollArea { border: 1px solid #e2e8f0; border-radius: 8px; }")
+        scroll.setFixedHeight(180)
+
+        # Modern minimalist scrollbar styling code block
+        scroll.setStyleSheet("""
+            QScrollArea { 
+                border: 1px solid #e2e8f0; 
+                border-radius: 8px; 
+                background-color: #ffffff;
+            }
+            
+            /* The vertical scrollbar container */
+            QScrollBar:vertical {
+                border: none;
+                background: #f8fafc;
+                width: 8px;
+                margin: 4px 2px 4px 2px;
+                border-radius: 4px;
+            }
+            
+            /* The draggable handle part */
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                min-height: 20px;
+                border-radius: 4px;
+            }
+            
+            /* Handle color when hovering over it */
+            QScrollBar::handle:vertical:hover {
+                background: #94a3b8;
+            }
+            
+            /* Remove the mofos top and bottom arrow buttons entirely */
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+                height: 0px;
+            }
+            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
+                border: none;
+                background: none;
+                height: 0px;
+            }
+        """)
 
         self._list_container = QWidget()
         self._list_layout = QVBoxLayout(self._list_container)
