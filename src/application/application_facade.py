@@ -46,11 +46,22 @@ class ApplicationFacade:
 
     def generate(self, program_ids: List[str]) -> SchedulerWorker:
         """Start schedule generation for the selected programs in the background.
+
+        Wires result storage internally: each schedule the worker finds is added
+        to the schedule-result state as it streams in, so callers never have to
+        store DTOs themselves. The running worker is returned so the UI layer can
+        connect its signals for live progress, completion, and error reporting.
         """
+        # Clear previous results so a second run does not accumulate on top of the first.
+        self._state.get_schedule_state().set_schedules([])
+
         input_state = self._state.get_input_state()
-        return self._scheduler.generate_async(
+        worker = self._scheduler.generate_async(
             program_ids, input_state.get_courses(), input_state.get_periods()
         )
+        # Accumulate results in state as they arrive (encapsulated here, not exposed).
+        worker.schedule_found.connect(self._state.get_schedule_state().add_schedule)
+        return worker
 
     def cancel_scheduling(self) -> None:
         """Cancel an in-progress generation run."""
