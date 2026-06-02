@@ -153,30 +153,6 @@ class ProgramSelectorWidget(QWidget):
         self._counter_label.setStyleSheet("color: #64748b; font-size: 11px;")
         root.addWidget(self._counter_label)
 
-        # Summary panel
-        summary_frame = QFrame()
-        summary_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        summary_frame.setStyleSheet(
-            "QFrame { background: #f0fdf4; border: 1px solid #16a34a; border-radius: 8px; padding: 4px; }"
-        )
-        summary_layout = QVBoxLayout(summary_frame)
-        summary_layout.setContentsMargins(8, 6, 8, 6)
-        summary_layout.setSpacing(2)
-
-        summary_title = QLabel("Selected Programs:")
-        summary_title.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        summary_layout.addWidget(summary_title)
-
-        self._summary_layout = QVBoxLayout()
-        self._summary_layout.setSpacing(1)
-        summary_layout.addLayout(self._summary_layout)
-
-        self._empty_label = QLabel("(no program selected)")
-        self._empty_label.setStyleSheet("color: #94a3b8; font-size: 10px;")
-        self._summary_layout.addWidget(self._empty_label)
-
-        root.addWidget(summary_frame)
-
     # Public API
 
     def render(self, programs_vm) -> None:
@@ -259,38 +235,7 @@ class ProgramSelectorWidget(QWidget):
         self._counter_label.setStyleSheet(f"color: {color}; font-size: 11px;")
 
     def _refresh_summary(self) -> None:
-        # Clear old summary entries
-        while self._summary_layout.count():
-            item = self._summary_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        if not self._selected:
-            self._empty_label = QLabel("(no program selected)")
-            self._empty_label.setStyleSheet("color: #94a3b8; font-size: 10px;")
-            self._summary_layout.addWidget(self._empty_label)
-            return
-
-        for prog_id in self._selected:
-            row = self._rows.get(prog_id)
-            if row is None:
-                continue
-            text = f"• {row.display_name}  [{prog_id}]"
-            lbl = QLabel(text)
-            lbl.setFont(QFont("Arial", 10))
-            lbl.setStyleSheet("color: #166534;")
-            self._summary_layout.addWidget(lbl)
-
-        # Add a "clear all" button
-        clear_btn = QPushButton("Clear All")
-        clear_btn.setStyleSheet(
-            "QPushButton { color: #dc2626; background: transparent; "
-            "border: none; font-size: 10px; text-decoration: underline; }"
-            "QPushButton:hover { color: #991b1b; }"
-        )
-        clear_btn.setFixedHeight(20)
-        clear_btn.clicked.connect(self._clear_all)
-        self._summary_layout.addWidget(clear_btn)
+        pass
 
     def _clear_all(self) -> None:
         for prog_id in list(self._selected):
