@@ -46,14 +46,14 @@ class _CourseRow(QWidget):
         # Course ID
         id_lbl = QLabel(course_vm.course_id)
         id_lbl.setFixedWidth(72)
-        id_lbl.setFont(QFont("Courier New", 10, QFont.Bold))
+        id_lbl.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
         id_lbl.setStyleSheet("color: #475569;")
         layout.addWidget(id_lbl)
 
         # Course name
         name_lbl = QLabel(course_vm.course_name)
         name_lbl.setFont(QFont("Arial", 10))
-        name_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(name_lbl)
 
         # Requirement badge
@@ -149,7 +149,7 @@ class _ProgramBlock(QWidget):
         for group_key in sorted(groups.keys()):
             # Group header
             group_lbl = QLabel(group_key)
-            group_lbl.setFont(QFont("Arial", 10, QFont.Bold))
+            group_lbl.setFont(QFont("Arial", 10, QFont.Weight.Bold))
             group_lbl.setStyleSheet(
                 "color: #1e3a5f; background: #dbeafe; padding: 3px 8px; border-radius: 3px;"
             )
@@ -192,6 +192,8 @@ class CourseListWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._blocks: Dict[str, _ProgramBlock] = {}
+        # Track live rendered blocks to prevent layout memory leaks on re-renders
+        self._active_widgets: List[QWidget] = []
         self._build_ui()
     
     # UI construction
@@ -202,7 +204,7 @@ class CourseListWidget(QWidget):
 
         # Title
         title = QLabel("Courses by program")
-        title.setFont(QFont("Arial", 13, QFont.Bold))
+        title.setFont(QFont("Arial", 13, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignLeft)
         root.addWidget(title)
 

@@ -56,14 +56,14 @@ class _ProgramRow(QWidget):
         # ID label
         id_label = QLabel(program_id)
         id_label.setFixedWidth(64)
-        id_label.setFont(QFont("Courier New", 11, QFont.Bold))
+        id_label.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
         id_label.setStyleSheet("color: #475569;")
         layout.addWidget(id_label)
 
         # Name label
         self._name_label = QLabel(display_name)
         self._name_label.setFont(QFont("Arial", 11))
-        self._name_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self._name_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self._name_label)
 
         self.setStyleSheet(self.DEFAULT_STYLE)
@@ -130,7 +130,7 @@ class ProgramSelectorWidget(QWidget):
 
         # Title
         title = QLabel("Select Study Programs (up to 5)")
-        title.setFont(QFont("Arial", 13, QFont.Bold))
+        title.setFont(QFont("Arial", 13, QFont.Weight.Bold))
         root.addWidget(title)
 
         # Scrollable program list
@@ -155,7 +155,7 @@ class ProgramSelectorWidget(QWidget):
 
         # Summary panel
         summary_frame = QFrame()
-        summary_frame.setFrameShape(QFrame.StyledPanel)
+        summary_frame.setFrameShape(QFrame.Shape.StyledPanel)
         summary_frame.setStyleSheet(
             "QFrame { background: #f0fdf4; border: 1px solid #16a34a; border-radius: 8px; padding: 4px; }"
         )
@@ -164,7 +164,7 @@ class ProgramSelectorWidget(QWidget):
         summary_layout.setSpacing(2)
 
         summary_title = QLabel("Selected Programs:")
-        summary_title.setFont(QFont("Arial", 10, QFont.Bold))
+        summary_title.setFont(QFont("Arial", 10, QFont.Weight.Bold))
         summary_layout.addWidget(summary_title)
 
         self._summary_layout = QVBoxLayout()

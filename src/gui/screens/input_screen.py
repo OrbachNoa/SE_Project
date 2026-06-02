@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from typing import List
 
+from src.gui.widgets.program_selector_widget import ProgramSelectorWidget
+from src.application.dto_viewmodel.program_view_model import ProgramViewModel
+from data.programs import programs_data
+
 from PyQt6.QtWidgets import (
     QLabel, QVBoxLayout, QHBoxLayout, QPushButton,
     QRadioButton, QButtonGroup, QFrame, QFileDialog,
@@ -135,19 +139,18 @@ class InputScreen(Screen):
 
         body.addWidget(files_card)
 
-        # ── Programs card (placeholder for SCRUM-90) ──────────────────
-        programs_card = _card()
-        prog_layout = QVBoxLayout(programs_card)
-        prog_layout.setContentsMargins(20, 16, 20, 16)
-        prog_layout.setSpacing(6)
+        # ── Study Programs Real Selection Widget (SCRUM-90) ───────────
+        self.program_selector = ProgramSelectorWidget()
+        body.addWidget(self.program_selector)
 
-        prog_title = QLabel("Study Programs")
-        prog_title.setObjectName("card-title")
-        prog_hint = QLabel("Program selector — coming in SCRUM-90")
-        prog_hint.setObjectName("card-hint")
-        prog_layout.addWidget(prog_title)
-        prog_layout.addWidget(prog_hint)
-        body.addWidget(programs_card)
+        # Convert the raw dictionary items into structured ProgramViewModel tokens
+        view_models_list = [
+            ProgramViewModel(program_id=p_id, display_name=p_name, course_count=0)
+            for p_id, p_name in programs_data.items()
+        ]
+        
+        # Populate and paint your selector widget framework instantly with the live models
+        self.program_selector.render(view_models_list)
 
         body.addStretch()
 
@@ -381,8 +384,8 @@ class InputScreen(Screen):
     # ── Placeholder ────────────────────────────────────────────────────
 
     def _collect_selected_program_ids(self) -> List[str]:
-        """Placeholder — wired to program-selector widget in SCRUM-90."""
-        return []
+        """Fetch the active checked program IDs directly from Shira's custom widget."""
+        return self.program_selector.get_selected()
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
