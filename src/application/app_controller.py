@@ -12,7 +12,6 @@ every worker instance.
 OCP: extending the application means updating ApplicationFacade —
 this class stays closed for modification.
 
-SCRUM-135 / SCRUM-98
 """
 from __future__ import annotations
 
@@ -85,6 +84,11 @@ class AppController(QObject):
             )
             return
 
+        # Disconnect the previous worker before replacing it. If a run was
+        # cancelled, the old worker may still be alive and emit search_finished
+        # after cancellation — without this, handlers fire twice.
+        self._disconnect_worker()
+
         # The facade starts the worker (and wires result storage internally),
         # then returns it so the controller can forward signals to the screens.
         self._worker = self._facade.generate(program_ids)
@@ -98,6 +102,23 @@ class AppController(QObject):
         """Stop a running scheduling job. Safe to call when idle."""
         if self._worker is not None and self._worker.isRunning():
             self._facade.cancel_scheduling()
+
+    def _disconnect_worker(self) -> None:
+        """Disconnect all signals from the current worker, if one exists.
+
+        Called before starting a new run to prevent handlers from firing
+        twice when a cancelled worker emits its final signals after the
+        new worker has already started.
+        """
+        if self._worker is None:
+            return
+        try:
+            self._worker.schedule_found.disconnect(self._handle_schedule_found)
+            self._worker.progress_updated.disconnect(self._handle_progress_updated)
+            self._worker.search_finished.disconnect(self._handle_search_finished)
+            self._worker.error_occurred.disconnect(self._handle_error_occurred)
+        except RuntimeError:
+            pass  # Already disconnected or underlying C++ object was destroyed
 
     # ------------------------------------------------------------------
     # Results / export (called by the output screen)
