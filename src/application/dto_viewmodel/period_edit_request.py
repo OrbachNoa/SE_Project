@@ -1,4 +1,4 @@
-"""ViewModel for displaying and editing an exam period in the calendar editor."""
+"""Request DTO for editing an exam period in the calendar editor."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -6,9 +6,9 @@ from typing import List
 
 
 @dataclass
-class PeriodEditViewModel:
-    """One exam period view model, flattened for display in the calendar editor widget.
-    This class contains only primitive types and standard collections to maintain strict decoupling
+class PeriodEditRequest:
+    """One exam period request, flattened for data transfer from UI to ViewModel.
+    This class contains only primitive types and standard collections to maintain strict decoupling 
     between the presentation layer and core business logic.
     """
 
