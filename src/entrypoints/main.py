@@ -4,7 +4,7 @@ import sys
 import time
 
 from data.programs import programs_data
-from io.parsers.validators.fileValidator import validate_all_files
+from io.validators.fileValidator import validate_all_files
 from io.parsers.ParserFactory import ParserFactory
 from src.logic.SlotBuilder import SlotBuilder
 from src.logic.Scheduler import Scheduler
@@ -12,13 +12,13 @@ from logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
 from logic.checkers.MoedOrderChecker import MoedOrderChecker
 from logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
 from logic.observers.StreamingScheduleObserver import StreamingScheduleObserver
-from io.parsers.validators.maxProgramsValidator import MaxProgramsValidator
-from io.parsers.validators.programExistenceValidator import ProgramExistenceValidator
+from io.validators.maxProgramsValidator import MaxProgramsValidator
+from io.validators.programExistenceValidator import ProgramExistenceValidator
 from io.writers.textFileWriter import TextFileWriter
 from infrastructure.cache.DiskCacheRepository import DiskCacheRepository
 from infrastructure.cache.FileChangeDetector import FileChangeDetector
 from infrastructure.cache.CachedInputLoader import CachedInputLoader
-from io.parsers.validators.ValidatorPipeline import ValidatorPipeline
+from io.validators.ValidatorPipeline import ValidatorPipeline
 
 
 

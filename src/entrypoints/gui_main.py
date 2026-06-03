@@ -19,7 +19,7 @@ from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleR
 from infrastructure.cache.DiskCacheRepository import DiskCacheRepository
 from infrastructure.cache.FileChangeDetector import FileChangeDetector
 from io.parsers.ParserFactory import ParserFactory
-from io.parsers.validators.ValidatorPipeline import ValidatorPipeline
+from src.io.validators.ValidatorPipeline import ValidatorPipeline
 from src.gui.app import App
 from src.application.app_controller import AppController
 from io.writers.textFileWriter import TextFileWriter
