@@ -1,83 +1,70 @@
-"""gui_main.py — The Composition Root for the Graphical User Interface (GUI) application.
-
-Instantiates all decoupled services, structural state components, and parsing factories.
-Wires them together via structural Dependency Injection (DI) to assemble the execution facade.
-"""
 import sys
-
 from PyQt6.QtWidgets import QApplication
 
-from src.application.app_state import AppState
+from src.gui.app import App
+from src.application.app_controller import AppController
 from src.application.application_facade import ApplicationFacade
+from src.application.app_state import AppState
 from src.application.file_import_service import FileImportService
 from src.application.scheduling_service import SchedulingService
 from src.application.schedule_export_service import ScheduleExportService
 from src.application.view_model_mapper import ViewModelMapper
-from src.application.import_mode import ImportMode
 from src.application.HybridScheduleResultState import HybridScheduleResultState
-from src.data.SQLiteScheduleRepository import SQLiteScheduleRepository
 from src.data.DiskCacheRepository import DiskCacheRepository
 from src.data.FileChangeDetector import FileChangeDetector
+from src.data.SQLiteScheduleRepository import SQLiteScheduleRepository
 from src.parsers.ParserFactory import ParserFactory
 from src.validators.ValidatorPipeline import ValidatorPipeline
-from src.gui.app import App
-from src.application.app_controller import AppController
 from src.writers.textFileWriter import TextFileWriter
 
 
-def build_app() -> tuple[QApplication, App]:
-    """
-    Assembles the structural dependency graph of the entire application.
-    Constructs layers from data storage nodes up to the top view-controller components.
-    """
-    qt_app = QApplication(sys.argv)
+def build_controller() -> AppController:
+    """Wire the full dependency graph and return a ready-to-use AppController."""
 
-    # ── 1. Storage & State Layer Initialization ──────────────────────────────
-    # Instantiate the atomic SQLite repository used as a virtual memory overflow buffer
-    repository = SQLiteScheduleRepository()          
-    
-    # Wrap the repository into a paged navigation state reader interface proxy
-    hybrid_state = HybridScheduleResultState(repository)
+    # --- Shared SQLite repository ---
+    # A SINGLE repository instance is shared between the writer side and the
+    # reader side. SchedulingService writes generated schedules into it from the
+    # background worker, while HybridScheduleResultState reads paged windows back
+    # out of it for the output screen. They must be the same object, otherwise
+    # the GUI would read from an empty database.
+    schedule_repository = SQLiteScheduleRepository()
 
-    # Compose the root runtime state as the unified single source of truth
-    state = AppState(schedule_state=hybrid_state)     
-    
-    # ── 2. Structural Infrastructure Services ────────────────────────────────
-    # Initialize file loading service pipeline with local validation configurations
+    # --- State ---
+    # The schedule sub-state is the SQLite-backed Hybrid variant so the output
+    # screen can page through more results than fit in memory. It is injected
+    # into AppState; the input sub-state is created by AppState itself.
+    schedule_state = HybridScheduleResultState(repository=schedule_repository)
+    state = AppState(schedule_state=schedule_state)
+
+    # --- Services ---
     importer = FileImportService(
         repository=DiskCacheRepository(),
         detector=FileChangeDetector(),
         parser_factory=ParserFactory(),
-        validators=ValidatorPipeline([]),
+        validators=ValidatorPipeline(),
         state=state.get_input_state(),
     )
-    
-    # ── 3. Facade Architecture Composition ────────────────────────────────────
-    # Build the application facade, injecting the shared repository to the scheduling service
+    # SchedulingService now requires the shared repository so the background
+    # worker can stream batches of schedules straight into SQLite.
+    scheduler = SchedulingService(repository=schedule_repository)
+    exporter  = ScheduleExportService(writer=TextFileWriter())
+    mapper    = ViewModelMapper()
+
+    # --- Facade ---
     facade = ApplicationFacade(
         state=state,
         importer=importer,
-        scheduler=SchedulingService(repository),  # Injects the safe disk storage link to the background engine
-        exporter=ScheduleExportService(writer=TextFileWriter()),
-        mapper=ViewModelMapper(),
+        scheduler=scheduler,
+        exporter=exporter,
+        mapper=mapper,
     )
-    
-    # ── 4. UI Layer Instantiation ────────────────────────────────────────────
-    # Bind the unified application facade inside a thin mediator controller node
-    controller = AppController(facade)
-    
-    # Generate the main visualization window view bound to its specific controller
-    window = App(controller)
 
-    return qt_app, window
-
-
-def main() -> None:
-    """Application main runtime entry point."""
-    qt_app, window = build_app()
-    window.start()
-    sys.exit(qt_app.exec())
+    return AppController(facade)
 
 
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+    controller = build_controller()
+    window = App(controller)
+    window.start()
+    sys.exit(app.exec())
