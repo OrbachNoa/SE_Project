@@ -53,14 +53,13 @@ class Scheduler:
             
             # Updates progress every 10 schedules to prevent flooding the IPC queue and GUI thread.
             if found_count[0] % 10 == 0:
-                progress = int((found_count[0] / max_results) * 100)
-                observer.on_progress(progress)
+                observer.on_progress(found_count[0])
                 
             return
 
         slot = slots[index]
         # Use slot dates directly, so no period lookup is needed.
-        for date in slot.candidateDates:
+        for date in slot.candidateDates or observer.should_cancel():
             # Check maximum results inside the loop because a deep branch might have reached the limit.
             if found_count[0] >= max_results:
                 return

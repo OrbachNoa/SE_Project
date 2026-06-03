@@ -1,4 +1,4 @@
-"""Adapter that pushes observer events into a multiprocessing Queue.
+"""Adapter that pushes observer events into a multiprocessing Queue for Inter-Process Communication.
 """
 from __future__ import annotations
 from multiprocessing import Queue
@@ -10,20 +10,28 @@ from src.application.dto_viewmodel.schedule_dto import ScheduleDTO, AssignmentDT
 
 
 class QueueScheduleObserver(IScheduleObserver):
-    """Pushes updates to a queue because a background process cannot update the GUI directly."""
+    """
+    Pushes computation lifecycle events into a multiprocessing Queue.
+    Enables safe data streaming from the isolated background engine process back to the UI environment.
+    """
 
-    def __init__(self, queue: Queue, cancel_event: Event, batch_size: int = 50) -> None:
-        # The communication pipe to the main process because we need Inter-Process Communication (IPC).
+    def __init__(self, queue: Queue, cancel_event: Event, batch_size: int = 1000) -> None:
+        # The cross-process IPC communication pipe mapped directly to the parent process listener
         self._queue = queue
-        # The shared flag to stop the search early because the user might cancel via the GUI.
+        # Shared cancellation flag monitored to interrupt execution loops early on user request
         self._cancel_event = cancel_event
-        # The maximum number of items to hold before sending because frequent IPC calls cause performance drops.
+        # Threshold limit configuring the max capacity frame footprint of localized item packages
         self._batch_size = batch_size
-        # The local memory storage that aggregates schedules because sending them one by one is too expensive.
-        self._buffer = []
+        # Local memory storage buffer that aggregates processed data packets before flushing
+        self._buffer: list[ScheduleDTO] = []
+        # Suppresses redundant traffic updates by blocking unchanged sequential progress values
+        self._last_progress_sent: int = -1
 
     def on_schedule_found(self, schedule: Any) -> None:
-        """Adds to buffer and pushes only when the batch is full to save IPC overhead."""
+        """
+        Transforms domain objects into pure data primitives and queues them inside the local buffer.
+        Flushes data over the IPC line only when the batch fills to optimize context-switching costs.
+        """
         dto = self._to_schedule_dto(schedule)
         self._buffer.append(dto)
         
@@ -31,31 +39,38 @@ class QueueScheduleObserver(IScheduleObserver):
             self._flush_buffer()
 
     def _flush_buffer(self) -> None:
-        """Pushes the accumulated batch to the queue and clears the buffer."""
+        """Transfers accumulated data frame blocks onto the IPC queue pipe and flushes local memory references."""
         if self._buffer:
             self._queue.put(("SCHEDULE_BATCH", self._buffer))
             self._buffer = []
 
     def on_progress(self, value: int) -> None:
-        """Pushes a progress event because the QThread is listening for percentage updates."""
-        self._queue.put(("PROGRESS", value))
+        """
+        Pushes search progression values down the channel context tree.
+        Suppresses identical duplicate signals to drop communication packet costs from O(N) to O(100).
+        """
+        if value != self._last_progress_sent:
+            self._last_progress_sent = value
+            self._queue.put(("PROGRESS", value))
 
     def should_cancel(self) -> bool:
-        """Checks the event flag because the user might have clicked the cancel button."""
+        """Interrogates shared memory flag status criteria to determine if generation parameters were aborted."""
         return self._cancel_event is not None and self._cancel_event.is_set()
 
     def on_finished(self) -> None:
-        """Flushes any remaining schedules before signaling the end."""
+        """Flushes remaining cached record allocations and transmits a termination sequence message."""
         self._flush_buffer()
         self._queue.put(("FINISHED", None))
 
     def on_error(self, message: str) -> None:
-        """Pushes an error signal because we want to show a polite error popup in the GUI."""
+        """Formats error crash reports into standard IPC signals to pop open notifications inside user views."""
         self._queue.put(("ERROR", message))
 
     def _to_schedule_dto(self, schedule: Any) -> ScheduleDTO:
-        """Maps the domain model to a DTO, converting objects to pure primitives for safe IPC."""
-        
+        """
+        Deconstructs heavy domain object graphs into flat, primitive-based DTO structures.
+        Guarantees memory nodes are clean and safe for pipe marshaling across OS boundary lines.
+        """
         assignments = [
             AssignmentDTO(
                 course_id=assignment.course.courseId,

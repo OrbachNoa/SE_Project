@@ -20,7 +20,7 @@ from src.concurrency.SchedulerWorker import SchedulerWorker
 
 
 class ApplicationFacade:
-    """Coordinates state, file loading, scheduling, export, and view-model mapping."""
+    """Coordinates state buffers, file loading parsers, scheduling engines, and view-model mapping integrations."""
 
     def __init__(
         self,
@@ -37,43 +37,74 @@ class ApplicationFacade:
         self._mapper = mapper
 
     def import_file(self, request: ImportRequest) -> ImportResult:
-        """Import one file via the import service; state is updated as a side effect.
-
-        The import service writes parsed data into the same InputDataState this
-        facade's AppState exposes, so a successful import leaves AppState current.
-        """
+        """Imports a single data asset file using the parsing engine; internal state registers adapt accordingly."""
         return self._importer.load_file(request.path, request.file_type, request.mode)
 
     def generate(self, program_ids: List[str]) -> SchedulerWorker:
-        """Start schedule generation for the selected programs in the background.
-
-        Wires result storage internally: each schedule the worker finds is added
-        to the schedule-result state as it streams in, so callers never have to
-        store DTOs themselves. The running worker is returned so the UI layer can
-        connect its signals for live progress, completion, and error reporting.
         """
-        # Clear previous results so a second run does not accumulate on top of the first.
+        Launches the scheduling computation pipeline asynchronously inside a dedicated background process thread.
+        Clears out stale operational states prior to startup execution to prevent data bleeding across multiple runs.
+        """
+        # Clear previous run data to ensure a completely clean execution target context
         self._state.get_schedule_state().set_schedules([])
 
+        # Extract required input parameters cached inside the state layer
         input_state = self._state.get_input_state()
+        
+        # Deploy the background process worker with correct state properties
         worker = self._scheduler.generate_async(
             program_ids, input_state.get_courses(), input_state.get_periods()
         )
-        # Accumulate results in state as they arrive (encapsulated here, not exposed).
-        worker.schedule_found.connect(self._state.get_schedule_state().add_schedule)
+        
+        # Connect the asynchronous stream notification line to capture batch updates live
+        worker.schedules_batch_found.connect(self._on_schedules_batch_received)
         return worker
 
+    def _on_schedules_batch_received(self, batch_size: int) -> None:
+        """
+        Internal receiver slot triggered whenever the background process writer persists a data packet frame to SQLite.
+        Accepts a scalar integer primitive size tracker instead of heavy list instances to guarantee high UI rendering speeds.
+        """
+        self._state.get_schedule_state().add_schedules_batch(batch_size)
+
+    # ------------------------------------------------------------------
+    # Page navigation 
+    # ------------------------------------------------------------------
+
+    def is_first_window_ready(self) -> bool:
+        """Validates if initial data slices have reached storage, declaring it safe to pop open output view panels."""
+        return self._state.get_schedule_state().is_first_window_ready()
+
+    def get_total_count(self) -> int:
+        """Fetches the aggregated volume size metrics of all valid schedules recorded across the active repository."""
+        return self._state.get_schedule_state().count()
+
+    def load_page(self, page: int) -> None:
+        """Instructs the lower storage layer state targets to rotate active navigation frames over to the specified page index."""
+        self._state.get_schedule_state().load_page(page)
+
+    def get_page_info(self) -> dict:
+        """Extracts a structural configuration dictionary detailing current navigation pagination thresholds for UI binding components."""
+        state = self._state.get_schedule_state()
+        return {
+            "current_page":  state.current_page,
+            "total_pages":   state.total_pages(),
+            "total_count":   state.count(),
+            "window_size":   state.current_window_size(),
+            "sqlite_count":  state.sqlite_count(),
+        }
+
     def cancel_scheduling(self) -> None:
-        """Cancel an in-progress generation run."""
+        """Signals active running asynchronous worker processes to terminate operational procedures immediately."""
         self._scheduler.cancel()
 
     def get_schedule_vm(self, index: int) -> ScheduleViewModel:
-        """Return the schedule at index as a view model, with 'X of Y' context."""
+        """Resolves raw data structures into fully localized display ViewModels, stamping context metrics on the fly."""
         schedule_state = self._state.get_schedule_state()
         dto = schedule_state.get_schedule(index)
         return self._mapper.to_schedule_vm(dto, current_index=index, total=schedule_state.count())
 
     def export(self, index: int, path: str) -> None:
-        """Export the schedule at index to the given path."""
+        """Routes targeted on-memory result profiles directly out towards concrete disk serialization endpoints."""
         dto = self._state.get_schedule_state().get_schedule(index)
         self._exporter.save(dto, path)
