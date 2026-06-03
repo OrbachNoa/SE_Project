@@ -6,9 +6,9 @@ from src.models.enums import Semester
 # ===========================================================================
 # TC-SCHED-SVC-001 : Test that build_slots instantiates SlotBuilder and builds slots correctly
 # ===========================================================================
-def test_build_slots(make_course, make_period, make_program_entry):
+def test_build_slots(make_course, make_period, make_program_entry, mock_repository):
     # Arrange
-    service = SchedulingService()
+    service = SchedulingService(mock_repository)
     program_id="83101"
     pe = make_program_entry(program_id=program_id)
     c = make_course(course_id="10101", program_entries=[pe])
@@ -29,9 +29,9 @@ def test_build_slots(make_course, make_period, make_program_entry):
 @patch("src.application.scheduling_service.Queue")
 @patch("src.application.scheduling_service.Event")
 @patch("src.application.scheduling_service.SchedulerWorker")
-def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cls, make_course, make_period):
+def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cls, make_course, make_period, mock_repository):
     # Arrange
-    service = SchedulingService()
+    service = SchedulingService(mock_repository)
     c = make_course()
     p = make_period()
     
@@ -52,6 +52,8 @@ def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cl
     
     # assert the worker is created and started
     assert mock_worker_cls.call_count == 1
+    kwargs = mock_worker_cls.call_args[1]
+    assert kwargs.get("repository") == mock_repository
     assert mock_worker.start.call_count == 1
     assert worker == mock_worker
 
@@ -59,9 +61,9 @@ def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cl
 # ===========================================================================
 # TC-SCHED-SVC-003: Test that cancel is a safe no-op when no worker is active.
 # ===========================================================================
-def test_cancel_no_active_worker():
+def test_cancel_no_active_worker(mock_repository):
     # Arrange
-    service = SchedulingService()
+    service = SchedulingService(mock_repository)
     
     # Act
     service.cancel()
@@ -73,9 +75,9 @@ def test_cancel_no_active_worker():
 # ===========================================================================
 # TC-SCHED-SVC-004: Test that cancel triggers the cancel method on the active worker.
 # ===========================================================================
-def test_cancel_with_active_worker():
+def test_cancel_with_active_worker(mock_repository):
     # Arrange
-    service = SchedulingService()
+    service = SchedulingService(mock_repository)
     mock_worker = MagicMock()
     service._worker = mock_worker
     
@@ -118,9 +120,9 @@ def test_run_scheduler_process_helper(mock_runner_cls):
 # ===========================================================================
 # TC-SCHED-SVC-006: Test that generate_async propagates ValueError if a course has no matching exam period.
 # ===========================================================================
-def test_generate_async_raises_value_error_for_orphan_course(make_course, make_period, make_program_entry):
+def test_generate_async_raises_value_error_for_orphan_course(make_course, make_period, make_program_entry, mock_repository):
     # Arrange
-    service = SchedulingService()
+    service = SchedulingService(mock_repository)
     pe = make_program_entry(program_id="83101", semester=Semester.SPRI)
     orphan_course = make_course(course_id="10101", program_entries=[pe])
     fall_period = make_period(semester=Semester.FALL)
@@ -133,9 +135,9 @@ def test_generate_async_raises_value_error_for_orphan_course(make_course, make_p
 # ===========================================================================
 # TC-SCHED-SVC-007: Test that build_slots propagates ValueError if a course has no matching exam period.
 # ===========================================================================
-def test_build_slots_raises_value_error_for_orphan_course(make_course, make_period, make_program_entry):
+def test_build_slots_raises_value_error_for_orphan_course(make_course, make_period, make_program_entry, mock_repository):
     # Arrange
-    service = SchedulingService()
+    service = SchedulingService(mock_repository)
     pe = make_program_entry(program_id="83101", semester=Semester.SPRI)
     orphan_course = make_course(course_id="10101", program_entries=[pe])
     fall_period = make_period(semester=Semester.FALL)
@@ -152,9 +154,9 @@ def test_build_slots_raises_value_error_for_orphan_course(make_course, make_peri
 @patch("src.application.scheduling_service.Queue")
 @patch("src.application.scheduling_service.Event")
 @patch("src.application.scheduling_service.SchedulerWorker")
-def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mock_queue, mock_process_cls, make_course, make_period):
+def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mock_queue, mock_process_cls, make_course, make_period, mock_repository):
     # Arrange
-    service = SchedulingService()
+    service = SchedulingService(mock_repository)
     c = make_course()
     p = make_period()
     
@@ -165,4 +167,4 @@ def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mo
     assert mock_process_cls.call_count == 1
     args, kwargs = mock_process_cls.call_args
     process_args = kwargs.get("args") or args[0]
-    assert process_args[-1] == 100
+    assert process_args[-1] == 1000000

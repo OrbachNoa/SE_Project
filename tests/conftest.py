@@ -18,6 +18,8 @@ from src.models.domain import (
     ExamAssignment,
     ExamSchedule,
 )
+from unittest.mock import MagicMock
+from src.data.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 
 # ---------------------------------------------------------------------------
@@ -197,4 +199,10 @@ def make_data_cache(make_course, make_period):
             source_hashes=source_hashes or {}
         )
     return _make
-
+
+@pytest.fixture
+def mock_repository():
+    """Provides a MagicMock spec'd for SQLiteScheduleRepository to isolate tests from disk I/O."""
+    return MagicMock(spec=SQLiteScheduleRepository)
+
+

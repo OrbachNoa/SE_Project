@@ -5,7 +5,7 @@ import pytest
 from src.main import run_pipeline
 
 # Set the path to the folder where the test files (fixtures) are located.
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 
 
 # ===========================================================================

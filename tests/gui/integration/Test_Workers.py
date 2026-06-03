@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from src.concurrency.SchedulerWorker import SchedulerWorker
 from src.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
+from src.data.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 pytestmark = pytest.mark.usefixtures("qapp")
 
@@ -16,6 +17,7 @@ def test_worker_dispatches_messages():
     mock_queue = MagicMock()
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
+    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
     
     mock_queue.get.side_effect = [
         ("SCHEDULE_BATCH", ["dto1", "dto2"]),
@@ -23,13 +25,13 @@ def test_worker_dispatches_messages():
         ("FINISHED", None)
     ]
     
-    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process)
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process, mock_repository)
     
-    found_schedules = []
+    batch_counts = []
     progress_vals = []
     finished_called = False
     
-    worker.schedule_found.connect(found_schedules.append)
+    worker.schedules_batch_found.connect(batch_counts.append)
     worker.progress_updated.connect(progress_vals.append)
     worker.search_finished.connect(lambda: setattr(sys.modules[__name__], "finished_called", True))
     
@@ -39,7 +41,8 @@ def test_worker_dispatches_messages():
     worker.run()
     
     # Assert
-    assert found_schedules == ["dto1", "dto2"]
+    mock_repository.insert_batch.assert_called_once_with(["dto1", "dto2"])
+    assert batch_counts == [2]
     assert progress_vals == [50]
     assert getattr(sys.modules[__name__], "finished_called") is True
 
@@ -52,13 +55,15 @@ def test_worker_process_crash_drainage_path():
     mock_queue = MagicMock()
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
+    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
     
     mock_queue.get.side_effect = queue.Empty()
     
     mock_process.is_alive.return_value = False
     mock_process.exitcode = 137
+    mock_cancel_event.is_set.return_value = False
     
-    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process)
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process, mock_repository)
     
     error_msg = None
     def on_error(msg):
@@ -83,11 +88,12 @@ def test_worker_cancel_graceful_and_terminate():
     mock_queue = MagicMock()
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
+    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
     
     mock_process.is_alive.return_value = True
     mock_queue.empty.side_effect = [False, False, True]
     
-    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process)
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process, mock_repository)
     
     # Act
     worker.cancel()
