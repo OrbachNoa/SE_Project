@@ -6,26 +6,35 @@ from multiprocessing import Queue, Process
 from multiprocessing.synchronize import Event
 from PyQt6.QtCore import QThread, pyqtSignal 
 
+from src.data.SQLiteScheduleRepository import SQLiteScheduleRepository
+
 
 class SchedulerWorker(QThread):
-    """Listens to the background process because the GUI needs to update safely without freezing."""
+    """
+    Asynchronous worker thread that unloads background process execution streams.
+    Monitors engine states and dispatches clean execution status updates directly to UI views.
+    """
 
-    schedule_found = pyqtSignal(object)  
-    progress_updated = pyqtSignal(int)   
-    search_finished = pyqtSignal()       
-    error_occurred = pyqtSignal(str)     
+    # --- PyQt Signals to safely communicate asynchronous engine events to the GUI thread ---
+    schedule_found        = pyqtSignal(object)      # Kept for backward compatibility profiles
+    schedules_batch_found = pyqtSignal(int)         # Emits lightweight packet size scalar to bypass UI event lag
+    progress_updated      = pyqtSignal(int)   
+    search_finished       = pyqtSignal()       
+    error_occurred        = pyqtSignal(str)     
 
-    def __init__(self, queue: Queue, cancel_event: Event, process: Process) -> None:
+    def __init__(self, queue: Queue, cancel_event: Event, process: Process, repository: SQLiteScheduleRepository) -> None:
         super().__init__()
         
-        # The communication pipe from the background process because we need to read incoming data.
+        # Inter-process pipeline conduit feeding raw solution blocks from child process
         self._queue = queue
-        # The shared flag to trigger cancellation because the Worker acts as the middleman for user actions.
+        # Shared cancellation state monitor flag to interrupt generation steps mid-run
         self._cancel_event = cancel_event
-        # The actual heavy computation process because the Worker is responsible for starting and terminating it.
+        # Concrete operating system process handle running back-tracking operations
         self._process = process
+        # Local SQLite storage client invoked directly inside this background worker context
+        self._repository = repository
         
-        # Maps message types to handlers because dictionary dispatch replaces ugly if-else chains.
+        # Maps operational message string signatures over to active execution handler routes
         self._dispatch = {
             "SCHEDULE_BATCH": self._handle_schedule_batch,
             "PROGRESS": self._handle_progress,
@@ -34,81 +43,93 @@ class SchedulerWorker(QThread):
         }
 
     def run(self) -> None:
-        """Runs the listener loop because we need to continuously check the queue for live updates."""
+        """Main active event monitoring loop parsing cross-process IPC channel streams."""
+        # Spin up the secondary heavy computation child process layer
         self._process.start()
 
         while True:
             try:
+                # Capture next signal transmission frame boundary passing down the stream
                 msg_type, payload = self._queue.get(timeout=1.0)
             except queue.Empty:
-                # The queue is empty. We check if the process died unexpectedly.
+                # Interrogate process health if communication channels go dry unexpectedly
                 if not self._process.is_alive():
-                    # Exitcode 0 means normal termination. Anything else means an OS-level crash.
+                    if self._cancel_event.is_set():
+                        break
+                    # Trap abnormal operating system level code exceptions early
                     if self._process.exitcode is not None and self._process.exitcode != 0:
                         self.error_occurred.emit(f"The scheduling engine crashed unexpectedly (Exit code: {self._process.exitcode})")
                     else:
-                        # Fallback: process died normally but didn't send FINISHED (or we missed it).
+                        # Fallback recovery route to close sessions gracefully if finished message skipped
                         self.search_finished.emit()
                     break
                 continue
+            except ValueError:
+                break
             except Exception as e:
-                # Catching real unexpected IPC errors so they don't crash the GUI thread silently.
+                # Trap unexpected marshaling or runtime crashes safely to prevent silent GUI lockups
                 self.error_occurred.emit(f"IPC communication error with the scheduling engine: {str(e)}")
                 break
             
+            # Resolve packet identifiers against registered operation routes
             handler = self._dispatch.get(msg_type)
             
-            # Executes the handler and breaks the loop if it returns False because the process ended.
+            # Fire targets and break loops immediately if structural updates request termination
             if handler and not handler(payload):
                 break
 
-        # Cleans up the OS process table because otherwise it remains as a 'zombie' process.
+        # Reclamation block to purge and join dead operating system handle listings cleanly
         if self._process.is_alive():
             self._process.join(timeout=1.0)
         else:
             self._process.join()
 
     def cancel(self) -> None:
-        """Stops the background process gracefully, falling back to termination if needed."""
-        
+        """Triggers operational shutdown flags to terminate underlying computation streams gracefully."""
         if self._cancel_event is not None:
             self._cancel_event.set()
 
         if self._process is not None and self._process.is_alive():
-            # Gives the process a short grace period to read the flag and exit cleanly.
+            # Grant a tight grace window period for clean internal thread termination processing
             self._process.join(timeout=0.5) 
             
-            # Forcefully terminates the process if it ignored the flag to prevent infinite hangs.
+            # Force close unresponsive nodes if thread constraints exceed fallback thresholds
             if self._process.is_alive():
                 self._process.terminate()
                 self._process.join(timeout=1.0) 
 
-        # Drains the queue because unread messages can cause the process to deadlock when terminating.
-        while not self._queue.empty():
-            try:
+        # Empty data remnants to release internal buffers and avoid pipeline deadlocks
+        try:
+            while not self._queue.empty():
                 self._queue.get_nowait()
-            except queue.Empty:
-                break
+        except (queue.Empty, ValueError,OSError):
+            pass
 
     # --- Dispatch Handlers ---
 
     def _handle_schedule_batch(self, payload: list) -> bool:
-        """Iterates over the received batch and emits them to the GUI thread."""
-        for dto in payload:
-            self.schedule_found.emit(dto)
+        """
+        Intercepts raw array packets directly on the background worker pipeline loop.
+        Persists datasets to the SQLite repository and broadcasts lightweight metadata to the GUI.
+        """
+        if payload:
+            # Commit raw blocks to SQLite directly from this non-UI background thread segment
+            self._repository.insert_batch(payload)
+            # Emit integer metrics to let view windows update trackers without dropping frame rates
+            self.schedules_batch_found.emit(len(payload))
         return True
 
     def _handle_progress(self, payload) -> bool:
-        """Emits progress and returns True because the search is still running."""
+        """Passes calculation progress indexes upwards to drive active interface components."""
         self.progress_updated.emit(payload)
         return True
 
     def _handle_error(self, payload) -> bool:
-        """Emits error and returns False because a crash stops the search."""
+        """Broadcasts error messages and halts current execution monitoring routines."""
         self.error_occurred.emit(payload)
         return False
 
     def _handle_finished(self, payload) -> bool:
-        """Emits finished and returns False because there are no more schedules to find."""
+        """Signals generation sequence finalization and wraps up operational thread scopes cleanly."""
         self.search_finished.emit()
         return False

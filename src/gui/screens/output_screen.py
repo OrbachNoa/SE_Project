@@ -37,6 +37,10 @@ class OutputScreen(Screen):
 
         self._current_index: int = 0
         self._total: int = 0
+        self._current_page: int = 0
+        self._total_pages: int = 0
+        self._total_found: int = 0
+        self._sqlite_count: int = 0   # items written to SQLite so far
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -104,6 +108,39 @@ class OutputScreen(Screen):
         root.addWidget(nav_bar)
         root.addWidget(_divider())
 
+        # ── Page navigation bar ───────────────────────────────────────
+        self._page_bar = QFrame()
+        self._page_bar.setObjectName("nav-bar")
+        self._page_bar.setFixedHeight(44)
+        page_layout = QHBoxLayout(self._page_bar)
+        page_layout.setContentsMargins(20, 0, 20, 0)
+        page_layout.setSpacing(8)
+
+        self._prev_page_btn = QPushButton("← Prev 10K")
+        self._prev_page_btn.setObjectName("btn-ghost")
+        self._prev_page_btn.setFixedHeight(30)
+        self._prev_page_btn.clicked.connect(self._on_prev_page)
+        page_layout.addWidget(self._prev_page_btn)
+
+        page_layout.addStretch()
+
+        self._page_label = QLabel()
+        self._page_label.setObjectName("counter-label")
+        self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        page_layout.addWidget(self._page_label)
+
+        page_layout.addStretch()
+
+        self._next_page_btn = QPushButton("Next 10K →")
+        self._next_page_btn.setObjectName("btn-ghost")
+        self._next_page_btn.setFixedHeight(30)
+        self._next_page_btn.clicked.connect(self._on_next_page)
+        page_layout.addWidget(self._next_page_btn)
+
+        self._page_bar.setVisible(False)   # hidden until there are multiple pages
+        root.addWidget(self._page_bar)
+        root.addWidget(_divider())
+
         # ── Content area ──────────────────────────────────────────────
         body = QVBoxLayout()
         body.setContentsMargins(28, 20, 28, 20)
@@ -135,10 +172,14 @@ class OutputScreen(Screen):
         root.addLayout(body)
 
         self._refresh_counter()
+        # Live update: while the search continues in the background, keep the
+        # page-bar counter current so the user knows more results are arriving.
+        self._controller.total_count_updated.connect(self._on_total_count_updated)
 
     # ── Display helpers ────────────────────────────────────────────────
 
     def _refresh_counter(self) -> None:
+        """Update the solution counter and page bar to reflect current state."""
         if self._total == 0:
             self._counter_label.setText("No solutions")
         else:
@@ -147,28 +188,93 @@ class OutputScreen(Screen):
             )
         self._prev_btn.setEnabled(self._current_index > 0)
         self._next_btn.setEnabled(self._current_index < self._total - 1)
+        self._refresh_page_bar()
+
+    def _refresh_page_bar(self) -> None:
+        """Show/hide page bar and update its label + button states."""
+        has_pages = self._total_pages > 1
+        self._page_bar.setVisible(has_pages)
+        if not has_pages:
+            return
+
+        total_str = f"{self._total_found:,}"
+        self._page_label.setText(
+            f"Page {self._current_page + 1} / {self._total_pages}"
+            f"  ·  {total_str} total"
+        )
+        self._prev_page_btn.setEnabled(self._current_page > 0)
+
+        # "Next Page →" is only enabled when the target page has a FULL 10 K of
+        # data written to SQLite.  Navigating into a partially-written page causes
+        # a freeze (SQLite read while writes are pending) and a crash (empty page
+        # → IndexError in get_schedule).  The button grays out while that page
+        # fills up and re-enables automatically once it is ready.
+        _WINDOW       = 10_000
+        next_page_idx = self._current_page + 1          # 0-based
+        sqlite_needed = next_page_idx * _WINDOW         # items SQLite must hold
+        next_ready    = self._sqlite_count >= sqlite_needed
+        self._next_page_btn.setEnabled(
+            self._current_page < self._total_pages - 1 and next_ready
+        )
+
+    def _on_total_count_updated(self, total: int) -> None:
+        """Fired each batch while the search is running — keep UI in sync."""
+        info               = self._controller.get_page_info()
+        self._total_found  = info["total_count"]
+        self._total_pages  = info["total_pages"]
+        self._sqlite_count = info.get("sqlite_count", 0)
+        # On page 0 the memory window grows live — keep the solution counter current.
+        if self._current_page == 0:
+            self._total = info["window_size"]
+            self._refresh_counter()
+        else:
+            self._refresh_page_bar()
+
+    def _on_next_page(self) -> None:
+        target = self._current_page + 1
+        if target >= self._total_pages:
+            return   # safety: discard queued clicks that arrived after state changed
+        self._controller.load_page(target)
+        self._sync_page_info()
+        self._current_index = 0
+        self._show_current()
+        self._refresh_counter()
+
+    def _on_prev_page(self) -> None:
+        target = self._current_page - 1
+        if target < 0:
+            return   # safety guard
+        self._controller.load_page(target)
+        self._sync_page_info()
+        self._current_index = 0
+        self._show_current()
+        self._refresh_counter()
 
     def _show_current(self) -> None:
-        """Render solution at _current_index. CalendarWidget (SCRUM-93) replaces this."""
+        """Render solution at _current_index via the CalendarWidget."""
         if self._total == 0:
-            self._content_label.setText(
-                "No solutions to display.\n\n"
-                "Go back and adjust your selections."
-            )
             return
         try:
-            # Fetch the structured data transfer view model token from backend core
             vm = self._controller.get_schedule_view(self._current_index)
-            # Map dynamic ISO string bounds to prepare the skeleton coordinates
             active_dates = sorted(list({item.date for item in vm.items}))
             self.calendar_grid.setup_month_grid(active_dates)
-            # Render visual details directly using pre-composed data row packages
             self.calendar_grid.display_assignments(vm.items)
         except Exception as e:
-            QMessageBox.critical(self, "Display Error", f"Failed to paint calendar: {str(e)}")
+            QMessageBox.critical(self, "Display Error", f"Failed to paint calendar: {str(e)})")
 
     def _on_back(self) -> None:
         self._router.back()
+
+    # ── Page navigation ────────────────────────────────────────────────
+
+    def _sync_page_info(self) -> None:
+        """Pull current paging state from the controller."""
+        info = self._controller.get_page_info()
+        self._current_page  = info["current_page"]
+        self._total_pages   = info["total_pages"]
+        self._total         = info["window_size"]
+        self._total_found   = info["total_count"]
+        self._sqlite_count  = info.get("sqlite_count", 0)
 
     # ── Navigation ─────────────────────────────────────────────────────
 
@@ -188,11 +294,7 @@ class OutputScreen(Screen):
 
     def on_enter(self) -> None:
         self._current_index = 0
-        try:
-            vm = self._controller.get_schedule_view(0)
-            self._total = vm.total
-        except IndexError:
-            self._total = 0
+        self._sync_page_info()
         self._show_current()
         self._refresh_counter()
         self._back_btn.setFocus()

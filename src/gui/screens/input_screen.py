@@ -55,6 +55,9 @@ class InputScreen(Screen):
         self._courses_loaded = False
         self._periods_loaded = False
         self._last_count = 0
+        # Prevents _on_search_finished from switching screens a second time when
+        # early_results_ready has already done so (e.g. for searches > 10 K results).
+        self._already_navigated_to_output = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -207,6 +210,7 @@ class InputScreen(Screen):
         self._controller.progress_updated.connect(self._on_progress_updated)
         self._controller.search_finished.connect(self._on_search_finished)
         self._controller.error_occurred.connect(self._on_error_occurred)
+        self._controller.early_results_ready.connect(self._on_early_results_ready)
 
         self._refresh_generate_button()
 
@@ -319,6 +323,7 @@ class InputScreen(Screen):
                 "ℹ  Program selection coming in SCRUM-90."
             )
             return
+        self._already_navigated_to_output = False
         self._set_running_mode(True)
         self._controller.generate_schedules(program_ids)
 
@@ -338,8 +343,16 @@ class InputScreen(Screen):
             f"Found {count} schedule{'s' if count != 1 else ''} so far…"
         )
 
+    def _on_early_results_ready(self) -> None:
+        """First window (10 K) is ready — switch screens without waiting for full search."""
+        self._already_navigated_to_output = True
+        self._router.show(SCREEN_OUTPUT)
+
     def _on_search_finished(self) -> None:
         self._set_running_mode(False)
+        if self._already_navigated_to_output:
+            # early_results_ready already handled the screen switch; nothing to do.
+            return
         if self._last_count > 0:
             self._router.show(SCREEN_OUTPUT)
         else:
