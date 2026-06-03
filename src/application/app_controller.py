@@ -7,12 +7,12 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from src.application.import_mode import ImportMode
 from src.application.import_result import ImportResult
 from src.application.import_request import ImportRequest
-from src.application.dto_viewmodel.schedule_view_model import ScheduleViewModel
+from application.viewmodels.schedule_view_model import ScheduleViewModel
 
 if TYPE_CHECKING:
     from src.application.application_facade import ApplicationFacade
-    from src.concurrency.SchedulerWorker import SchedulerWorker
-    from src.application.dto_viewmodel.schedule_dto import ScheduleDTO
+    from infrastructure.concurrency.SchedulerWorker import SchedulerWorker
+    from application.dto.schedule_dto import ScheduleDTO
 
 
 class AppController(QObject):

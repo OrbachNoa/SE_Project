@@ -8,15 +8,15 @@ from __future__ import annotations
 
 from typing import List
 
-from src.application.app_state import AppState
-from src.application.file_import_service import FileImportService
-from src.application.scheduling_service import SchedulingService
-from src.application.schedule_export_service import ScheduleExportService
-from src.application.view_model_mapper import ViewModelMapper
+from application.state.app_state import AppState
+from application.services.file_import_service import FileImportService
+from application.services.scheduling_service import SchedulingService
+from application.services.schedule_export_service import ScheduleExportService
+from application.services.view_model_mapper import ViewModelMapper
 from src.application.import_request import ImportRequest
 from src.application.import_result import ImportResult
-from src.application.dto_viewmodel.schedule_view_model import ScheduleViewModel
-from src.concurrency.SchedulerWorker import SchedulerWorker
+from application.viewmodels.schedule_view_model import ScheduleViewModel
+from infrastructure.concurrency.SchedulerWorker import SchedulerWorker
 
 
 class ApplicationFacade:

@@ -1,8 +1,8 @@
 from typing import List
 from ..models.exam_schedule import ExamSchedule, ExamAssignment
 from .SlotBuilder import Slot
-from .IConflictChecker import IConflictChecker
-from .IScheduleObserver import IScheduleObserver
+from .checkers.IConflictChecker import IConflictChecker
+from .observers.IScheduleObserver import IScheduleObserver
 
 
 class Scheduler:
