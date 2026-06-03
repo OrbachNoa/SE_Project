@@ -15,67 +15,129 @@ Scheduling correctness: completeness, conflict detection, backtracking
 Schedule generation must complete within 30 seconds
 
 ## 3. Test Layers
+Tests are devided into 3 main layers: Logic, GUI, and Performance.
 
-### 3.1 File Parser Tests
-Tests the abstract FileParser base class and three concrete parsers: CoursesFileParser, ExamPeriodsFileParser, ProgramsFileParser. Each parser reads a UTF-8 text file, splits on the $$$$ separator, and returns typed domain objects.
+### 3.1 Logic Tests
+This field tests the core logic of the system and is devided into Unit Tests and Integration Tests.
 
-### 3.2 Domain Model Tests
-Tests the core domain classes: Course, ExamPeriod, ExamAssignment, ExamSchedule, and supporting enums.
+#### 3.1.1 Unit Tests
 
-### 3.3 Input Validator Tests
-Tests MaxProgramsValidator (max 5 programs) and ProgramExistenceValidator (only known program codes).
+* **Test File Parsers:**
+  * Tests the abstract FileParser base class and three concrete parsers: CoursesFileParser, ExamPeriodsFileParser, ProgramsFileParser. Each parser reads a UTF-8 text file, splits on the $$$$ separator, and returns typed domain objects.
 
-### 3.4 Conflict Checker Tests
-Tests the three IConflictChecker implementations: ProgramYearConflictChecker, ExcludedDatesChecker, ExamPeriodBoundaryChecker.
+* **Test Domain Model:**
+  * Tests the core domain classes: Course, ExamPeriod, ExamAssignment, ExamSchedule, and supporting enums.
 
-### 3.5 Scheduler Engine Tests
-Tests the Scheduler class — the core backtracking engine that generates all valid schedules.
+* **Test Input Validator:**
+  * Tests MaxProgramsValidator (max 5 programs) and ProgramExistenceValidator (only known program codes).
 
-### 3.6 SlotBuilder Tests
-Tests the SlotBuilder class — builds slots for scheduling.
+* **Test Conflict Checker:**
+  * Tests the three IConflictChecker implementations: ProgramYearConflictChecker, MoedOrderChecker.
 
-### 3.7 Output Formatter Tests
-Tests TextFileWriter — formatting and writing the final schedule output.
+* **Test Scheduler Engine:**
+  * Tests the Scheduler class — the core backtracking engine that generates all valid schedules.
 
-### 3.8 Integration Tests
-Full end-to-end pipeline tests using real fixture files. No mocks.
+* **Test Slot Builder:**
+  * Tests the SlotBuilder class — builds slots for scheduling.
 
-### 3.9 Main Entry Point Tests
-Tests the CLI main() function — correct exit codes, clean stderr, no Python tracebacks.
+* **Test Observers:**
+  * Tests Observer pattern implementation for monitoring schedule generation progress.
 
-### 3.10 Behavioural & Completeness Tests
-High-level correctness tests for the scheduling algorithm. Verify properties that span multiple classes.
+* **Test Data Cache:**
+  * Tests DataCache for efficient storage and retrieval of schedule data.
 
-### 3.11 Performance Tests
-Verify the 30-second SRS constraint under realistic and maximum load scenarios.
+* **Test Boundary DTOs:**
+  * Tests boundary DTOs for schedule generation.
+
+#### 3.1.2 Integration Tests
+
+* **Test Behavioural:**
+  * High-level correctness tests for the scheduling algorithm. Verify properties that span multiple classes.
+
+* **Test Integration:**
+  * Tests integration between parsers, validators, schedulers, and writers. Full end-to-end pipeline tests using real fixture files.
+
+* **Test Application State:**
+  * Tests ApplicationState for managing application-wide state and transitions.
+
+* **Test Main:**
+  * Tests the CLI main() function — correct exit codes, clean stderr, no Python tracebacks.
+
+* **Test Output:**
+  * Tests the file writer outputs in correct format with the correct data.
+
+* **Test Scheduling Service:**
+  * Tests the SchedulingService for correct scheduling logic.
+
+### 3.2 GUI Tests
+This field tests the GUI aspect of the system and is devided into Unit Tests and Integration Tests.
+
+#### 3.2.1 Unit Tests
+
+* **Test Screen Router:**
+  * Tests the ScreenRouter class for correct navigation between screens.
+
+* **Test App Controller:**
+  * Tests the AppController class for correct application state management.
+
+* **Test Navigation:**
+  * Tests the navigation between screens.
+
+#### 3.2.2 Integration Tests
+
+* **Test GUI:**
+  * Tests the GUI for correct functionality.
+
+* **Test GUI Integration:**
+  * Tests the integration between the GUI and the backend.
+
+* **Test Workers:**
+  * Tests the workers for correct functionality.
+
+### 3.3 Performance Tests
+This field tests the performance aspect of the system.
+
+* **Test Performance:**
+  * Verify the 30-second SRS constraint under realistic and maximum load scenarios.
 
 # Test File Structure
 ```bash
 tests/
-|── Conftest.py
-├── Test_Parsers.py          
-├── Test_Domain.py           
-├── Test_Validators.py       
-├── Test_Checkers.py         
-├── Test_Scheduler_Engine.py 
-├── Test_SlotBuilder.py
-├── Test_Output.py
-├── Test_Integration.py      
-├── Test_Main.py             
-├── Test_Behavioural.py      
-├── Test_Performance.py  
-├── Test_Application_State.py  
-├── Test_Boundary_DTOs.py
-├── Test_Data_Cache.py
-├── Test_Scheduling_Service.py
-├── Test_Workers.py
-├── Test_Navigation.py
-├── Test_Observers.py
-└── fixtures/            
-    ├── courses_valid.txt
-    ├── courses_no_exams.txt
-    ├── periods_valid.txt
-    ├── programs_valid.txt
-    ├── programs_bad.txt
-    └── programs_too_many.txt
+├── conftest.py
+├── fixtures/
+│   ├── courses_valid.txt
+│   ├── courses_no_exams.txt
+│   ├── periods_valid.txt
+│   ├── programs_valid.txt
+│   ├── programs_bad.txt
+│   └── programs_too_many.txt
+├── logic/
+│   ├── unit/
+│   │   ├── Test_Domain.py
+│   │   ├── Test_Boundary_DTOs.py
+│   │   ├── Test_Checkers.py
+│   │   ├── Test_SlotBuilder.py
+│   │   ├── Test_Validators.py
+│   │   ├── Test_Parsers.py
+│   │   ├── Test_Observers.py
+│   │   ├── Test_Data_Cache.py
+│   │   └── Test_Scheduler_Engine.py
+│   └── integration/
+│       ├── Test_Application_State.py
+│       ├── Test_Scheduling_Service.py
+│       ├── Test_Behavioural.py
+│       ├── Test_Integration.py
+│       ├── Test_Main.py
+│       └── Test_Output.py
+├── gui/
+│   ├── unit/
+│   │   ├── Test_Screen_Router.py
+│   │   ├── Test_App_Controller.py
+│   │   └── Test_Navigation.py
+│   └── integration/
+│       ├── Test_GUI.py
+│       ├── Test_GUI_Integration.py
+│       └── Test_Workers.py
+└── performance/
+    └── Test_Performance.py
 ```
