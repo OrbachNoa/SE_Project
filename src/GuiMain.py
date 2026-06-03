@@ -4,25 +4,33 @@ Instantiates all decoupled services, structural state components, and parsing fa
 Wires them together via structural Dependency Injection (DI) to assemble the execution facade.
 """
 import sys
+from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 from application.state.AppState import AppState
 from application.ApplicationFacade import ApplicationFacade
 from application.services.FileImportService import FileImportService
+from application.services.InputCacheService import InputCacheService
+from application.services.InputDataMerger import InputDataMerger
 from application.services.SchedulingService import SchedulingService
 from application.services.ScheduleExportService import ScheduleExportService
 from application.services.ViewModelMapper import ViewModelMapper
-from application.ImportMode import ImportMode
 from application.state.HybridScheduleResultState import HybridScheduleResultState
 from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 from infrastructure.cache.DiskCacheRepository import DiskCacheRepository
 from infrastructure.cache.FileChangeDetector import FileChangeDetector
-from io.parsers.ParserFactory import ParserFactory
-from src.io.validators.ValidatorPipeline import ValidatorPipeline
-from src.gui.App import App
+from file_io.parsers.ParserFactory import ParserFactory
+from file_io.validators.ValidatorPipeline import ValidatorPipeline
+from gui.App import App
 from application.AppController import AppController
-from io.writers.TextFileWriter import TextFileWriter
+from file_io.writers.TextFileWriter import TextFileWriter
 
 
 def build_app() -> tuple[QApplication, App]:
@@ -34,22 +42,25 @@ def build_app() -> tuple[QApplication, App]:
 
     # ── 1. Storage & State Layer Initialization ──────────────────────────────
     # Instantiate the atomic SQLite repository used as a virtual memory overflow buffer
-    repository = SQLiteScheduleRepository()          
+    schedule_repository = SQLiteScheduleRepository()          
     
     # Wrap the repository into a paged navigation state reader interface proxy
-    hybrid_state = HybridScheduleResultState(repository)
+    hybrid_state = HybridScheduleResultState(schedule_repository)
 
     # Compose the root runtime state as the unified single source of truth
     state = AppState(schedule_state=hybrid_state)     
     
     # ── 2. Structural Infrastructure Services ────────────────────────────────
     # Initialize file loading service pipeline with local validation configurations
+    input_state = state.get_input_state()
+    cache_repository = DiskCacheRepository()
+    cache_detector = FileChangeDetector()
     importer = FileImportService(
-        repository=DiskCacheRepository(),
-        detector=FileChangeDetector(),
+        cache_service=InputCacheService(cache_repository, cache_detector),
         parser_factory=ParserFactory(),
         validators=ValidatorPipeline([]),
-        state=state.get_input_state(),
+        merger=InputDataMerger(input_state),
+        state=input_state,
     )
     
     # ── 3. Facade Architecture Composition ────────────────────────────────────
@@ -57,7 +68,7 @@ def build_app() -> tuple[QApplication, App]:
     facade = ApplicationFacade(
         state=state,
         importer=importer,
-        scheduler=SchedulingService(repository),  # Injects the safe disk storage link to the background engine
+        scheduler=SchedulingService(schedule_repository),  # Injects the safe disk storage link to the background engine
         exporter=ScheduleExportService(writer=TextFileWriter()),
         mapper=ViewModelMapper(),
     )

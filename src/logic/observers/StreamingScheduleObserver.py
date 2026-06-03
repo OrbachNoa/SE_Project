@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional
 
 from logic.observers.IScheduleObserver import IScheduleObserver
-from io.writers.TextFileWriter import TextFileWriter
+from file_io.writers.TextFileWriter import TextFileWriter
 
 
 class StreamingScheduleObserver(IScheduleObserver):

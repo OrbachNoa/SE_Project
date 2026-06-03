@@ -5,7 +5,7 @@ from multiprocessing import Queue
 from multiprocessing.synchronize import Event
 from typing import Any
 
-from src.logic.observers.IScheduleObserver import IScheduleObserver
+from logic.observers.IScheduleObserver import IScheduleObserver
 from application.dto.SchedulDTO import ScheduleDTO, AssignmentDTO
 
 

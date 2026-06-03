@@ -1,6 +1,6 @@
 from typing import Dict
 from PyQt6.QtWidgets import QStackedWidget
-from src.gui.Screen import Screen
+from gui.Screen import Screen
 
 
 class ScreenRouter:

@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence
 
-from src.gui.Screen import Screen
+from gui.Screen import Screen
 
 
 def _divider(parent=None) -> QFrame:

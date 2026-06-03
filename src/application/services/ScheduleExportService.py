@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from io.writers.OutputWriter import OutputWriter
+from file_io.writers.OutputWriter import OutputWriter
 from application.dto.SchedulDTO import ScheduleDTO
 from application.dto.ScheduleDTOAdapter import ScheduleDTOAdapter
 

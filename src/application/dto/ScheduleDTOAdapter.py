@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from src.models.Enums import Moed, Semester
+from models.Enums import Moed, Semester
 from application.dto.SchedulDTO import AssignmentDTO, ScheduleDTO
 
 

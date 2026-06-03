@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Tuple
 
-from src.models.Course import Course
+from models.Course import Course
 from models.ExamPeriod import ExamPeriod
 from infrastructure.repositories.IDataRepository import IDataRepository
 from infrastructure.cache.FileChangeDetector import FileChangeDetector

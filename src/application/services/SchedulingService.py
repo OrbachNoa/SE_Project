@@ -4,11 +4,11 @@ from __future__ import annotations
 from multiprocessing import Process, Queue, Event
 from typing import List, Optional
 
-from src.models.Course import Course
+from models.Course import Course
 from models.ExamPeriod import ExamPeriod
 from infrastructure.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
 from infrastructure.concurrency.SchedulerWorker import SchedulerWorker
-from src.logic.SlotBuilder import SlotBuilder, Slot
+from logic.SlotBuilder import SlotBuilder, Slot
 from logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
 from logic.checkers.MoedOrderChecker import MoedOrderChecker
 from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository

@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont
 
-from src.gui.Screen import Screen
+from gui.Screen import Screen
 from application.ImportMode import ImportMode
 
 SCREEN_OUTPUT = "output"

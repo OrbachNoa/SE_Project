@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Iterable, List
 
-from src.models.Course import Course
+from models.Course import Course
 from models.ExamPeriod import ExamPeriod
 from application.dto.SchedulDTO import ScheduleDTO, AssignmentDTO
 from application.viewmodels.ScheduleViewModel import (

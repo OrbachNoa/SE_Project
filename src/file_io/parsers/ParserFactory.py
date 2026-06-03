@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Type
 
-from io.parsers.FileParser import FileParser
-from io.parsers.CourseParser import CoursesFileParser
-from io.parsers.DateParser import ExamPeriodsFileParser
-from io.parsers.programParser import ProgramsFileParser
+from file_io.parsers.FileParser import FileParser
+from file_io.parsers.CourseParser import CoursesFileParser
+from file_io.parsers.DateParser import ExamPeriodsFileParser
+from file_io.parsers.programParser import ProgramsFileParser
 
 
 class ParserFactory:

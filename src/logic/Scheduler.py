@@ -1,5 +1,5 @@
 from typing import List
-from ..models.ExamSchedule import ExamSchedule, ExamAssignment
+from models.ExamSchedule import ExamSchedule, ExamAssignment
 from .SlotBuilder import Slot
 from .checkers.IConflictChecker import IConflictChecker
 from .observers.IScheduleObserver import IScheduleObserver

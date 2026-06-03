@@ -1,7 +1,7 @@
 # region Imports
 from .FileParser import FileParser
-from ...models.Enums import EvalType, Semester, Requirement
-from ...models.Course import Course, ProgramEntry
+from models.Enums import EvalType, Semester, Requirement
+from models.Course import Course, ProgramEntry
 # endregion
 
 class CoursesFileParser(FileParser):
