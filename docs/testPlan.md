@@ -116,7 +116,7 @@ tests/
 │   │   ├── Test_Domain.py
 │   │   ├── Test_Boundary_DTOs.py
 │   │   ├── Test_Checkers.py
-│   │   ├── Test_SlotBuilder.py
+│   │   ├── Test_Slot_Builder.py
 │   │   ├── Test_Validators.py
 │   │   ├── Test_Parsers.py
 │   │   ├── Test_Observers.py
