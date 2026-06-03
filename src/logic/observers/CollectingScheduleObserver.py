@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List
 
 from logic.observers.IScheduleObserver import IScheduleObserver
-from src.models.exam_schedule import ExamAssignment
+from models.ExamSchedule import ExamAssignment
 
 
 class _ScheduleSnapshot:

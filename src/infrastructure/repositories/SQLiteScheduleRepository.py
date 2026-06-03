@@ -19,7 +19,7 @@ import zlib
 import threading
 from typing import List
 
-from application.dto.schedule_dto import ScheduleDTO
+from application.dto.SchedulDTO import ScheduleDTO
 
 # Default database file path placed in the OS temporary directory
 _DEFAULT_DB = os.path.join(tempfile.gettempdir(), "exam_scheduler_overflow.sqlite")

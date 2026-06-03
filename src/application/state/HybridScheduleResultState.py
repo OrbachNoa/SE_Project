@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import List
 
-from application.dto.schedule_dto import ScheduleDTO
-from application.state.schedule_result_state import ScheduleResultState
+from application.dto.SchedulDTO import ScheduleDTO
+from application.state.ScheduleResultState import ScheduleResultState
 from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 # Globally defined rendering frame block limit size
