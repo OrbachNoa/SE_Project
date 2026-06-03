@@ -1,6 +1,6 @@
 # region Imports
 from abc import ABC, abstractmethod
-from .validationResult import ValidationResult
+from .ValidationResult import ValidationResult
 # endregion
 
 class IInputValidator(ABC):

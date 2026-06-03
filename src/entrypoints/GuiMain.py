@@ -7,22 +7,22 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
-from application.state.app_state import AppState
-from src.application.application_facade import ApplicationFacade
-from application.services.file_import_service import FileImportService
-from application.services.scheduling_service import SchedulingService
-from application.services.schedule_export_service import ScheduleExportService
-from application.services.view_model_mapper import ViewModelMapper
-from src.application.import_mode import ImportMode
+from application.state.AppState import AppState
+from application.ApplicationFacade import ApplicationFacade
+from application.services.FileImportService import FileImportService
+from application.services.SchedulingService import SchedulingService
+from application.services.ScheduleExportService import ScheduleExportService
+from application.services.ViewModelMapper import ViewModelMapper
+from application.ImportMode import ImportMode
 from application.state.HybridScheduleResultState import HybridScheduleResultState
 from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 from infrastructure.cache.DiskCacheRepository import DiskCacheRepository
 from infrastructure.cache.FileChangeDetector import FileChangeDetector
 from io.parsers.ParserFactory import ParserFactory
 from src.io.validators.ValidatorPipeline import ValidatorPipeline
-from src.gui.app import App
-from src.application.app_controller import AppController
-from io.writers.textFileWriter import TextFileWriter
+from src.gui.App import App
+from application.AppController import AppController
+from io.writers.TextFileWriter import TextFileWriter
 
 
 def build_app() -> tuple[QApplication, App]:

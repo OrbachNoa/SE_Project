@@ -1,11 +1,11 @@
 from __future__ import annotations
 from typing import List, Tuple
 
-from src.models.course import Course
-from src.models.exam_period import ExamPeriod
+from src.models.Course import Course
+from models.ExamPeriod import ExamPeriod
 from infrastructure.repositories.IDataRepository import IDataRepository
 from infrastructure.cache.FileChangeDetector import FileChangeDetector
-from application.state.input_data_state import InputDataState
+from application.state.InputDataState import InputDataState
 
 
 class CachedInputLoader:

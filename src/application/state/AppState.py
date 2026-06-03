@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from application.state.input_data_state import InputDataState
-from application.state.schedule_result_state import ScheduleResultState
+from application.state.InputDataState import InputDataState
+from application.state.ScheduleResultState import ScheduleResultState
 
 
 class AppState:

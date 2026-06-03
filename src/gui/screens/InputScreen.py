@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import List
 
-from src.gui.widgets.program_selector_widget import ProgramSelectorWidget
-from src.application.dto_viewmodel.program_view_model import ProgramViewModel
+from gui.widgets.ProgramSelectorWidget import ProgramSelectorWidget
+from application.viewmodels.ProgramViewModel import ProgramViewModel
 from data.programs import programs_data
 
 from PyQt6.QtWidgets import (
@@ -22,8 +22,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont
 
-from src.gui.screen import Screen
-from src.application.import_mode import ImportMode
+from src.gui.Screen import Screen
+from application.ImportMode import ImportMode
 
 SCREEN_OUTPUT = "output"
 

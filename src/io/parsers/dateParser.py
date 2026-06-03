@@ -1,7 +1,7 @@
 # region Imports
-from .fileParser import FileParser
-from ...models.enums import Moed, Semester
-from ...models.exam_period import ExamPeriod
+from .FileParser import FileParser
+from ...models.Enums import Moed, Semester
+from ...models.ExamPeriod import ExamPeriod
 from datetime import datetime, timedelta
 import re
 # endregion

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional
 
-from .inputValidator import IInputValidator
-from .validationResult import ValidationResult
+from .InputValidator import IInputValidator
+from .ValidationResult import ValidationResult
 
 
 class ValidatorPipeline:

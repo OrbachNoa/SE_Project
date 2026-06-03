@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from io.writers.outputWriter import OutputWriter
-from application.dto.schedule_dto import ScheduleDTO
+from io.writers.OutputWriter import OutputWriter
+from application.dto.SchedulDTO import ScheduleDTO
 from application.dto.ScheduleDTOAdapter import ScheduleDTOAdapter
 
 

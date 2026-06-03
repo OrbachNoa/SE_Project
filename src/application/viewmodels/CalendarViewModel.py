@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
-from .schedule_view_model import ScheduleItemViewModel
+from .ScheduleViewModel import ScheduleItemViewModel
 
 
 @dataclass

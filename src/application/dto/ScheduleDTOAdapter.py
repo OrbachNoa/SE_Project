@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from src.models.enums import Moed, Semester
-from application.dto.schedule_dto import AssignmentDTO, ScheduleDTO
+from src.models.Enums import Moed, Semester
+from application.dto.SchedulDTO import AssignmentDTO, ScheduleDTO
 
 
 class _CourseView:

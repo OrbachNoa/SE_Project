@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List
 
-from application.state.input_data_state import InputDataState
-from src.application.import_mode import ImportMode
-from src.application.import_result import ImportResult
+from application.state.InputDataState import InputDataState
+from application.ImportMode import ImportMode
+from application.ImportResult import ImportResult
 from io.parsers.ParserFactory import ParserFactory
 from io.validators.ValidatorPipeline import ValidatorPipeline
 from io.validators import fileValidator

@@ -11,9 +11,9 @@ from __future__ import annotations
 from datetime import date
 from typing import List
 
-from src.models.course import Course, ProgramEntry
-from src.models.exam_period import ExamPeriod
-from src.models.enums import EvalType, Semester, Moed, Requirement
+from src.models.Course import Course, ProgramEntry
+from models.ExamPeriod import ExamPeriod
+from src.models.Enums import EvalType, Semester, Moed, Requirement
 from infrastructure.cache.DataCache import DataCache, CourseDict, PeriodDict
 
 

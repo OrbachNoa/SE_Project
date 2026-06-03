@@ -1,5 +1,5 @@
 # region Imports
-from .inputValidator import IInputValidator
+from .InputValidator import IInputValidator
 # endregion
 
 class ProgramExistenceValidator(IInputValidator):

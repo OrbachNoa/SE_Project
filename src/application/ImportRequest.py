@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.application.import_mode import ImportMode
+from application.ImportMode import ImportMode
 
 
 @dataclass

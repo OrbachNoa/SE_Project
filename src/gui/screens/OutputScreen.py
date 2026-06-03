@@ -7,7 +7,7 @@ SCRUM-96  : export button (Yuval)
 from __future__ import annotations
 
 # Import your custom calendar view component safely
-from src.gui.widgets.calendar_widget import CalendarWidget
+from gui.widgets.CalendarWidget import CalendarWidget
 
 from PyQt6.QtWidgets import (
     QLabel, QMessageBox, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence
 
-from src.gui.screen import Screen
+from src.gui.Screen import Screen
 
 
 def _divider(parent=None) -> QFrame:

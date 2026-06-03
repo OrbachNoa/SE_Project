@@ -4,9 +4,9 @@ from __future__ import annotations
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QMessageBox
 from PyQt6.QtCore import Qt
 
-from src.gui.widgets.calendar_widget import CalendarWidget
-from src.application.dto_viewmodel.period_edit_view_model import PeriodEditViewModel
-from src.application.dto_viewmodel.period_edit_request import PeriodEditRequest
+from gui.widgets.CalendarWidget import CalendarWidget
+from application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
+from application.viewmodels.PeriodEditRequest import PeriodEditRequest
 
 
 class CalendarEditorWidget(QWidget):

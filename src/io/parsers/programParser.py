@@ -1,5 +1,5 @@
 # region Imports
-from .fileParser import FileParser
+from .FileParser import FileParser
 # endregion
 
 class ProgramsFileParser(FileParser):

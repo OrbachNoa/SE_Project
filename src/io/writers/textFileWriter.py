@@ -1,9 +1,9 @@
 import sys
 import os
 from typing import List
-from .outputWriter import OutputWriter
-from ...models.domain import ExamSchedule, ExamAssignment
-from ...models.enums import Semester, Moed
+from .OutputWriter import OutputWriter
+from ...models.Domain import ExamSchedule, ExamAssignment
+from ...models.Enums import Semester, Moed
 
 # Defines the standard academic rendering order for output sections.
 SEMESTER_ORDER = {s.name: i for i, s in enumerate(Semester)}
