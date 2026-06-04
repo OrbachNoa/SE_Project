@@ -37,9 +37,11 @@ class CalendarEditorWidget(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
 
         # --- Navigation Bar ---
+        style = "background-color: #008080; color: white; border-radius: 4px; padding: 5px; font-weight: bold; border: none;"
         nav_layout = QHBoxLayout()
         self.prev_btn = QPushButton("◀")
-        self.prev_btn.setFixedSize(30, 30)
+        self.prev_btn.setFixedSize(20, 20)
+        self.prev_btn.setStyleSheet(style)
         self.prev_btn.clicked.connect(self._on_prev_clicked)
         
         self.period_label = QLabel()
@@ -47,7 +49,8 @@ class CalendarEditorWidget(QWidget):
         self.period_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #143D30;")
         
         self.next_btn = QPushButton("▶")
-        self.next_btn.setFixedSize(30, 30)
+        self.next_btn.setFixedSize(20, 20)
+        self.next_btn.setStyleSheet(style)
         self.next_btn.clicked.connect(self._on_next_clicked)
         
         nav_layout.addWidget(self.prev_btn)
