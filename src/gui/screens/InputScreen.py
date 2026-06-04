@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont
 
-from gui.Screen import Screen
+from gui.screen import Screen
 from application.ImportMode import ImportMode
 
 # Name used by the router to identify the output screen.
