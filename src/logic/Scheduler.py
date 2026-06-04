@@ -59,11 +59,12 @@ class Scheduler:
 
         slot = slots[index]
         # Use slot dates directly, so no period lookup is needed.
-        for date in slot.candidateDates or observer.should_cancel():
+        for date in slot.candidateDates:
             # Check maximum results inside the loop because a deep branch might have reached the limit.
             if found_count[0] >= max_results:
                 return
-
+            if observer.should_cancel():
+                return
             assignment = ExamAssignment(
                 course=slot.course, date=date, moed=slot.moed, semester=slot.semester
             )

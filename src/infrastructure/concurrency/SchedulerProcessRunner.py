@@ -33,8 +33,8 @@ class SchedulerProcessRunner:
 
     def run(self) -> None:
         """Executes the search safely because we must catch crashes and report them to the main app."""
+        observer = self._create_observer()
         try:
-            observer = self._create_observer()
             scheduler = self._create_scheduler()
             
             # Starts the actual backtracking algorithm.
@@ -45,8 +45,7 @@ class SchedulerProcessRunner:
             
         except Exception as e:
             # Catches unexpected crashes because the main app will hang forever if the queue goes silent.
-            error_observer = self._create_observer()
-            error_observer.on_error(f"Fatal scheduling error: {str(e)}")
+            observer.on_error(str(e))
 
     def _create_observer(self) -> QueueScheduleObserver:
         """Creates the queue adapter because the scheduler needs a way to talk to the outside world."""
