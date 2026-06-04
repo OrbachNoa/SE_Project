@@ -23,8 +23,34 @@ class InputDataState:
     def __init__(self) -> None:
         self._courses: List[Course] = []
         self._periods: List[ExamPeriod] = []
+        # The programme IDs the user selected before launching generation.
+        # Stored here so that the display layer can later retrieve them and
+        # filter or annotate the view model accordingly (e.g. show only the
+        # programmes relevant to the current generation run). Initialised to
+        # an empty list so the attribute always exists even before the first
+        # generation request.
+        self._selected_program_ids: List[str] = []
 
     # --- accessors / mutators (UML) ----------------------------------------
+
+    def set_selected_programs(self, program_ids: List[str]) -> None:
+        """Store a copy of the programme IDs chosen by the user for the current run.
+
+        A copy is stored (rather than the original list) so that external mutations
+        of the caller's list cannot silently corrupt the stored state. These IDs are
+        needed later — after the scheduler has finished — when the display layer maps
+        each ScheduleDTO to a view model and must know which programmes were in scope
+        for the generation run.
+        """
+        self._selected_program_ids = list(program_ids)
+
+    def get_selected_programs(self) -> List[str]:
+        """Return a copy of the stored programme IDs for the current generation run.
+
+        A copy is returned so callers cannot accidentally mutate the internal list.
+        Returns an empty list if set_selected_programs has never been called.
+        """
+        return list(self._selected_program_ids)
 
     def replace_courses(self, courses: List[Course]) -> None:
         """Replace all loaded courses (REPLACE-mode import)."""

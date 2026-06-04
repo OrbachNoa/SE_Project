@@ -23,8 +23,10 @@ from PyQt6.QtWidgets import (
 class _CourseRow(QWidget):
     """One row displaying a single course's details."""
 
-    EXAM_STYLE = "background-color: #fef9c3; border-left: 3px solid #ca8a04;"
-    DEFAULT_STYLE = "background-color: #f8fafc; border-left: 3px solid #e2e8f0;"
+    # Green-tinted left border for exam-relevant courses
+    EXAM_STYLE = "background-color: #F0FAF5; border-left: 3px solid #14633F; border-radius: 0 4px 4px 0;"
+    # Neutral left border for all other courses
+    DEFAULT_STYLE = "background-color: #F8FAFC; border-left: 3px solid #E2E8F0; border-radius: 0 4px 4px 0;"
 
     def __init__(self, course_vm, parent=None):
         """
@@ -40,58 +42,41 @@ class _CourseRow(QWidget):
         super().__init__(parent)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 4, 8, 4)
+        layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(8)
+        # Compact fixed height keeps the course list dense and readable
+        self.setFixedHeight(36)
 
-        # Course ID
+        # Course ID — narrow fixed column, subdued slate colour
         id_lbl = QLabel(course_vm.course_id)
-        id_lbl.setFixedWidth(72)
-        id_lbl.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
-        id_lbl.setStyleSheet("color: #475569;")
+        id_lbl.setFixedWidth(44)
+        id_lbl.setFont(QFont("Segoe UI", 10))
+        id_lbl.setStyleSheet("color: #64748B;")
         layout.addWidget(id_lbl)
 
-        # Course name
+        # Course name — stretches to fill remaining horizontal space
         name_lbl = QLabel(course_vm.course_name)
-        name_lbl.setFont(QFont("Arial", 10))
+        name_lbl.setFont(QFont("Segoe UI", 12))
+        name_lbl.setStyleSheet("color: #1E293B;")
         name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        layout.addWidget(name_lbl)
+        layout.addWidget(name_lbl, stretch=1)
 
-        # Requirement badge
+        # Requirement badge — compact pill: green for Obligatory, amber for Elective.
+        # Evaluation badge and exam icon removed to reduce visual noise.
         req_lbl = QLabel(course_vm.requirement)
-        req_lbl.setFixedWidth(50)
         req_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        req_lbl.setFont(QFont("Arial", 9))
-        req_color = "#1d4ed8" if "Obligatory" in course_vm.requirement else "#6b7280"
+        if "Obligatory" in course_vm.requirement:
+            req_color, req_bg = "#14633F", "#E5F0EB"
+        else:
+            req_color, req_bg = "#92400E", "#FEF3C7"
         req_lbl.setStyleSheet(
-            f"color: {req_color}; background: #eff6ff; "
-            "border-radius: 4px; padding: 1px 3px;"
+            f"color: {req_color}; background: {req_bg}; "
+            "border-radius: 4px; padding: 1px 6px; font-size: 11px;"
         )
         layout.addWidget(req_lbl)
 
-        # Evaluation badge
-        eval_lbl = QLabel(course_vm.evaluation)
-        eval_lbl.setFixedWidth(80)
-        eval_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        eval_lbl.setFont(QFont("Arial", 9))
-        if course_vm.is_exam_relevant:
-            eval_lbl.setStyleSheet(
-                "color: #92400e; background: #fef3c7; border-radius: 4px; "
-                "padding: 1px 3px; font-weight: bold;"
-            )
-        else:
-            eval_lbl.setStyleSheet(
-                "color: #6b7280; background: #f3f4f6; border-radius: 4px; padding: 1px 3px;"
-            )
-        layout.addWidget(eval_lbl)
-
-        # Exam icon
-        if course_vm.is_exam_relevant:
-            exam_icon = QLabel("📋")
-            exam_icon.setToolTip("This course is relevant for exams")
-            layout.addWidget(exam_icon)
-
         border = self.EXAM_STYLE if course_vm.is_exam_relevant else self.DEFAULT_STYLE
-        self.setStyleSheet(f"QWidget {{ {border} border-radius: 4px; }}")
+        self.setStyleSheet(f"QWidget {{ {border} }}")
 
 # Internal helper: one expandable program block
 class _ProgramBlock(QWidget):
@@ -100,12 +85,14 @@ class _ProgramBlock(QWidget):
     Header shows program name + course count; body shows course rows.
     """
 
+    # Dark green header matching the brand palette; Segoe UI for readability
     HEADER_STYLE = (
         "QPushButton {"
-        "  background-color: #1e40af; color: white; border-radius: 6px;"
-        "  text-align: left; padding: 8px 12px; font-size: 12px; font-weight: bold;"
+        "  background-color: #143D30; color: white; border-radius: 8px;"
+        "  text-align: left; padding: 8px 14px;"
+        "  font-family: 'Segoe UI'; font-size: 12px; font-weight: 600;"
         "}"
-        "QPushButton:hover { background-color: #1d4ed8; }"
+        "QPushButton:hover { background-color: #0F2D23; }"
     )
 
     def __init__(self, program_vm, parent=None):
@@ -122,12 +109,8 @@ class _ProgramBlock(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Header button
-        course_count = len(program_vm.courses)
-        header_text = (
-            f"▶  {program_vm.program_id}  —  {program_vm.program_name}"
-            f"  ({course_count} Courses)"
-        )
+        # Header button — course count removed to keep the label concise
+        header_text = f"▶  {program_vm.program_id} — {program_vm.program_name}"
         self._header_btn = QPushButton(header_text)
         self._header_btn.setStyleSheet(self.HEADER_STYLE)
         self._header_btn.setFixedHeight(40)
@@ -147,11 +130,12 @@ class _ProgramBlock(QWidget):
             groups.setdefault(key, []).append(c)
 
         for group_key in sorted(groups.keys()):
-            # Group header
+            # Year/semester sub-header — light blue band separating groups
             group_lbl = QLabel(group_key)
-            group_lbl.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            group_lbl.setFont(QFont("Segoe UI", 11))
             group_lbl.setStyleSheet(
-                "color: #1e3a5f; background: #dbeafe; padding: 3px 8px; border-radius: 3px;"
+                "color: #143D30; background: #EAF4FA; padding: 4px 12px; "
+                "border-radius: 6px; font-weight: 600; margin: 4px 0px;"
             )
             body_layout.addWidget(group_lbl)
 
@@ -202,11 +186,8 @@ class CourseListWidget(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(6)
 
-        # Title
-        title = QLabel("Courses by program")
-        title.setFont(QFont("Arial", 13, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        root.addWidget(title)
+        # Title is intentionally absent here — the parent card in input_screen.py
+        # provides the "📋  Courses" heading so it is not duplicated.
 
         # Scrollable area
         scroll = QScrollArea()
