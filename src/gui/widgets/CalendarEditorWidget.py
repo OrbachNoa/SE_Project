@@ -3,13 +3,15 @@ from typing import List
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QHBoxLayout, 
                              QMessageBox, QLabel, QDateEdit)
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, pyqtSignal
 
 from src.gui.widgets.CalendarWidget import CalendarWidget
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 from src.application.viewmodels.PeriodEditRequest import PeriodEditRequest
 
 class CalendarEditorWidget(QWidget):
+    constraints_saved = pyqtSignal(list)
+
     def __init__(self, view_models: List[PeriodEditViewModel], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         # Holds the list of all exam periods.
@@ -85,7 +87,7 @@ class CalendarEditorWidget(QWidget):
         # --- Calendar Grid ---
         self.calendar_grid = CalendarWidget()
         self.calendar_grid.date_clicked.connect(self.toggle_date_exclusion)
-        self.main_layout.addWidget(self.calendar_grid)
+        self.main_layout.addWidget(self.calendar_grid, stretch=1)
 
         # --- Bottom Bar ---
         self.button_layout = QHBoxLayout()
@@ -166,4 +168,5 @@ class CalendarEditorWidget(QWidget):
     def _on_apply_clicked(self) -> None:
         """Saves the state and notifies the user."""
         self._save_current_state()
+        self.constraints_saved.emit(self._view_models)
         QMessageBox.information(self, "Saved", f"Constraints saved successfully for all {len(self._view_models)} periods.")

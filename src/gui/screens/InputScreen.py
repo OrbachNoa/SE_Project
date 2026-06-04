@@ -546,6 +546,19 @@ class InputScreen(Screen):
         self._set_running_mode(False)
         self._progress_label.setText("")
 
+    def _on_constraints_saved(self, updated_vms: list) -> None:
+        """Triggered when the user saves constraints in the calendar editor."""
+        # The updated data (updated_vms) is returned from the calendar.
+        # In the next development phase, you will likely pass them to the controller 
+        # to update the model, for example:
+        # self._controller.update_periods_constraints(updated_vms)
+        
+        # For now, ensure the Generate button is enabled (ready to create schedule)
+        self._refresh_generate_button()
+        
+        # Debug print to verify it works:
+        print(f"InputScreen received {len(updated_vms)} updated periods from calendar.")
+
     # ── Controller signal handlers ─────────────────────────────────────
 
     def _on_schedule_found(self, dto) -> None:
@@ -717,6 +730,7 @@ class InputScreen(Screen):
                     # Insert the interactive calendar editor with all loaded periods
                     from src.gui.widgets.CalendarEditorWidget import CalendarEditorWidget
                     self._editor_widget = CalendarEditorWidget(period_vms)
+                    self._editor_widget.constraints_saved.connect(self._on_constraints_saved)
                     self.right_col.insertWidget(0, self._editor_widget, stretch=1)
 
     # ── Program selection ──────────────────────────────────────────────

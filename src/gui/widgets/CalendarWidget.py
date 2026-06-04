@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from typing import List, Dict
-from PyQt6.QtWidgets import QWidget, QGridLayout, QLabel, QVBoxLayout, QFrame
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QWidget, QGridLayout, QLabel, QVBoxLayout, QFrame, QScrollArea
+from PyQt6.QtCore import Qt, pyqtSignal, QDate
 
-from application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
+from src.application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
 
 
 class CalendarWidget(QWidget):
@@ -39,35 +39,76 @@ class CalendarWidget(QWidget):
         # Draw text labels systematically for columns header trackers
         for column_idx, name in enumerate(days):
             lbl = QLabel(name)
-            
+
             # Text alignment conversion adjusted to strictly obey PyQt6 enums
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
+
             # Slate-500 text with comfortable vertical padding matching card min-height rhythm
             lbl.setStyleSheet("font-weight: 600; color: #64748B; padding: 8px 4px;")
             self.headers_layout.addWidget(lbl, 0, column_idx)
             
         self.main_layout.addWidget(self.headers_frame)
 
+        # Scroll area to handle multiple months without squishing the cells
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+
         # Primary operational bounding viewport layout matrix for active month cells
         self.grid_frame = QFrame()
         self.grid_layout = QGridLayout(self.grid_frame)
         self.grid_layout.setSpacing(4)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.addWidget(self.grid_frame)
+        
+        # Align top prevents cells from stretching vertically when space is available
+        self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        self.scroll_area.setWidget(self.grid_frame)
+        self.main_layout.addWidget(self.scroll_area)
 
     def setup_month_grid(self, date_list: List[str]) -> None:
-        """Flushes viewport matrix structures and maps empty date squares layout rows."""
-        # Wipe past container allocations securely to avoid active memory grid leak bugs
-        for layout in self._day_layouts.values():
-            layout.parentWidget().deleteLater()
+        """Flushes viewport matrix structures and maps date squares with month headers."""
+        # Wipe past container allocations securely
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+                
         self._day_layouts.clear()
         self._day_frames.clear()
 
-        row, col = 0, 0
-        
-        # Generate bounding square shells contextually for each given period coordinate
+        if not date_list:
+            return
+
+        current_month = None
+        row = 0
+        col = 0
+
         for date_str in date_list:
+            qdate = QDate.fromString(date_str, Qt.DateFormat.ISODate)
+            month_str = qdate.toString("MMMM yyyy")
+
+            # Handle month change and print month header
+            if month_str != current_month:
+                if current_month is not None:
+                    # Move to a new row for the new month to avoid overlapping
+                    row += 1 
+                
+                month_lbl = QLabel(month_str)
+                month_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #008080; padding: 12px 0 6px 0;")
+                month_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                
+                # Span the header across all 7 columns
+                self.grid_layout.addWidget(month_lbl, row, 0, 1, 7)
+                
+                row += 1
+                current_month = month_str
+                
+                # Recalculate column offset for the first day of the new month
+                col = qdate.dayOfWeek() % 7
+
+            # Generate bounding square shells contextually
             cell_frame = QFrame()
             cell_frame.setFrameShape(QFrame.Shape.StyledPanel)
             # Off-white background for visual depth; min-height ensures usable cell area
