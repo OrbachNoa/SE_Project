@@ -2,7 +2,7 @@ import sys
 import os
 from typing import List
 from .OutputWriter import OutputWriter
-from models.Domain import ExamSchedule, ExamAssignment
+from models.domain import ExamSchedule, ExamAssignment
 from models.Enums import Semester, Moed
 
 # Defines the standard academic rendering order for output sections.

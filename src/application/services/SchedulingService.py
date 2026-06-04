@@ -4,7 +4,7 @@ from __future__ import annotations
 from multiprocessing import Process, Queue, Event
 from typing import List, Optional
 
-from models.Course import Course
+from models.course import Course
 from models.ExamPeriod import ExamPeriod
 from infrastructure.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
 from infrastructure.concurrency.SchedulerWorker import SchedulerWorker

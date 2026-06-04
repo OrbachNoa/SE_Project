@@ -1,5 +1,5 @@
 from typing import List
-from .Course import Course
+from .course import Course
 from .Enums import Moed, Semester
 
 class ExamAssignment:

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from models.Domain import ExamSchedule
+from models.domain import ExamSchedule
 
 # Defines the export contract to decouple the Scheduler from specific storage formats.
 class OutputWriter(ABC):

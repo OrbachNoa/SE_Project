@@ -5,9 +5,9 @@ ScheduleDTO into flat and primitive view models for the GUI.
 """
 from __future__ import annotations
 
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
-from models.Course import Course
+from models.course import Course
 from models.ExamPeriod import ExamPeriod
 from application.dto.SchedulDTO import ScheduleDTO, AssignmentDTO
 from application.viewmodels.ScheduleViewModel import (
@@ -36,26 +36,81 @@ class ViewModelMapper:
 
     # ----- schedules -------------------------------------------------------
     
-    def _item_from_assignment(self, a: AssignmentDTO) -> ScheduleItemViewModel:
-        """Compose one display item from a flat assignment DTO."""
+    def _item_from_assignment(
+        self,
+        a: AssignmentDTO,
+        selected_programs: Optional[List[str]] = None,
+    ) -> ScheduleItemViewModel:
+        """Compose one display item from a flat assignment DTO.
+
+        selected_programs controls which programme/requirement pairs are shown in the
+        tooltip. Only pairs whose program_id appears in selected_programs are kept.
+        When selected_programs is None or empty the filter is skipped and all pairs are
+        shown \u2014 this acts as a safe fallback so the tooltip is never blank when the
+        caller does not specify a filter (e.g. the calendar view).
+        """
         subtitle = f"{a.course_id} \u00b7 {a.semester} \u00b7 Moed {a.moed}"
+
+        # Decide which (program_id, requirement_value) pairs are relevant.
+        # selected_programs being falsy (None or []) means "no active filter \u2014 show all".
+        # This ensures callers that do not pass selected_programs still get a complete
+        # tooltip without any code change on their side.
+        if selected_programs:
+            relevant_pairs = [
+                (pid, req)
+                for pid, req in a.program_requirements
+                if pid in selected_programs
+            ]
+        else:
+            # No filter: include every programme this course belongs to.
+            relevant_pairs = list(a.program_requirements)
+
+        # Build a human-readable programme block.
+        # requirement_value is a raw uppercase string ("OBLIGATORY" / "ELECTIVE");
+        # .capitalize() converts it to sentence-case ("Obligatory" / "Elective")
+        # without requiring any enum import in this layer.
+        if relevant_pairs:
+            prog_lines = "\n".join(
+                f"Program {pid}: {req.capitalize()}"
+                for pid, req in relevant_pairs
+            )
+            program_block = f"\n{prog_lines}"
+        else:
+            # The course has no programme entries for the selected programmes,
+            # so we add nothing rather than displaying an empty or misleading block.
+            program_block = ""
+
         tooltip = (
             f"{a.course_name} ({a.course_id})\n"
             f"{a.date} \u00b7 {a.semester} \u00b7 Moed {a.moed}"
+            f"{program_block}"
         )
         return ScheduleItemViewModel(
             date=a.date, title=a.course_name, subtitle=subtitle, tooltip=tooltip
         )
 
-    
     def to_schedule_vm(
-        self, dto: ScheduleDTO, current_index: int = 0, total: int = 1
+        self,
+        dto: ScheduleDTO,
+        current_index: int = 0,
+        total: int = 1,
+        selected_programs: Optional[List[str]] = None,
     ) -> ScheduleViewModel:
-        """Map a schedule DTO to a date-sorted ScheduleViewModel ("X of Y" from caller, example: "Schedule 2 of 5")."""
+        """Map a schedule DTO to a date-sorted ScheduleViewModel ("X of Y" from caller, example: "Schedule 2 of 5").
+
+        selected_programs is the list of programme IDs the user selected before
+        launching generation. It is forwarded to _item_from_assignment so each
+        item's tooltip shows only the relevant programme/requirement pairs.
+        Callers that omit selected_programs receive the full unfiltered tooltip
+        (backward-compatible default).
+        """
         if dto is None:
             raise ValueError("to_schedule_vm received None; expected a ScheduleDTO")
 
-        items = [self._item_from_assignment(a) for a in dto.assignments]
+        # None sentinel \u2192 empty list so _item_from_assignment receives a consistent type.
+        effective_programs = selected_programs if selected_programs is not None else []
+
+        items = [self._item_from_assignment(a, effective_programs) for a in dto.assignments]
         items.sort(key=lambda item: item.date)  # ISO dates sort correctly as text
         return ScheduleViewModel(items=items, current_index=current_index, total=total)
 

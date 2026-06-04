@@ -1,7 +1,7 @@
 from typing import List, Set, Tuple
 from datetime import date
 from models.Enums import Moed, Requirement
-from models.Course import Course
+from models.course import Course
 from models.ExamPeriod import ExamPeriod
 
 
