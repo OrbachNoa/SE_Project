@@ -235,11 +235,12 @@ class InputScreen(Screen):
         left_col.addWidget(self._build_courses_card(), stretch=1)
 
         # Right column: reserved calendar editor placeholder.
-        right_col = QVBoxLayout()
-        right_col.addWidget(self._build_calendar_placeholder(), stretch=1)
+        self.right_col = QVBoxLayout()
+        self._placeholder = self._build_calendar_placeholder()
+        self.right_col.addWidget(self._placeholder, stretch=1)
 
         two_col_layout.addLayout(left_col, stretch=1)
-        two_col_layout.addLayout(right_col, stretch=1)
+        two_col_layout.addLayout(self.right_col, stretch=1)
         body.addLayout(two_col_layout)
 
         root.addLayout(body)
@@ -633,6 +634,13 @@ class InputScreen(Screen):
             return input_state.get_courses()
         except Exception:
             return []
+    
+    def _get_loaded_periods(self) -> list:
+        try:
+            input_state = self._controller._facade._state.get_input_state()
+            return input_state.get_periods()
+        except Exception:
+            return []
 
     def _get_mapper(self):
         """Safely retrieve the ViewModelMapper from the controller's facade.
@@ -694,6 +702,22 @@ class InputScreen(Screen):
             self._periods_loaded = True
             self._mark_file_loaded(self._periods_row, result.loaded_count, "periods")
             self._refresh_generate_button()
+
+            # --- Inject the dynamic calendar editor ---
+            periods = self._get_loaded_periods()
+            mapper = self._get_mapper()
+            if periods and mapper:
+                period_vms = mapper.to_period_edit_vms(periods)
+                if period_vms:
+                    # Remove the static placeholder UI
+                    if self._placeholder:
+                        self._placeholder.deleteLater()
+                        self._placeholder = None
+                    
+                    # Insert the interactive calendar editor with all loaded periods
+                    from src.gui.widgets.CalendarEditorWidget import CalendarEditorWidget
+                    self._editor_widget = CalendarEditorWidget(period_vms)
+                    self.right_col.insertWidget(0, self._editor_widget, stretch=1)
 
     # ── Program selection ──────────────────────────────────────────────
 

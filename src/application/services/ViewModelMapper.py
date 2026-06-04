@@ -41,52 +41,33 @@ class ViewModelMapper:
         a: AssignmentDTO,
         selected_programs: Optional[List[str]] = None,
     ) -> ScheduleItemViewModel:
-        """Compose one display item from a flat assignment DTO.
-
-        selected_programs controls which programme/requirement pairs are shown in the
-        tooltip. Only pairs whose program_id appears in selected_programs are kept.
-        When selected_programs is None or empty the filter is skipped and all pairs are
-        shown \u2014 this acts as a safe fallback so the tooltip is never blank when the
-        caller does not specify a filter (e.g. the calendar view).
-        """
-        subtitle = f"{a.course_id} \u00b7 {a.semester} \u00b7 Moed {a.moed}"
-
-        # Decide which (program_id, requirement_value) pairs are relevant.
-        # selected_programs being falsy (None or []) means "no active filter \u2014 show all".
-        # This ensures callers that do not pass selected_programs still get a complete
-        # tooltip without any code change on their side.
+        
+        # Filter programs if needed. If None, just dump everything.
         if selected_programs:
             relevant_pairs = [
-                (pid, req)
-                for pid, req in a.program_requirements
-                if pid in selected_programs
+                (pid, req) for pid, req in a.program_requirements if pid in selected_programs
             ]
         else:
-            # No filter: include every programme this course belongs to.
             relevant_pairs = list(a.program_requirements)
 
-        # Build a human-readable programme block.
-        # requirement_value is a raw uppercase string ("OBLIGATORY" / "ELECTIVE");
-        # .capitalize() converts it to sentence-case ("Obligatory" / "Elective")
-        # without requiring any enum import in this layer.
+        # Build the program req string. using <br> cuz PyQt labels support rich text HTML formatting.
         if relevant_pairs:
-            prog_lines = "\n".join(
-                f"Program {pid}: {req.capitalize()}"
-                for pid, req in relevant_pairs
-            )
-            program_block = f"\n{prog_lines}"
+            req_str = "<br>".join(f"Prog {pid} ({req.capitalize()})" for pid, req in relevant_pairs)
         else:
-            # The course has no programme entries for the selected programmes,
-            # so we add nothing rather than displaying an empty or misleading block.
-            program_block = ""
+            req_str = ""
 
+        # Title is just the course name. Subtitle holds the ID and the colored req string.
+        title = a.course_name
+        subtitle = f"ID: {a.course_id}<br><span style='color: #0f766e;'>{req_str}</span>"
+        
+        # Tooltip for when someone actually hovers over this tiny box
         tooltip = (
             f"{a.course_name} ({a.course_id})\n"
-            f"{a.date} \u00b7 {a.semester} \u00b7 Moed {a.moed}"
-            f"{program_block}"
+            f"{a.date} · {a.semester} · Moed {a.moed}\n"
+            f"{req_str.replace('<br>', ', ')}"
         )
         return ScheduleItemViewModel(
-            date=a.date, title=a.course_name, subtitle=subtitle, tooltip=tooltip
+            date=a.date, title=title, subtitle=subtitle, tooltip=tooltip
         )
 
     def to_schedule_vm(

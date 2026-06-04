@@ -3,19 +3,24 @@ from __future__ import annotations
 
 from typing import List, Dict
 from PyQt6.QtWidgets import QWidget, QGridLayout, QLabel, QVBoxLayout, QFrame
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
 
 
 class CalendarWidget(QWidget):
     """Visual day-matrix rendering engine displaying pre-composed schedule items."""
+    
+    # Custom signal to yell at the editor when a date is clicked
+    date_clicked = pyqtSignal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         
         # Track live calendar cells layout pointers using ISO strings as keys
         self._day_layouts: Dict[str, QVBoxLayout] = {}
+        # Need to keep track of the frames so we can style them later
+        self._day_frames: Dict[str, QFrame] = {} 
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -57,6 +62,7 @@ class CalendarWidget(QWidget):
         for layout in self._day_layouts.values():
             layout.parentWidget().deleteLater()
         self._day_layouts.clear()
+        self._day_frames.clear()
 
         row, col = 0, 0
         
@@ -66,6 +72,8 @@ class CalendarWidget(QWidget):
             cell_frame.setFrameShape(QFrame.Shape.StyledPanel)
             # Off-white background for visual depth; min-height ensures usable cell area
             cell_frame.setStyleSheet("QFrame { background-color: #FAFAFA; border: 1px solid #E2E8F0; border-radius: 8px; min-height: 60px; }")
+            # Turning the cell to pressable and passing the date
+            cell_frame.mousePressEvent = lambda event, d=date_str: self.date_clicked.emit(d)
             
             cell_layout = QVBoxLayout(cell_frame)
             cell_layout.setContentsMargins(6, 4, 6, 4)
@@ -82,9 +90,10 @@ class CalendarWidget(QWidget):
             cell_layout.addWidget(day_lbl)
             self.grid_layout.addWidget(cell_frame, row, col)
             self._day_layouts[date_str] = cell_layout
+            self._day_frames[date_str] = cell_frame
 
             col += 1
-            
+
             # Step down down into subsequent grid levels whenever completing a weekly block
             if col > 6:
                 col = 0
@@ -114,3 +123,14 @@ class CalendarWidget(QWidget):
                     "border: 1px solid #B7D4C5; font-size: 11px; border-radius: 4px; padding: 2px; }"
                 )
                 container_layout.addWidget(exam_lbl)
+
+    def set_date_excluded_style(self, date_str: str, is_excluded: bool) -> None:
+        """Grey out the cell if excluded, else normal."""
+        if date_str in self._day_frames:
+            frame = self._day_frames[date_str]
+            if is_excluded:
+                # Grey out the date so we don't have exams on our days off
+                frame.setStyleSheet("QFrame { background-color: #E2E8F0; border: 1px solid #CBD5E1; border-radius: 8px; min-height: 60px; }")
+            else:
+                # Revert to normal
+                frame.setStyleSheet("QFrame { background-color: #FAFAFA; border: 1px solid #E2E8F0; border-radius: 8px; min-height: 60px; }")
