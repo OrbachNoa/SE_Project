@@ -1,6 +1,6 @@
 from typing import List
 from .course import Course
-from .Enums import Moed, Semester
+from .enums import Moed, Semester
 
 class ExamAssignment:
     """Represents one exam placement for a course."""

@@ -1,5 +1,5 @@
 from typing import List
-from .Enums import EvalType, Semester, Requirement
+from .enums import EvalType, Semester, Requirement
 
 class ProgramEntry:
     """

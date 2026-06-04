@@ -1,5 +1,5 @@
 from typing import List, Set, Iterable
-from .Enums import Semester, Moed
+from .enums import Semester, Moed
 from datetime import timedelta, date
 
 class ExamPeriod:

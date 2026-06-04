@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence
 
-from gui.Screen import Screen
+from gui.screen import Screen
 
 # Size of one SQLite result page. Must stay in sync with the backend window
 # size; changing only one of the two creates off-by-page navigation bugs.
