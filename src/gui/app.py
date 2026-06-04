@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget
-from src.gui.screen_router import ScreenRouter
-from src.gui.screens.input_screen import InputScreen
-from src.gui.screens.output_screen import OutputScreen
+from gui.ScreenRouter import ScreenRouter
+from gui.screens.InputScreen import InputScreen
+from gui.screens.OutputScreen import OutputScreen
 
 SCREEN_INPUT  = "input"
 SCREEN_OUTPUT = "output"
