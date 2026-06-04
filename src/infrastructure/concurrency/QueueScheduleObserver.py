@@ -78,7 +78,19 @@ class QueueScheduleObserver(IScheduleObserver):
                 instructor=assignment.course.instructor,
                 date=assignment.date.isoformat() if assignment.date else "",
                 semester=assignment.semester.value if hasattr(assignment.semester, 'value') else assignment.semester,
-                moed=assignment.moed.value if hasattr(assignment.moed, 'value') else assignment.moed
+                moed=assignment.moed.value if hasattr(assignment.moed, 'value') else assignment.moed,
+                # Carry the (program id, requirement) pair for every program the course
+                # belongs to. The UI uses this to show which programs the course is in
+                # and whether it is obligatory or elective in each one.
+                # requirement is an enum, so .value gives the plain "OBLIGATORY" / "ELECTIVE"
+                # string, which keeps the DTO picklable across the process boundary.
+                program_requirements=[
+                    (
+                        entry.programId,
+                        entry.requirement.value if hasattr(entry.requirement, "value") else str(entry.requirement),
+                    )
+                    for entry in (assignment.course.programEntries or [])
+                ],
             )
             for assignment in schedule.assignments
         ]
