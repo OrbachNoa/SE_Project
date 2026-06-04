@@ -38,7 +38,8 @@ class CalendarWidget(QWidget):
             # Text alignment conversion adjusted to strictly obey PyQt6 enums
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            lbl.setStyleSheet("font-weight: 600; color: #475569; padding: 4px;")
+            # Slate-500 text with comfortable vertical padding matching card min-height rhythm
+            lbl.setStyleSheet("font-weight: 600; color: #64748B; padding: 8px 4px;")
             self.headers_layout.addWidget(lbl, 0, column_idx)
             
         self.main_layout.addWidget(self.headers_frame)
@@ -63,7 +64,8 @@ class CalendarWidget(QWidget):
         for date_str in date_list:
             cell_frame = QFrame()
             cell_frame.setFrameShape(QFrame.Shape.StyledPanel)
-            cell_frame.setStyleSheet("QFrame { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; }")
+            # Off-white background for visual depth; min-height ensures usable cell area
+            cell_frame.setStyleSheet("QFrame { background-color: #FAFAFA; border: 1px solid #E2E8F0; border-radius: 8px; min-height: 60px; }")
             
             cell_layout = QVBoxLayout(cell_frame)
             cell_layout.setContentsMargins(6, 4, 6, 4)
@@ -106,8 +108,9 @@ class CalendarWidget(QWidget):
                 # Tooltip configuration using string streams prepared inside business mappers
                 exam_lbl.setToolTip(item.tooltip)
                 
+                # Bar-Ilan light green background with dark green text replaces the blue palette
                 exam_lbl.setStyleSheet(
-                    "QLabel { background-color: #eff6ff; color: #1e40af; "
-                    "border: 1px solid #bfdbfe; font-size: 11px; border-radius: 4px; padding: 2px; }"
+                    "QLabel { background-color: #E5F0EB; color: #143D30; "
+                    "border: 1px solid #B7D4C5; font-size: 11px; border-radius: 4px; padding: 2px; }"
                 )
                 container_layout.addWidget(exam_lbl)

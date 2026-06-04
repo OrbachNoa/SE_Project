@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Tuple
 
 
 @dataclass(slots=True)
@@ -26,6 +26,12 @@ class AssignmentDTO:
 
     # Moed value. example: "ALEPH"
     moed: str
+
+    # List of (program_id, requirement) pairs for every program this course belongs to.
+    # A course can be in multiple programs with different requirement statuses
+    # (e.g. "OBLIGATORY" in one program, "ELECTIVE" in another).
+    # Plain strings only — keeps this DTO picklable across process boundaries.
+    program_requirements: List[Tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
