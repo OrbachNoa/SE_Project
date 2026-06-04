@@ -1,5 +1,5 @@
 from .IConflictChecker import IConflictChecker
-from models.Enums import Requirement
+from models.enums import Requirement
 
 
 class ProgramYearConflictChecker(IConflictChecker):

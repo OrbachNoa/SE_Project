@@ -1,5 +1,5 @@
 from logic.checkers.IConflictChecker import IConflictChecker
-from models.Enums import Moed
+from models.enums import Moed
 
 class MoedOrderChecker(IConflictChecker):
     """

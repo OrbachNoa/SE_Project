@@ -13,7 +13,7 @@ from typing import List
 
 from models.course import Course, ProgramEntry
 from models.ExamPeriod import ExamPeriod
-from models.Enums import EvalType, Semester, Moed, Requirement
+from models.enums import EvalType, Semester, Moed, Requirement
 from infrastructure.cache.DataCache import DataCache, CourseDict, PeriodDict
 
 
