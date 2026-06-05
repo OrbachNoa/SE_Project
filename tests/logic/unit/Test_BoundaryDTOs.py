@@ -1,7 +1,7 @@
 import pickle
 import pytest
-from src.application.dto_viewmodel.schedule_dto import AssignmentDTO, ScheduleDTO
-from src.application.dto_viewmodel.ScheduleDTOAdapter import ScheduleDTOAdapter
+from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
+from src.application.dto.ScheduleDTOAdapter import ScheduleDTOAdapter
 
 # -------------------------------------------------------------------------
 # TC-DTO-001..007 : Test DTOs boundary between processes

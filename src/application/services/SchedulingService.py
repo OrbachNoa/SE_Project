@@ -4,14 +4,14 @@ from __future__ import annotations
 from multiprocessing import Process, Queue, Event
 from typing import List, Optional
 
-from models.course import Course
-from models.ExamPeriod import ExamPeriod
-from infrastructure.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
-from infrastructure.concurrency.SchedulerWorker import SchedulerWorker
-from logic.SlotBuilder import SlotBuilder, Slot
-from logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
-from logic.checkers.MoedOrderChecker import MoedOrderChecker
-from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.models.Course import Course
+from src.models.ExamPeriod import ExamPeriod
+from src.infrastructure.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
+from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
+from src.logic.SlotBuilder import SlotBuilder, Slot
+from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
+from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 # Sets a fallback limit for tracking backtrack results safely within boundaries
 DEFAULT_MAX_RESULTS = 1000000  

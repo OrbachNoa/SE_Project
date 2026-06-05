@@ -16,10 +16,10 @@ from typing import List, TYPE_CHECKING
 if TYPE_CHECKING:
     from viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
-from models.course import Course, ProgramEntry
-from models.ExamPeriod import ExamPeriod
-from models.enums import EvalType, Semester, Moed, Requirement
-from infrastructure.cache.DataCache import DataCache, CourseDict, PeriodDict
+from src.models.Course import Course, ProgramEntry
+from src.models.ExamPeriod import ExamPeriod
+from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.infrastructure.cache.DataCache import DataCache, CourseDict, PeriodDict
 
 
 class InputDataState:

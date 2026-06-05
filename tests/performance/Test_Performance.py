@@ -2,12 +2,12 @@ from datetime import date, timedelta
 import time
 import pytest
 
-from src.models.enums import EvalType, Semester, Moed, Requirement
+from src.models.Enums import EvalType, Semester, Moed, Requirement
 from src.logic.Scheduler import Scheduler
-from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
-from src.logic.MoedOrderChecker import MoedOrderChecker
+from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
 from src.logic.SlotBuilder import SlotBuilder
-from src.logic.CollectingScheduleObserver import CollectingScheduleObserver
+from src.logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
 
 # ---------------------------------------------------------------------------
 # Helper functions and constants used in the tests.

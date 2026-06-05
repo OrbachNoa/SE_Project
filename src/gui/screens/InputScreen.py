@@ -13,9 +13,9 @@ from __future__ import annotations
 from typing import List
 
 from gui.widgets.ProgramSelectorWidget import ProgramSelectorWidget
-from gui.widgets.program_selector_dialog import ProgramSelectorDialog
+from gui.widgets.ProgramSelectorDialog import ProgramSelectorDialog
 from gui.widgets.CourseListWidget import CourseListWidget
-from application.viewmodels.ProgramViewModel import ProgramViewModel
+from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 from data.programs import programs_data
 
 from PyQt6.QtWidgets import (
@@ -27,7 +27,7 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont
 
 from gui.screen import Screen
-from application.ImportMode import ImportMode
+from src.application.ImportBoundary import ImportMode
 
 # Name used by the router to identify the output screen.
 SCREEN_OUTPUT = "output"

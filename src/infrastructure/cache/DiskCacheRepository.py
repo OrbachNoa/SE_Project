@@ -54,7 +54,7 @@ class DiskCacheRepository(IDataRepository):
         try:
             with self._cache_path.open("rb") as f:
                 cache = pickle.load(f)
-        except (pickle.UnpicklingError, EOFError, OSError):
+        except (pickle.UnpicklingError, EOFError, OSError, ImportError, AttributeError):
             # Catches errors and returns None because a broken file is exactly like having no file.
             return None
             

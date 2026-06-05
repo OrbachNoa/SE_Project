@@ -2,12 +2,12 @@ from datetime import date
 from unittest.mock import MagicMock
 import pytest
 
-from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
-from src.logic.MoedOrderChecker import MoedOrderChecker
+from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
 from src.logic.Scheduler import Scheduler
 from src.logic.SlotBuilder import SlotBuilder
-from src.logic.CollectingScheduleObserver import CollectingScheduleObserver
+from src.logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
 
 
 # Helper: Creates the default checkers and gives them the exam dates they need.

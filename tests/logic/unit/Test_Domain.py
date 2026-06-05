@@ -1,8 +1,8 @@
 from datetime import date
 import pytest
 
-from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.models.domain import (
+from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.models.Domain import (
     Course,
     ProgramEntry,
     ExamPeriod,

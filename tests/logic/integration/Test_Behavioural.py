@@ -1,12 +1,12 @@
 from datetime import date
 import pytest
 
-from src.models.enums import EvalType, Semester, Moed, Requirement
+from src.models.Enums import EvalType, Semester, Moed, Requirement
 from src.logic.Scheduler import Scheduler
-from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
-from src.logic.MoedOrderChecker import MoedOrderChecker
+from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
 from src.logic.SlotBuilder import SlotBuilder
-from src.logic.CollectingScheduleObserver import CollectingScheduleObserver
+from src.logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -100,7 +100,7 @@ def test_every_schedule_passes_all_conflict_checks(
     # Assert — Go through every exam in every schedule and ask the 
     # checkers if there is a conflict. None of them should fail.
     # Local import
-    from src.models.domain import ExamSchedule
+    from src.models.Domain import ExamSchedule
     assert len(schedules) > 0, "Sanity: scheduler should produce results"
     for s in schedules:
         partial = ExamSchedule()

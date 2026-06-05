@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 
 
 # ---------------------------------------------------------------------------
@@ -11,7 +11,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 # ---------------------------------------------------------------------------
 def _run_main(argv, monkeypatch):
     monkeypatch.setattr(sys, "argv", argv)
-    from src.main import main
+    from src.entrypoints.main import main
     main()
 
 

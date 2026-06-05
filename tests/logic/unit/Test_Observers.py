@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import MagicMock
 from datetime import date
-from src.concurrency.QueueScheduleObserver import QueueScheduleObserver
-from src.logic.CollectingScheduleObserver import CollectingScheduleObserver
-from src.logic.StreamingScheduleObserver import StreamingScheduleObserver
-from src.models.domain import ExamSchedule
+from src.infrastructure.concurrency.QueueScheduleObserver import QueueScheduleObserver
+from src.logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
+from src.logic.observers.StreamingScheduleObserver import StreamingScheduleObserver
+from src.models.Domain import ExamSchedule
 
 
 # ===========================================================================

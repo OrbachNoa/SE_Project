@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import List
 
-from application.dto.SchedulDTO import ScheduleDTO
+from src.application.dto.ScheduleDTO import ScheduleDTO
 
 
 class ScheduleResultState:
