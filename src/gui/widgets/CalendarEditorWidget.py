@@ -77,11 +77,6 @@ class CalendarEditorWidget(QWidget):
         dates_layout.addWidget(self.end_date_edit)
         dates_layout.addStretch()
 
-        # Placeholder for future filtering feature (v3.0)
-        filter_btn = QPushButton("⚙ Filters (v3.0)")
-        filter_btn.setEnabled(False) 
-        dates_layout.addWidget(filter_btn)
-
         self.main_layout.addLayout(dates_layout)
 
         # --- Calendar Grid ---
