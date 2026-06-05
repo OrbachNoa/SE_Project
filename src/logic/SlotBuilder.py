@@ -1,8 +1,8 @@
 from typing import List, Set, Tuple
 from datetime import date
-from ..models.enums import Moed, Requirement
-from ..models.course import Course
-from ..models.exam_period import ExamPeriod
+from models.enums import Moed, Requirement
+from models.course import Course
+from models.ExamPeriod import ExamPeriod
 
 
 class Slot:
