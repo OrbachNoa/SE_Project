@@ -9,9 +9,9 @@ from multiprocessing.synchronize import Event
 from typing import List
 
 from .QueueScheduleObserver import QueueScheduleObserver
-from logic.Scheduler import Scheduler
-from logic.checkers.IConflictChecker import IConflictChecker
-from logic.SlotBuilder import Slot
+from src.logic.Scheduler import Scheduler
+from src.logic.checkers.IConflictChecker import IConflictChecker
+from src.logic.SlotBuilder import Slot
 
 
 class SchedulerProcessRunner:

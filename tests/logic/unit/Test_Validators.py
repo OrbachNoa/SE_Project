@@ -1,11 +1,11 @@
 from unittest.mock import MagicMock
 import pytest
 
-from src.validators.maxProgramsValidator import MaxProgramsValidator
-from src.validators.programExistenceValidator import ProgramExistenceValidator
-from src.validators.inputValidator import IInputValidator
-from src.validators.validationResult import ValidationResult
-from src.validators.ValidatorPipeline import ValidatorPipeline
+from src.file_io.validators.MaxProgramsValidator import MaxProgramsValidator
+from src.file_io.validators.ProgramExistenceValidator import ProgramExistenceValidator
+from src.file_io.validators.InputValidator import IInputValidator
+from src.file_io.validators.ValidationResult import ValidationResult
+from src.file_io.validators.ValidatorPipeline import ValidatorPipeline
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ def test_validator_failure_prevents_schedule_generation(make_program_entry):
 
     # We import the orchestration entry point lazily so this test can
     # still load even if the module is renamed during development.
-    from src.main import run_pipeline 
+    from src.entrypoints.main import run_pipeline 
     selected = ["83101"]
     # Act — run the pipeline with the failing validator injected.
     try:

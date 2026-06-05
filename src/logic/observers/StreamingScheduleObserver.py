@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import Optional
 
-from logic.observers.IScheduleObserver import IScheduleObserver
-from file_io.writers.TextFileWriter import TextFileWriter
+from src.logic.observers.IScheduleObserver import IScheduleObserver
+from src.file_io.writers.TextFileWriter import TextFileWriter
 
 
 class StreamingScheduleObserver(IScheduleObserver):

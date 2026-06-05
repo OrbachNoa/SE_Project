@@ -1,10 +1,10 @@
 import pytest
 from datetime import date
-from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.data.DataCache import DataCache
-from src.application.app_state import AppState
-from src.application.input_data_state import InputDataState
-from src.application.schedule_result_state import ScheduleResultState
+from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.infrastructure.cache.DataCache import DataCache
+from src.application.state.AppState import AppState
+from src.application.state.InputDataState import InputDataState
+from src.application.state.ScheduleResultState import ScheduleResultState
 
 # ===========================================================================
 # TC-AS-001: Verify that AppState sets up InputDataState and ScheduleResultState.

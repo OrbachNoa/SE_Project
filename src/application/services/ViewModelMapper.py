@@ -7,19 +7,19 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional
 
-from models.course import Course
-from models.ExamPeriod import ExamPeriod
-from application.dto.SchedulDTO import ScheduleDTO, AssignmentDTO
-from application.viewmodels.ScheduleViewModel import (
+from src.models.Course import Course
+from src.models.ExamPeriod import ExamPeriod
+from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
+from src.application.viewmodels.ScheduleViewModel import (
     ScheduleViewModel,
     ScheduleItemViewModel,
 )
-from application.viewmodels.CalendarViewModel import (
+from src.application.viewmodels.CalendarViewModel import (
     CalendarViewModel,
     CalendarCellViewModel,
 )
-from application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
-from application.viewmodels.ProgramViewModel import (
+from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
+from src.application.viewmodels.ProgramViewModel import (
     ProgramViewModel,
     ProgramCoursesViewModel,
     CourseRowViewModel,

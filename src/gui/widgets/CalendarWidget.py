@@ -5,7 +5,7 @@ from typing import List, Dict
 from PyQt6.QtWidgets import QWidget, QGridLayout, QLabel, QVBoxLayout, QFrame
 from PyQt6.QtCore import Qt
 
-from application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
+from src.application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
 
 
 class CalendarWidget(QWidget):

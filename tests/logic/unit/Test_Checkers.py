@@ -1,9 +1,9 @@
 from datetime import date
 import pytest
 
-from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.logic.ProgramYearConflictChecker import ProgramYearConflictChecker
-from src.logic.MoedOrderChecker import MoedOrderChecker
+from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
 
 
 # ---------------------------------------------------------------------------

@@ -2,9 +2,9 @@ from datetime import date
 import os
 import pytest
 
-from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.models.domain import ExamSchedule
-from src.writers.textFileWriter import TextFileWriter
+from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.models.Domain import ExamSchedule
+from src.file_io.writers.TextFileWriter import TextFileWriter
 
 
 # ===========================================================================

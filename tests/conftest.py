@@ -4,20 +4,31 @@ conftest.py — Shared tools (fixtures) for the exam scheduling tests.
 This file creates basic objects like Courses and Dates. This makes it easier 
 to write tests because you only change the specific parts you need to check.
 """
+# region Imports
 from datetime import date
+from pathlib import Path
+import sys
+from unittest.mock import MagicMock
 import pytest
-
-# ---------------------------------------------------------------------------
-# Imports for the system
-# ---------------------------------------------------------------------------
-from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.models.domain import (
+from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.models.Domain import (
     Course,
     ProgramEntry,
     ExamPeriod,
     ExamAssignment,
     ExamSchedule,
 )
+from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+# endregion
+
+# region Path Setup
+# Add 'src' and project root to sys.path so pytest can resolve absolute imports inside the src directory.
+SRC_ROOT = Path(__file__).resolve().parent.parent / "src"
+PROJECT_ROOT = SRC_ROOT.parent
+for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
+# endregion
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +136,7 @@ def qapp():
 @pytest.fixture
 def make_assignment_dto(make_assignment):
     """Provides a factory to build AssignmentDTOs with default values matched to the domain fixtures."""
-    from src.application.dto_viewmodel.schedule_dto import AssignmentDTO
+    from src.application.dto.ScheduleDTO import AssignmentDTO
     def _make(
         course_id=None,
         course_name=None,
@@ -149,7 +160,7 @@ def make_assignment_dto(make_assignment):
 @pytest.fixture
 def make_schedule_dto(make_assignment_dto):
     """Provides a factory to build ScheduleDTOs with default values."""
-    from src.application.dto_viewmodel.schedule_dto import ScheduleDTO
+    from src.application.dto.ScheduleDTO import ScheduleDTO
     def _make(assignments=None, total_assignments=None):
         if assignments is None:
             assignments = []
@@ -162,7 +173,7 @@ def make_schedule_dto(make_assignment_dto):
 @pytest.fixture
 def make_data_cache(make_course, make_period):
     """Provides a factory to build DataCaches with default values matched to domain fixtures."""
-    from src.data.DataCache import DataCache
+    from src.infrastructure.cache.DataCache import DataCache
     def _make(courses=None, periods=None, source_hashes=None):
         if courses is None:
             c = make_course()
@@ -197,4 +208,52 @@ def make_data_cache(make_course, make_period):
             source_hashes=source_hashes or {}
         )
     return _make
-
+
+@pytest.fixture
+def mock_repository():
+    """Provides a MagicMock spec'd for SQLiteScheduleRepository to isolate tests from disk I/O."""
+    return MagicMock(spec=SQLiteScheduleRepository)
+
+
+@pytest.fixture
+def mock_controller():
+    """Provides a mocked AppController with standard PyQt signals and stubbed methods."""
+    controller = MagicMock()
+    # Mock PyQt signals on controller
+    controller.schedule_found = MagicMock()
+    controller.progress_updated = MagicMock()
+    controller.search_finished = MagicMock()
+    controller.error_occurred = MagicMock()
+    controller.early_results_ready = MagicMock()
+    controller.total_count_updated = MagicMock()
+    controller.get_page_info.return_value = {
+        "current_page": 0,
+        "total_pages": 1,
+        "total_count": 0,
+        "window_size": 0,
+        "sqlite_count": 0,
+    }
+    return controller
+
+
+@pytest.fixture
+def mock_router():
+    """Provides a MagicMock for the screen router."""
+    return MagicMock()
+
+
+@pytest.fixture
+def viewmodel_mapper():
+    """Provides a fresh ViewModelMapper instance."""
+    from src.application.services.ViewModelMapper import ViewModelMapper
+    return ViewModelMapper()
+
+
+@pytest.fixture
+def app_state():
+    """Provides a fresh AppState instance."""
+    from src.application.state.AppState import AppState
+    return AppState()
+
+
+
