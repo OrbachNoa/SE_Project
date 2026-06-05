@@ -9,7 +9,12 @@ the place where the domain<->cache shape conversion happens.
 from __future__ import annotations
 
 from datetime import date
-from typing import List
+from typing import List, TYPE_CHECKING
+
+# A guard for avoiding circular imports between this class and the vm class used
+# in calendar editor, which needs to call back into this state to apply edits.
+if TYPE_CHECKING:
+    from viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
 from models.course import Course, ProgramEntry
 from models.ExamPeriod import ExamPeriod
@@ -21,31 +26,28 @@ class InputDataState:
     """Holds loaded courses and exam periods, plus the on-disk cache bridge."""
 
     def __init__(self) -> None:
+        # The loaded courses from the user's input.
         self._courses: List[Course] = []
+        # The loaded exam periods from the user's input.
         self._periods: List[ExamPeriod] = []
-        # The programme IDs the user selected before launching generation.
-        # Stored here so that the display layer can later retrieve them and
-        # filter or annotate the view model accordingly (e.g. show only the
-        # programmes relevant to the current generation run). Initialised to
-        # an empty list so the attribute always exists even before the first
-        # generation request.
+        # The program IDs user selected before launching generation.
         self._selected_program_ids: List[str] = []
 
     # --- accessors / mutators (UML) ----------------------------------------
 
     def set_selected_programs(self, program_ids: List[str]) -> None:
-        """Store a copy of the programme IDs chosen by the user for the current run.
+        """Store a copy of the program IDs chosen by the user for the current run.
 
         A copy is stored (rather than the original list) so that external mutations
         of the caller's list cannot silently corrupt the stored state. These IDs are
         needed later — after the scheduler has finished — when the display layer maps
-        each ScheduleDTO to a view model and must know which programmes were in scope
+        each ScheduleDTO to a view model and must know which programs were in scope
         for the generation run.
         """
         self._selected_program_ids = list(program_ids)
 
     def get_selected_programs(self) -> List[str]:
-        """Return a copy of the stored programme IDs for the current generation run.
+        """Return a copy of the stored program IDs for the current generation run.
 
         A copy is returned so callers cannot accidentally mutate the internal list.
         Returns an empty list if set_selected_programs has never been called.
@@ -67,6 +69,33 @@ class InputDataState:
     def get_periods(self) -> List[ExamPeriod]:
         """Return the loaded exam periods."""
         return self._periods
+    
+    def apply_period_edits(self, edited_vms: List["PeriodEditViewModel"]) -> None:
+        """Apply edited periods from the calendar editor onto the stored periods."""
+        # Index incoming edits by (semester, moed) for efficient lookup
+        edits_by_key = {(vm.semester, vm.moed): vm for vm in edited_vms}
+
+        rebuilt: List[ExamPeriod] = []
+        for period in self._periods:
+            key = (period.semester.value, period.moed.value)
+            vm = edits_by_key.get(key)
+            if vm is None:
+                # No edit for this period; keep it as-is
+                rebuilt.append(period)
+                continue
+            # Rebuild from the edited values: ISO strings -> date, str -> enum.
+            # A new ExamPeriod re-validates the range and recomputes availableDates.
+            rebuilt.append(
+                ExamPeriod(
+                    semester=Semester(vm.semester),
+                    moed=Moed(vm.moed),
+                    start_date=date.fromisoformat(vm.start_date),
+                    end_date=date.fromisoformat(vm.end_date),
+                    excluded_dates=[date.fromisoformat(d) for d in vm.excluded_dates],
+                )
+            )
+
+        self._periods = rebuilt
 
     # --- cache bridge (lead's two extra methods) ---------------------------
 

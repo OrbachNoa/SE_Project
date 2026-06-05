@@ -548,12 +548,8 @@ class InputScreen(Screen):
 
     def _on_constraints_saved(self, updated_vms: list) -> None:
         """Triggered when the user saves constraints in the calendar editor."""
-        # The updated data (updated_vms) is returned from the calendar.
-        # In the next development phase, you will likely pass them to the controller 
-        # to update the model, for example:
-        # self._controller.update_periods_constraints(updated_vms)
-        
-        # For now, ensure the Generate button is enabled (ready to create schedule)
+        # Push the edited periods into the model so generation uses them.
+        self._controller.update_exam_periods(updated_vms)
         self._refresh_generate_button()
         
         # Debug print to verify it works:
@@ -628,48 +624,16 @@ class InputScreen(Screen):
     # ── File loading ───────────────────────────────────────────────────
 
     def _get_loaded_courses(self) -> list:
-        """Safely retrieve loaded courses from the controller's internal chain.
+        """Return the list of currently loaded courses."""
+        return self._controller.get_loaded_courses()
 
-        Traverses _facade -> _state -> get_input_state -> get_courses with
-        hasattr guards at every step so a future refactor degrades to an empty
-        list instead of crashing. The read is a pure display concern, so it
-        lives here rather than as a new public method on the application layer.
-        """
-        try:
-            if not hasattr(self._controller, "_facade"):
-                return []
-            facade = self._controller._facade
-            if not hasattr(facade, "_state"):
-                return []
-            input_state = facade._state.get_input_state()
-            if not hasattr(input_state, "get_courses"):
-                return []
-            return input_state.get_courses()
-        except Exception:
-            return []
-    
     def _get_loaded_periods(self) -> list:
-        try:
-            input_state = self._controller._facade._state.get_input_state()
-            return input_state.get_periods()
-        except Exception:
-            return []
+        """Return the list of currently loaded exam periods."""
+        return self._controller.get_loaded_periods()
 
     def _get_mapper(self):
-        """Safely retrieve the ViewModelMapper from the controller's facade.
-
-        Uses hasattr guards so a renamed attribute returns None rather than
-        raising. None means "skip rendering" and leave the widget empty.
-        """
-        try:
-            if not hasattr(self._controller, "_facade"):
-                return None
-            facade = self._controller._facade
-            if not hasattr(facade, "_mapper"):
-                return None
-            return facade._mapper
-        except Exception:
-            return None
+        """Return the mapper instance for converting domain objects to view models."""
+        return self._controller.get_mapper()
 
     def _handle_import_result(self, result, data_label: str) -> None:
         """Show an error dialog if the import failed."""
@@ -695,9 +659,6 @@ class InputScreen(Screen):
             self._refresh_generate_button()
 
             # Read the imported courses back and render them grouped by program.
-            # to_program_courses_vm keeps the widget decoupled from domain
-            # objects. The hasattr-guarded helpers make this a safe no-op if the
-            # controller structure ever changes.
             courses = self._get_loaded_courses()
             mapper = self._get_mapper()
             if courses and mapper is not None:

@@ -41,7 +41,7 @@ class AppController(QObject):
         self._early_nav_fired: bool = False
 
     # ------------------------------------------------------------------
-    # File loading
+    # File loading & input state updates
     # ------------------------------------------------------------------
 
     def load_file(self, path: str, file_type: str, mode: ImportMode) -> ImportResult:
@@ -49,6 +49,10 @@ class AppController(QObject):
         return self._facade.import_file(
             ImportRequest(path=path, file_type=file_type, mode=mode)
         )
+        
+    def update_exam_periods(self, edited_vms) -> None:
+        """Apply edits made in the calendar editor GUI to the loaded exam periods."""
+        self._facade.update_periods(edited_vms)
 
     # ------------------------------------------------------------------
     # Schedule generation
@@ -124,6 +128,22 @@ class AppController(QObject):
     def get_page_info(self) -> dict:
         """Extracts metadata snapshots detailing current navigation cursor index bounds information."""
         return self._facade.get_page_info()
+
+    # ------------------------------------------------------------------
+    # State accessors for GUI components
+    # ------------------------------------------------------------------
+    
+    def get_loaded_courses(self) -> list:
+        """Courses currently loaded (for the course list widget)."""
+        return self._facade.get_loaded_courses()
+
+    def get_loaded_periods(self) -> list:
+        """Exam periods currently loaded (for the calendar editor)."""
+        return self._facade.get_loaded_periods()
+
+    def get_mapper(self):
+        """ViewModelMapper, for building display view models."""
+        return self._facade.get_mapper()
 
     # ------------------------------------------------------------------
     # Lifecycle
