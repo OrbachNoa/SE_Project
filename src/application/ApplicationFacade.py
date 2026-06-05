@@ -38,6 +38,10 @@ class ApplicationFacade:
     def import_file(self, request: ImportRequest) -> ImportResult:
         """Imports a single data asset file using the parsing engine; internal state registers adapt accordingly."""
         return self._importer.load_file(request.path, request.file_type, request.mode)
+    
+    def update_periods(self, edited_vms) -> None:
+        """Apply edited exam periods from the calendar editor into state."""
+        self._state.get_input_state().apply_period_edits(edited_vms)
 
     def generate(self, program_ids: List[str]) -> SchedulerWorker:
         """
@@ -65,6 +69,18 @@ class ApplicationFacade:
         Accepts a scalar integer primitive size tracker instead of heavy list instances to guarantee high UI rendering speeds.
         """
         self._state.get_schedule_state().add_schedules_batch(batch_size)
+        
+    def get_loaded_courses(self) -> list:
+        """Return the courses currently loaded in state (for display)."""
+        return self._state.get_input_state().get_courses()
+
+    def get_loaded_periods(self) -> list:
+        """Return the exam periods currently loaded in state (for display)."""
+        return self._state.get_input_state().get_periods()
+
+    def get_mapper(self):
+        """Return the ViewModelMapper for the GUI to build view models."""
+        return self._mapper
 
     # ------------------------------------------------------------------
     # Page navigation 

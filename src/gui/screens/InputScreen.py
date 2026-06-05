@@ -235,11 +235,12 @@ class InputScreen(Screen):
         left_col.addWidget(self._build_courses_card(), stretch=1)
 
         # Right column: reserved calendar editor placeholder.
-        right_col = QVBoxLayout()
-        right_col.addWidget(self._build_calendar_placeholder(), stretch=1)
+        self.right_col = QVBoxLayout()
+        self._placeholder = self._build_calendar_placeholder()
+        self.right_col.addWidget(self._placeholder, stretch=1)
 
         two_col_layout.addLayout(left_col, stretch=1)
-        two_col_layout.addLayout(right_col, stretch=1)
+        two_col_layout.addLayout(self.right_col, stretch=1)
         body.addLayout(two_col_layout)
 
         root.addLayout(body)
@@ -545,6 +546,15 @@ class InputScreen(Screen):
         self._set_running_mode(False)
         self._progress_label.setText("")
 
+    def _on_constraints_saved(self, updated_vms: list) -> None:
+        """Triggered when the user saves constraints in the calendar editor."""
+        # Push the edited periods into the model so generation uses them.
+        self._controller.update_exam_periods(updated_vms)
+        self._refresh_generate_button()
+        
+        # Debug print to verify it works:
+        print(f"InputScreen received {len(updated_vms)} updated periods from calendar.")
+
     # ── Controller signal handlers ─────────────────────────────────────
 
     def _on_schedule_found(self, dto) -> None:
@@ -614,41 +624,16 @@ class InputScreen(Screen):
     # ── File loading ───────────────────────────────────────────────────
 
     def _get_loaded_courses(self) -> list:
-        """Safely retrieve loaded courses from the controller's internal chain.
+        """Return the list of currently loaded courses."""
+        return self._controller.get_loaded_courses()
 
-        Traverses _facade -> _state -> get_input_state -> get_courses with
-        hasattr guards at every step so a future refactor degrades to an empty
-        list instead of crashing. The read is a pure display concern, so it
-        lives here rather than as a new public method on the application layer.
-        """
-        try:
-            if not hasattr(self._controller, "_facade"):
-                return []
-            facade = self._controller._facade
-            if not hasattr(facade, "_state"):
-                return []
-            input_state = facade._state.get_input_state()
-            if not hasattr(input_state, "get_courses"):
-                return []
-            return input_state.get_courses()
-        except Exception:
-            return []
+    def _get_loaded_periods(self) -> list:
+        """Return the list of currently loaded exam periods."""
+        return self._controller.get_loaded_periods()
 
     def _get_mapper(self):
-        """Safely retrieve the ViewModelMapper from the controller's facade.
-
-        Uses hasattr guards so a renamed attribute returns None rather than
-        raising. None means "skip rendering" and leave the widget empty.
-        """
-        try:
-            if not hasattr(self._controller, "_facade"):
-                return None
-            facade = self._controller._facade
-            if not hasattr(facade, "_mapper"):
-                return None
-            return facade._mapper
-        except Exception:
-            return None
+        """Return the mapper instance for converting domain objects to view models."""
+        return self._controller.get_mapper()
 
     def _handle_import_result(self, result, data_label: str) -> None:
         """Show an error dialog if the import failed."""
@@ -674,9 +659,6 @@ class InputScreen(Screen):
             self._refresh_generate_button()
 
             # Read the imported courses back and render them grouped by program.
-            # to_program_courses_vm keeps the widget decoupled from domain
-            # objects. The hasattr-guarded helpers make this a safe no-op if the
-            # controller structure ever changes.
             courses = self._get_loaded_courses()
             mapper = self._get_mapper()
             if courses and mapper is not None:
@@ -694,6 +676,23 @@ class InputScreen(Screen):
             self._periods_loaded = True
             self._mark_file_loaded(self._periods_row, result.loaded_count, "periods")
             self._refresh_generate_button()
+
+            # --- Inject the dynamic calendar editor ---
+            periods = self._get_loaded_periods()
+            mapper = self._get_mapper()
+            if periods and mapper:
+                period_vms = mapper.to_period_edit_vms(periods)
+                if period_vms:
+                    # Remove the static placeholder UI
+                    if self._placeholder:
+                        self._placeholder.deleteLater()
+                        self._placeholder = None
+                    
+                    # Insert the interactive calendar editor with all loaded periods
+                    from src.gui.widgets.CalendarEditorWidget import CalendarEditorWidget
+                    self._editor_widget = CalendarEditorWidget(period_vms)
+                    self._editor_widget.constraints_saved.connect(self._on_constraints_saved)
+                    self.right_col.insertWidget(0, self._editor_widget, stretch=1)
 
     # ── Program selection ──────────────────────────────────────────────
 
