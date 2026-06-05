@@ -1,7 +1,7 @@
 from datetime import date
 import pytest
 
-from src.models.enums import EvalType, Semester, Moed, Requirement
+from src.models.Enums import EvalType, Semester, Moed, Requirement
 from src.logic.SlotBuilder import SlotBuilder
 
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import List
 
-from logic.observers.IScheduleObserver import IScheduleObserver
-from models.ExamSchedule import ExamAssignment
+from src.logic.observers.IScheduleObserver import IScheduleObserver
+from src.models.ExamSchedule import ExamAssignment
 
 
 class _ScheduleSnapshot:

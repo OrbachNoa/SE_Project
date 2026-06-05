@@ -4,21 +4,21 @@ import sys
 import time
 
 from data.programs import programs_data
-from file_io.validators.FileValidator import validate_all_files
-from file_io.parsers.ParserFactory import ParserFactory
-from logic.SlotBuilder import SlotBuilder
-from logic.Scheduler import Scheduler
-from logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
-from logic.checkers.MoedOrderChecker import MoedOrderChecker
-from logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
-from logic.observers.StreamingScheduleObserver import StreamingScheduleObserver
-from file_io.validators.MaxProgramsValidator import MaxProgramsValidator
-from file_io.validators.ProgramExistenceValidator import ProgramExistenceValidator
-from file_io.writers.TextFileWriter import TextFileWriter
-from infrastructure.cache.DiskCacheRepository import DiskCacheRepository
-from infrastructure.cache.FileChangeDetector import FileChangeDetector
-from infrastructure.cache.CachedInputLoader import CachedInputLoader
-from file_io.validators.ValidatorPipeline import ValidatorPipeline
+from src.file_io.validators.FileValidator import validate_all_files
+from src.file_io.parsers.ParserFactory import ParserFactory
+from src.logic.SlotBuilder import SlotBuilder
+from src.logic.Scheduler import Scheduler
+from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
+from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
+from src.logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
+from src.logic.observers.StreamingScheduleObserver import StreamingScheduleObserver
+from src.file_io.validators.MaxProgramsValidator import MaxProgramsValidator
+from src.file_io.validators.ProgramExistenceValidator import ProgramExistenceValidator
+from src.file_io.writers.TextFileWriter import TextFileWriter
+from src.infrastructure.cache.DiskCacheRepository import DiskCacheRepository
+from src.infrastructure.cache.FileChangeDetector import FileChangeDetector
+from src.infrastructure.cache.CachedInputLoader import CachedInputLoader
+from src.file_io.validators.ValidatorPipeline import ValidatorPipeline
 
 
 

@@ -6,7 +6,7 @@ from multiprocessing import Queue, Process
 from multiprocessing.synchronize import Event
 from PyQt6.QtCore import QThread, pyqtSignal 
 
-from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 
 class SchedulerWorker(QThread):

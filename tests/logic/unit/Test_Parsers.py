@@ -1,10 +1,11 @@
 from datetime import date
 import pytest
 
-from src.parsers.fileParser import FileParser
-from src.parsers.courseParser import CoursesFileParser
-from src.parsers.dateParser import ExamPeriodsFileParser
-from src.parsers.programParser import ProgramsFileParser
+from src.file_io.parsers.FileParser import FileParser
+from src.file_io.parsers.CourseParser import CoursesFileParser
+from src.file_io.parsers.DateParser import ExamPeriodsFileParser
+from src.file_io.parsers.ProgramParser import ProgramsFileParser
+from src.file_io.parsers.ParserFactory import ParserFactory
 
 # The separator.
 SEP = "$$$$"
@@ -515,3 +516,82 @@ def test_periods_parser_accepts_different_moed_same_semester(tmp_path):
     )
     periods = ExamPeriodsFileParser().parse(str(f))
     assert len(periods) == 2
+
+
+# ---------------------------------------------------------------------------
+# ParserFactory tests - TC-PARS-025..029
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# TC-PARS-025: test that ParserFactory returns the supported file types.
+# ===========================================================================
+def test_parser_factory_supported_types():
+    # Act - Get the supported file types from the ParserFactory
+    supported = ParserFactory.supported_types()
+    
+    # Assert - check that the supported file types are correct
+    assert "courses" in supported
+    assert "periods" in supported
+    assert "programs" in supported
+
+# ===========================================================================
+# TC-PARS-026: test that ParserFactory creates a valid parser for a given file type.
+# ===========================================================================
+def test_parser_factory_create_valid():
+    # Act - Get the supported file types from the ParserFactory
+    parser = ParserFactory.create("courses")
+    
+    # Assert - check that the parser is of the correct type
+    assert isinstance(parser, CoursesFileParser)
+
+# ===========================================================================
+# TC-PARS-027: test that ParserFactory raises an error for an invalid file type.
+# ===========================================================================
+def test_parser_factory_create_invalid():
+    # Act + Assert - Try to create an invalid parser
+    with pytest.raises(ValueError) as exc:
+        ParserFactory.create("nonexistent")
+    assert "Unknown file type 'nonexistent'" in str(exc.value)
+
+# ===========================================================================
+# TC-PARS-028: test that ParserFactory raises an error when a duplicate parser type is registered.
+# ===========================================================================
+def test_parser_factory_register_duplicate():
+    # Act + Assert - Try to register a duplicate parser type
+    with pytest.raises(ValueError) as exc:
+        ParserFactory.register("courses", CoursesFileParser)
+    assert "already registered" in str(exc.value)
+
+# ===========================================================================
+# TC-PARS-029: test that ParserFactory can parse multiple files.
+# ===========================================================================
+def test_parser_factory_parse_files(tmp_path):
+    # Arrange - Create multiple files
+    courses_file = tmp_path / "courses.txt"
+    courses_file.write_text(
+        "Calculus 1\n"
+        "10101\n"
+        "Dr. Cohen\n"
+        "83101,2,FALL,Obligatory\n"
+        "Exam\n",
+        encoding="utf-8"
+    )
+    
+    programs_file = tmp_path / "programs.txt"
+    programs_file.write_text("83101, 83102\n", encoding="utf-8")
+    
+    mappings = {
+        "courses": str(courses_file),
+        "programs": str(programs_file),
+        "periods": None
+    }
+    
+    # Act - Parse the files
+    results = ParserFactory.parse_files(mappings)
+    
+    # Assert - Check that the files were parsed correctly
+    assert "courses" in results
+    assert "programs" in results
+    assert "periods" not in results
+    assert len(results["courses"]) == 1
+    assert results["programs"] == ["83101", "83102"]

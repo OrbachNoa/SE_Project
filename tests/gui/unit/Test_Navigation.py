@@ -1,6 +1,6 @@
 import pytest
-from src.application.schedule_result_state import ScheduleResultState
-from src.application.view_model_mapper import ViewModelMapper
+from src.application.state.ScheduleResultState import ScheduleResultState
+from src.application.services.ViewModelMapper import ViewModelMapper
 
 
 # ===========================================================================

@@ -9,23 +9,23 @@ for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from application.state.AppState import AppState
-from application.ApplicationFacade import ApplicationFacade
-from application.services.FileImportService import FileImportService
-from application.services.InputCacheService import InputCacheService
-from application.services.InputDataMerger import InputDataMerger
-from application.services.SchedulingService import SchedulingService
-from application.services.ScheduleExportService import ScheduleExportService
-from application.services.ViewModelMapper import ViewModelMapper
-from application.state.HybridScheduleResultState import HybridScheduleResultState
-from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
-from infrastructure.cache.DiskCacheRepository import DiskCacheRepository
-from infrastructure.cache.FileChangeDetector import FileChangeDetector
-from file_io.parsers.ParserFactory import ParserFactory
-from file_io.validators.ValidatorPipeline import ValidatorPipeline
+from src.application.state.AppState import AppState
+from src.application.ApplicationFacade import ApplicationFacade
+from src.application.services.FileImportService import FileImportService
+from src.application.services.InputCacheService import InputCacheService
+from src.application.services.InputDataMerger import InputDataMerger
+from src.application.services.SchedulingService import SchedulingService
+from src.application.services.ScheduleExportService import ScheduleExportService
+from src.application.services.ViewModelMapper import ViewModelMapper
+from src.application.state.HybridScheduleResultState import HybridScheduleResultState
+from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.infrastructure.cache.DiskCacheRepository import DiskCacheRepository
+from src.infrastructure.cache.FileChangeDetector import FileChangeDetector
+from src.file_io.parsers.ParserFactory import ParserFactory
+from src.file_io.validators.ValidatorPipeline import ValidatorPipeline
 from gui.app import App
-from application.AppController import AppController
-from file_io.writers.TextFileWriter import TextFileWriter
+from src.application.AppController import AppController
+from src.file_io.writers.TextFileWriter import TextFileWriter
 
 
 def build_controller() -> AppController:

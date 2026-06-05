@@ -1,6 +1,6 @@
 from typing import Callable, Dict, List
-from application.state.InputDataState import InputDataState
-from application.ImportMode import ImportMode
+from src.application.state.InputDataState import InputDataState
+from src.application.ImportBoundary import ImportMode
 
 
 class InputDataMerger:

@@ -1,9 +1,9 @@
 import pickle
 import pytest
 from pathlib import Path
-from src.data.DataCache import DataCache
-from src.data.DiskCacheRepository import DiskCacheRepository
-from src.data.FileChangeDetector import FileChangeDetector
+from src.infrastructure.cache.DataCache import DataCache
+from src.infrastructure.cache.DiskCacheRepository import DiskCacheRepository
+from src.infrastructure.cache.FileChangeDetector import FileChangeDetector
 
 # ===========================================================================
 # TC-DATA-001 : Test FileChangeDetector computes SHA-256 hash correctly

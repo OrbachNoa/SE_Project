@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch, ANY
-from src.application.scheduling_service import SchedulingService, _run_scheduler_process
-from src.models.enums import Semester
+from src.application.services.SchedulingService import SchedulingService, _run_scheduler_process
+from src.models.Enums import Semester
 
 # ===========================================================================
 # TC-SCHED-SVC-001 : Test that build_slots instantiates SlotBuilder and builds slots correctly
@@ -25,10 +25,10 @@ def test_build_slots(make_course, make_period, make_program_entry, mock_reposito
 # ===========================================================================
 # TC-SCHED-SVC-002 : Test that generate_async starts background process and starts the QThread worker.
 # ===========================================================================
-@patch("src.application.scheduling_service.Process")
-@patch("src.application.scheduling_service.Queue")
-@patch("src.application.scheduling_service.Event")
-@patch("src.application.scheduling_service.SchedulerWorker")
+@patch("src.application.services.SchedulingService.Process")
+@patch("src.application.services.SchedulingService.Queue")
+@patch("src.application.services.SchedulingService.Event")
+@patch("src.application.services.SchedulingService.SchedulerWorker")
 def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cls, make_course, make_period, mock_repository):
     # Arrange
     service = SchedulingService(mock_repository)
@@ -91,7 +91,7 @@ def test_cancel_with_active_worker(mock_repository):
 # ===========================================================================
 # TC-SCHED-SVC-005: Test that _run_scheduler_process helper instantiates SchedulerProcessRunner and calls run.
 # ===========================================================================
-@patch("src.application.scheduling_service.SchedulerProcessRunner")
+@patch("src.application.services.SchedulingService.SchedulerProcessRunner")
 def test_run_scheduler_process_helper(mock_runner_cls):
     # Arrange
     mock_runner = MagicMock()
@@ -150,10 +150,10 @@ def test_build_slots_raises_value_error_for_orphan_course(make_course, make_peri
 # ===========================================================================
 # TC-SCHED-SVC-008: Test that generate_async uses the DEFAULT_MAX_RESULTS constant.
 # ===========================================================================
-@patch("src.application.scheduling_service.Process")
-@patch("src.application.scheduling_service.Queue")
-@patch("src.application.scheduling_service.Event")
-@patch("src.application.scheduling_service.SchedulerWorker")
+@patch("src.application.services.SchedulingService.Process")
+@patch("src.application.services.SchedulingService.Queue")
+@patch("src.application.services.SchedulingService.Event")
+@patch("src.application.services.SchedulingService.SchedulerWorker")
 def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mock_queue, mock_process_cls, make_course, make_period, mock_repository):
     # Arrange
     service = SchedulingService(mock_repository)

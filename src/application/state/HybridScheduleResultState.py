@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from typing import List
 
-from application.dto.SchedulDTO import ScheduleDTO
-from application.state.ScheduleResultState import ScheduleResultState
-from infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.application.dto.ScheduleDTO import ScheduleDTO
+from src.application.state.ScheduleResultState import ScheduleResultState
+from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 # Globally defined rendering frame block limit size
 WINDOW_SIZE = 10_000

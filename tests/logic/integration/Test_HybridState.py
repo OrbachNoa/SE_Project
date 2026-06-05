@@ -1,5 +1,5 @@
 import pytest
-from src.application.HybridScheduleResultState import HybridScheduleResultState
+from src.application.state.HybridScheduleResultState import HybridScheduleResultState
 
 # ===========================================================================
 # TC-HYB-STA-001: Verify that HybridScheduleResultState initializes correctly.

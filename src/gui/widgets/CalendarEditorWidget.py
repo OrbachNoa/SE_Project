@@ -5,8 +5,8 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QMes
 from PyQt6.QtCore import Qt
 
 from gui.widgets.CalendarWidget import CalendarWidget
-from application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
-from application.viewmodels.PeriodEditRequest import PeriodEditRequest
+from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
+from src.application.viewmodels.PeriodEditRequest import PeriodEditRequest
 
 
 class CalendarEditorWidget(QWidget):

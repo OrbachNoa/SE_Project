@@ -4,15 +4,13 @@ from typing import List, Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from application.ImportMode import ImportMode
-from application.ImportResult import ImportResult
-from application.ImportRequest import ImportRequest
-from application.viewmodels.ScheduleViewModel import ScheduleViewModel
+from src.application.ImportBoundary import ImportMode, ImportRequest, ImportResult
+from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
 
 if TYPE_CHECKING:
-    from application.ApplicationFacade import ApplicationFacade
-    from infrastructure.concurrency.SchedulerWorker import SchedulerWorker
-    from application.dto.SchedulDTO import ScheduleDTO
+    from src.application.ApplicationFacade import ApplicationFacade
+    from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
+    from src.application.dto.ScheduleDTO import ScheduleDTO
 
 
 class AppController(QObject):

@@ -2,7 +2,7 @@ from pathlib import Path
 import pytest
 
 # Import the main pipeline function.
-from src.main import run_pipeline
+from src.entrypoints.main import run_pipeline
 
 # Set the path to the folder where the test files (fixtures) are located.
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
