@@ -114,29 +114,33 @@ tests/
 ├── logic/
 │   ├── unit/
 │   │   ├── Test_Domain.py
-│   │   ├── Test_Boundary_DTOs.py
+│   │   ├── Test_BoundaryDTOs.py
 │   │   ├── Test_Checkers.py
-│   │   ├── Test_Slot_Builder.py
+│   │   ├── Test_SlotBuilder.py
 │   │   ├── Test_Validators.py
 │   │   ├── Test_Parsers.py
 │   │   ├── Test_Observers.py
-│   │   ├── Test_Data_Cache.py
-│   │   └── Test_Scheduler_Engine.py
+│   │   ├── Test_DataCache.py
+│   │   ├── Test_ViewModelMapper.py
+│   │   └── Test_SchedulerEngine.py
 │   └── integration/
-│       ├── Test_Application_State.py
-│       ├── Test_Scheduling_Service.py
+│       ├── Test_ApplicationState.py
+│       ├── Test_SchedulingService.py
 │       ├── Test_Behavioural.py
 │       ├── Test_Integration.py
 │       ├── Test_Main.py
 │       └── Test_Output.py
 ├── gui/
 │   ├── unit/
-│   │   ├── Test_Screen_Router.py
-│   │   ├── Test_App_Controller.py
+│   │   ├── Test_ScreenRouter.py
+│   │   ├── Test_AppController.py
+│   │   ├── Test_InputScreen.py
+│   │   ├── Test_OutputScreen.py
+│   │   ├── Test_ProgramSelector.py
 │   │   └── Test_Navigation.py
 │   └── integration/
 │       ├── Test_GUI.py
-│       ├── Test_GUI_Integration.py
+│       ├── Test_GUIIntegration.py
 │       └── Test_Workers.py
 └── performance/
     └── Test_Performance.py
