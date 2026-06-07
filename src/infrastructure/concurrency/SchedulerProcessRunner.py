@@ -23,13 +23,15 @@ class SchedulerProcessRunner:
         checkers: List[IConflictChecker], 
         queue: Queue, 
         cancel_event: Event, 
-        max_results: int
+        max_results: int,
+        batch_size: int
     ) -> None:
         self._slots = slots
         self._checkers = checkers
         self._queue = queue
         self._cancel_event = cancel_event
         self._max_results = max_results
+        self._batch_size = batch_size
 
     def run(self) -> None:
         """Executes the search safely because we must catch crashes and report them to the main app."""
@@ -49,7 +51,7 @@ class SchedulerProcessRunner:
 
     def _create_observer(self) -> QueueScheduleObserver:
         """Creates the queue adapter because the scheduler needs a way to talk to the outside world."""
-        return QueueScheduleObserver(self._queue, self._cancel_event)
+        return QueueScheduleObserver(self._queue, self._cancel_event, self._batch_size)
 
     def _create_scheduler(self) -> Scheduler:
         """Creates the core engine because it contains the actual backtracking logic."""
