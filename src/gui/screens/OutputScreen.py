@@ -4,10 +4,9 @@ Output screen for the exam scheduler.
 This screen shows the generated schedules one at a time. It owns two
 navigation bars and a calendar area:
 
-    Solution bar : moves between individual schedules inside the page that is
-                   currently loaded in memory.
-    Page bar     : moves between 10 000 result pages stored in SQLite. It only
-                   appears when the full result set is larger than one page.
+    Solution bar : moves between page loads of 10,000 schedules as well as
+                   individual schedules inside the page that is currently
+                   loaded in memory.
     Calendar     : the area where the currently selected schedule is drawn.
 
 The screen also lets the user save the schedule that is currently on screen to
@@ -24,10 +23,14 @@ from gui.widgets.CalendarWidget import CalendarWidget
 
 from PyQt6.QtWidgets import (
     QLabel, QMessageBox, QVBoxLayout, QHBoxLayout, QPushButton,
-    QFrame, QScrollArea, QWidget, QFileDialog,
+    QFrame, QScrollArea, QWidget,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence, QTextDocument, QFont
+
+from gui.widgets.HeaderWidget import HeaderWidget
+from gui.widgets.Common import create_divider, prompt_save_file
+from gui.widgets.SolutionBarWidget import SolutionBarWidget
 
 from gui.screen import Screen
 
@@ -37,13 +40,7 @@ from gui.screen import Screen
 _PAGE_WINDOW = 10_000
 
 
-def _divider(parent=None) -> QFrame:
-    """Return a thin horizontal line used to separate the toolbars."""
-    line = QFrame(parent)
-    line.setObjectName("divider")
-    line.setFrameShape(QFrame.Shape.HLine)
-    line.setFixedHeight(1)
-    return line
+# Shared helper create_divider is imported from gui.widgets.Common
 
 
 class OutputScreen(Screen):
@@ -81,7 +78,6 @@ class OutputScreen(Screen):
         # Build the screen top to bottom.
         self._build_header(root)
         self._build_solution_bar(root)
-        self._build_page_bar(root)
         self._build_calendar_area(root)
 
         # Show the initial empty state before any schedule is loaded.
@@ -98,180 +94,24 @@ class OutputScreen(Screen):
         self._controller.total_count_updated.connect(self._on_total_count_updated)
 
     def _build_header(self, root: QVBoxLayout) -> None:
-        """
-        Build the green branding bar at the top of the screen.
-
-        It is the same bar as the input screen so the two screens feel like one
-        product. The only difference is the breadcrumb on the right, which is
-        inverted here to show that the user is now on the output step.
-        """
-        header = QFrame()
-        header.setObjectName("header")
-        header.setFixedHeight(70)
-        header.setStyleSheet("QFrame#header { background: #143D30; }")
-
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(28, 0, 28, 0)
-        layout.setSpacing(12)
-
-        # Calendar logo shown directly on the green bar, with no tile behind it.
-        # A larger glyph keeps it readable against the dark background.
-        icon_glyph = QLabel("\U0001F4C5")  # calendar emoji
-        icon_glyph.setStyleSheet("font-size: 30px; background: transparent;")
-        icon_glyph.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-
-        # App title with a heavier weight and a little letter spacing so it
-        # looks more polished than the default label font.
-        title = QLabel("Exam Scheduler")
-        title.setObjectName("app-title")
-        title_font = QFont("Segoe UI Semibold", 17)
-        title_font.setWeight(QFont.Weight.DemiBold)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.4)
-        title.setFont(title_font)
-        title.setStyleSheet("color: #FFFFFF; background: transparent;")
-        subtitle = QLabel("Generated schedules")
-        subtitle.setObjectName("app-subtitle")
-        subtitle.setStyleSheet("color: rgba(255,255,255,0.6); background: transparent;")
-
-        # Wrap the title and subtitle as a tight, vertically centered group so
-        # they line up with the emoji instead of stretching the full bar height.
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
-        title_col.addStretch()
-        title_col.addWidget(title)
-        title_col.addWidget(subtitle)
-        title_col.addStretch()
-
-        layout.addWidget(icon_glyph, alignment=Qt.AlignmentFlag.AlignVCenter)
-        layout.addLayout(title_col)
-        layout.addStretch()
-
-        # Breadcrumb on the right. Input is dimmed, Output is the active step.
-        crumb_input = QLabel("Input")
-        crumb_input.setStyleSheet("color: #475569; background: transparent;")
-        crumb_input.setEnabled(False)
-        crumb_sep = QLabel("\u203a")
-        crumb_sep.setStyleSheet("color: #475569; background: transparent;")
-        crumb_output = QLabel("Output")
-        crumb_output.setStyleSheet("color: #5BA4D4; font-weight: 600; background: transparent;")
-
-        layout.addWidget(crumb_input)
-        layout.addWidget(crumb_sep)
-        layout.addWidget(crumb_output)
-
+        """Build the gold branding bar with active output breadcrumb at the top of the screen."""
+        header = HeaderWidget(active_step="output", parent=self)
         root.addWidget(header)
 
     def _build_solution_bar(self, root: QVBoxLayout) -> None:
-        """
-        Build the bar that moves between schedules inside the current page.
-
-        Back and Export sit on the left. The previous, counter and next
-        controls sit on the right and step through the schedules one by one.
-        """
-        nav_bar = QFrame()
-        nav_bar.setObjectName("nav-bar")
-        nav_bar.setFixedHeight(52)
-        layout = QHBoxLayout(nav_bar)
-        layout.setContentsMargins(20, 0, 20, 0)
-        layout.setSpacing(8)
-
-        # Back returns to the input screen using the router history. The
-        # Alt+Left shortcut makes it reachable from the keyboard as well.
-        self._back_btn = QPushButton("\u2190 Back")
-        self._back_btn.setObjectName("btn-ghost")
-        self._back_btn.setShortcut(QKeySequence("Alt+Left"))
-        self._back_btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self._back_btn.setToolTip("Back to input screen (Alt+Left)")
-        self._back_btn.setFixedHeight(36)
-        self._back_btn.clicked.connect(self._on_back)
-        layout.addWidget(self._back_btn)
-
-        # Export saves the schedule on screen to a PDF. It is painted sky blue
-        # with a download glyph so it stands out clearly on the white bar.
-        self._export_btn = QPushButton("\u2b07  Export PDF")
-        self._export_btn.setObjectName("btn-export")
-        self._export_btn.setToolTip("Save the current schedule as a PDF file")
-        self._export_btn.setFixedHeight(36)
-        self._export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._export_btn.setStyleSheet(
-            "QPushButton#btn-export {"
-            "  background-color: #3E89BD; color: #FFFFFF; border: none;"
-            "  border-radius: 8px; padding: 0 18px; font-weight: 600; font-size: 13px;"
-            "}"
-            "QPushButton#btn-export:hover { background-color: #347AA8; }"
-            "QPushButton#btn-export:disabled { background-color: #CBD5E1; color: #F1F5F9; }"
-        )
-        self._export_btn.clicked.connect(self._on_export_pdf)
-        layout.addWidget(self._export_btn)
-
-        layout.addStretch()
-
-        # Previous schedule. It is disabled at index 0 so it can never go below.
-        self._prev_btn = QPushButton("\u25c0")
-        self._prev_btn.setObjectName("btn-secondary")
-        self._prev_btn.setToolTip("Previous solution")
-        self._prev_btn.setFixedSize(36, 36)
-        self._prev_btn.clicked.connect(self.on_prev)
-
-        # Shows "Solution N / Total", or "No solutions" when nothing is loaded.
-        self._counter_label = QLabel()
-        self._counter_label.setObjectName("counter-label")
-        self._counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # Next schedule. It is disabled on the last index of the window.
-        self._next_btn = QPushButton("\u25b6")
-        self._next_btn.setObjectName("btn-secondary")
-        self._next_btn.setToolTip("Next solution")
-        self._next_btn.setFixedSize(36, 36)
-        self._next_btn.clicked.connect(self.on_next)
-
-        layout.addWidget(self._prev_btn)
-        layout.addWidget(self._counter_label)
-        layout.addWidget(self._next_btn)
-
-        root.addWidget(nav_bar)
-        root.addWidget(_divider())
-
-    def _build_page_bar(self, root: QVBoxLayout) -> None:
-        """
-        Build the bar that moves between 10 000 result pages.
-
-        It is hidden whenever the whole result set fits in a single page and
-        only appears once the repository reports more than one page.
-        """
-        self._page_bar = QFrame()
-        self._page_bar.setObjectName("nav-bar")
-        self._page_bar.setFixedHeight(44)
-        layout = QHBoxLayout(self._page_bar)
-        layout.setContentsMargins(20, 0, 20, 0)
-        layout.setSpacing(8)
-
-        self._prev_page_btn = QPushButton("\u2190 Prev 10K")
-        self._prev_page_btn.setObjectName("btn-ghost")
-        self._prev_page_btn.setFixedHeight(30)
-        self._prev_page_btn.clicked.connect(self._on_prev_page)
-        layout.addWidget(self._prev_page_btn)
-
-        layout.addStretch()
-
-        # Shows "Page X / Y . NNN total".
-        self._page_label = QLabel()
-        self._page_label.setObjectName("counter-label")
-        self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self._page_label)
-
-        layout.addStretch()
-
-        self._next_page_btn = QPushButton("Next 10K \u2192")
-        self._next_page_btn.setObjectName("btn-ghost")
-        self._next_page_btn.setFixedHeight(30)
-        self._next_page_btn.clicked.connect(self._on_next_page)
-        layout.addWidget(self._next_page_btn)
-
-        # Hidden until _refresh_page_bar decides there is more than one page.
-        self._page_bar.setVisible(False)
-        root.addWidget(self._page_bar)
-        root.addWidget(_divider())
+        """Build the reusable solution navigation bar."""
+        from gui.widgets.SolutionBarWidget import SolutionBarWidget
+        self.solution_bar = SolutionBarWidget(self)
+        self.solution_bar.back_btn.clicked.connect(self._on_back)
+        self.solution_bar.export_btn.clicked.connect(self._on_export_pdf)
+        self.solution_bar.prev_btn.clicked.connect(self.on_prev)
+        self.solution_bar.next_btn.clicked.connect(self.on_next)
+        self.solution_bar.first_page_btn.clicked.connect(self._on_first_page)
+        self.solution_bar.prev_page_btn.clicked.connect(self._on_prev_page)
+        self.solution_bar.next_page_btn.clicked.connect(self._on_next_page)
+        self.solution_bar.last_page_btn.clicked.connect(self._on_last_page)
+        root.addWidget(self.solution_bar)
+        root.addWidget(create_divider())
 
     def _build_calendar_area(self, root: QVBoxLayout) -> None:
         """
@@ -318,53 +158,42 @@ class OutputScreen(Screen):
         root.addLayout(body)
 
     def _refresh_counter(self) -> None:
-        """Update the solution counter and refresh the page bar to match it."""
+        """Update the solution counter and refresh the page button states."""
         if self._total == 0:
-            self._counter_label.setText("No solutions")
+            self.solution_bar.counter_label.setText("No solutions")
         else:
-            self._counter_label.setText(
-                f"Solution  {self._current_index + 1} / {self._total}"
+            self.solution_bar.counter_label.setText(
+                f"Solution {self._current_index + 1} / {self._total}"
             )
 
         # Keep the arrows strictly inside the bounds of the current window.
-        self._prev_btn.setEnabled(self._current_index > 0)
-        self._next_btn.setEnabled(self._current_index < self._total - 1)
+        self.solution_bar.prev_btn.setEnabled(self._current_index > 0)
+        self.solution_bar.next_btn.setEnabled(self._current_index < self._total - 1)
 
         # Export only makes sense when there is a schedule on screen.
-        self._export_btn.setEnabled(self._total > 0)
+        self.solution_bar.export_btn.setEnabled(self._total > 0)
 
         self._refresh_page_bar()
 
     def _refresh_page_bar(self) -> None:
-        """
-        Show or hide the page bar and update its label and button states.
-
-        The Next page button is only enabled once the target page holds a full
-        window of schedules in SQLite. Opening a page that is still being
-        written causes a freeze, because the read waits for the pending write,
-        and an error when the page is still empty. Keeping the button disabled
-        while the page fills avoids both problems. It enables itself again once
-        total_count_updated reports a high enough sqlite_count.
-        """
+        """Update the page navigation button visibility and enabled states."""
         has_multiple_pages = self._total_pages > 1
-        self._page_bar.setVisible(has_multiple_pages)
+        self.solution_bar.pages_group.setVisible(has_multiple_pages)
         if not has_multiple_pages:
             return
 
-        total_text = f"{self._total_found:,}"
-        self._page_label.setText(
-            f"Page {self._current_page + 1} / {self._total_pages}"
-            f"  \u00b7  {total_text} total"
-        )
-        self._prev_page_btn.setEnabled(self._current_page > 0)
+        self.solution_bar.page_label.setText(f"Page {self._current_page + 1} / {self._total_pages}")
+        self.solution_bar.first_page_btn.setEnabled(self._current_page > 0)
+        self.solution_bar.prev_page_btn.setEnabled(self._current_page > 0)
 
         # Work out whether the next page is already fully written to disk.
         next_page_index = self._current_page + 1
         rows_needed_on_disk = next_page_index * _PAGE_WINDOW
         next_page_is_ready = self._sqlite_count >= rows_needed_on_disk
-        self._next_page_btn.setEnabled(
-            self._current_page < self._total_pages - 1 and next_page_is_ready
-        )
+        
+        has_next = self._current_page < self._total_pages - 1
+        self.solution_bar.next_page_btn.setEnabled(has_next and next_page_is_ready)
+        self.solution_bar.last_page_btn.setEnabled(has_next and next_page_is_ready)
 
     def _on_total_count_updated(self, total: int) -> None:
         """
@@ -404,6 +233,27 @@ class OutputScreen(Screen):
         """Load the previous page, reset to its first schedule and redraw."""
         target = self._current_page - 1
         if target < 0:
+            return
+        self._controller.load_page(target)
+        self._sync_page_info()
+        self._current_index = 0
+        self._show_current()
+        self._refresh_counter()
+
+    def _on_first_page(self) -> None:
+        """Load the first page, reset to its first schedule and redraw."""
+        if self._current_page == 0:
+            return
+        self._controller.load_page(0)
+        self._sync_page_info()
+        self._current_index = 0
+        self._show_current()
+        self._refresh_counter()
+
+    def _on_last_page(self) -> None:
+        """Load the last page, reset to its first schedule and redraw."""
+        target = self._total_pages - 1
+        if target < 0 or self._current_page == target:
             return
         self._controller.load_page(target)
         self._sync_page_info()
@@ -455,9 +305,7 @@ class OutputScreen(Screen):
 
         # Ask the user where to save, suggesting a readable default file name.
         default_name = f"exam_schedule_solution_{self._current_index + 1}.pdf"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save schedule as PDF", default_name, "PDF files (*.pdf)"
-        )
+        path = prompt_save_file(self, "Save schedule as PDF", default_name, "PDF files (*.pdf)")
         if not path:
             # The user closed the dialog without choosing a file.
             return
@@ -521,7 +369,7 @@ class OutputScreen(Screen):
 
             rows_html.append(
                 f"<tr bgcolor='{row_background}'>"
-                f"<td width='{width_date}' style='color:#143D30; font-weight:bold;'>{date_text}</td>"
+                f"<td width='{width_date}' style='color:#3E352F; font-weight:bold;'>{date_text}</td>"
                 f"<td width='{width_course}' style='font-weight:bold;'>{course_text}</td>"
                 f"<td width='{width_details}' style='color:#64748B;'>{details_text}</td>"
                 f"<td width='{width_programs}' style='color:#334155;'>{programs_text}</td>"
@@ -535,14 +383,14 @@ class OutputScreen(Screen):
         # body rows follow with the data assembled above.
         return (
             "<html><body>"
-            "<h1 style='color:#143D30; margin:0 0 2pt 0;'>Exam Schedule</h1>"
+            "<h1 style='color:#3E352F; margin:0 0 2pt 0;'>Exam Schedule</h1>"
             f"<p style='color:#64748B; margin:0 0 14pt 0;'>{solution_line} &nbsp;\u00b7&nbsp; {exam_count} exams</p>"
             "<table width='100%' cellspacing='0' cellpadding='7'>"
-            "<tr bgcolor='#143D30'>"
-            f"<td width='{width_date}' style='color:#FFFFFF; font-weight:bold;'>Date</td>"
-            f"<td width='{width_course}' style='color:#FFFFFF; font-weight:bold;'>Course</td>"
-            f"<td width='{width_details}' style='color:#FFFFFF; font-weight:bold;'>Details</td>"
-            f"<td width='{width_programs}' style='color:#FFFFFF; font-weight:bold;'>Programs</td>"
+            "<tr bgcolor='#d4b483'>"
+            f"<td width='{width_date}' style='color:#3E352F; font-weight:bold;'>Date</td>"
+            f"<td width='{width_course}' style='color:#3E352F; font-weight:bold;'>Course</td>"
+            f"<td width='{width_details}' style='color:#3E352F; font-weight:bold;'>Details</td>"
+            f"<td width='{width_programs}' style='color:#3E352F; font-weight:bold;'>Programs</td>"
             "</tr>"
             f"{''.join(rows_html)}"
             "</table>"
@@ -621,7 +469,7 @@ class OutputScreen(Screen):
         self._sync_page_info()
         self._show_current()
         self._refresh_counter()
-        self._back_btn.setFocus()
+        self.solution_bar.back_btn.setFocus()
 
     def on_leave(self) -> None:
         """Called by the router when the user navigates away from this screen."""

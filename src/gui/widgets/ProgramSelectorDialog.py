@@ -25,7 +25,7 @@ class _ProgramCard(QFrame):
     """A single clickable program card with a selected / unselected state."""
 
     SELECTED_STYLE = (
-        "QFrame#prog-card { background-color: #EAF4FA; border: 2px solid #3E89BD;"
+        "QFrame#prog-card { background-color: #FAF5EC; border: 2px solid #3396ad;"
         " border-radius: 12px; }"
     )
     DEFAULT_STYLE = (
@@ -72,7 +72,7 @@ class _ProgramCard(QFrame):
         if self._selected:
             self._box.setText("✓")
             self._box.setStyleSheet(
-                "color: #FFFFFF; background: #3E89BD; border: 2px solid #3E89BD;"
+                "color: #FFFFFF; background: #3396ad; border: 2px solid #3396ad;"
                 "border-radius: 6px; font-weight: bold; font-size: 12px;"
             )
         else:
@@ -87,8 +87,8 @@ class _ProgramCard(QFrame):
         self.setStyleSheet(self.SELECTED_STYLE if value else self.DEFAULT_STYLE)
         self._apply_box_style()
         if value:
-            self._name_lbl.setStyleSheet("color: #143D30; font-size: 13px; font-weight: 700; background: transparent; border: none;")
-            self._id_lbl.setStyleSheet("color: #3E89BD; font-size: 11px; font-weight: 600; background: transparent; border: none;")
+            self._name_lbl.setStyleSheet("color: #3E352F; font-size: 13px; font-weight: 700; background: transparent; border: none;")
+            self._id_lbl.setStyleSheet("color: #3396ad; font-size: 11px; font-weight: 600; background: transparent; border: none;")
         else:
             self._name_lbl.setStyleSheet("color: #334155; font-size: 13px; font-weight: 600; background: transparent; border: none;")
             self._id_lbl.setStyleSheet("color: #64748B; font-size: 11px; background: transparent; border: none;")
@@ -110,27 +110,27 @@ QFrame#dialog-card {
     border-radius: 18px;
 }
 QLabel#dialog-title {
-    color: #143D30;
+    color: #3E352F;
     font-size: 17px;
     font-weight: 700;
     background: transparent;
 }
 QLabel#dialog-hint {
-    color: #64748B;
+    color: #8A7E72;
     font-size: 12px;
     background: transparent;
 }
 QLabel#dialog-counter {
-    color: #64748B;
+    color: #3E352F;
     font-size: 12px;
     font-weight: 600;
-    background: #F1F5F9;
+    background: #FAF5EC;
     border-radius: 11px;
     padding: 4px 12px;
 }
 QPushButton#dialog-select {
-    background-color: #143D30;
-    color: #FFFFFF;
+    background-color: #3396ad;
+    color: #FDFBF7;
     border: none;
     border-radius: 10px;
     padding: 10px 26px;
@@ -138,7 +138,7 @@ QPushButton#dialog-select {
     font-weight: 600;
 }
 QPushButton#dialog-select:hover {
-    background-color: #0F2D23;
+    background-color: #297B8F;
 }
 QPushButton#dialog-cancel {
     background-color: #FFFFFF;

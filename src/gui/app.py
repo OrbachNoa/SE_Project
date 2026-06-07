@@ -9,26 +9,26 @@ SCREEN_OUTPUT = "output"
 APP_STYLESHEET = """
 /* ── Base widget defaults ─────────────────────────────────────────── */
 QWidget {
-    background-color: #FAFAFA;
-    color: #143D30;
+    background-color: #FDFBF7;
+    color: #3E352F;
     font-family: "Segoe UI", sans-serif;
     font-size: 13px;
 }
 
-/* ── Header bar — dark green Bar-Ilan brand strip ─────────────────── */
+/* ── Header bar — Gold brand strip ─────────────────── */
 QFrame#header {
-    background-color: #143D30;
+    background-color: #d4b483;
     border: none;
 }
 QLabel#app-title {
-    color: #F8FAFC;
+    color: #3E352F;
     font-size: 18px;
     font-weight: 700;
     background: transparent;
     letter-spacing: 0.5px;
 }
 QLabel#app-subtitle {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(62, 53, 47, 0.7);
     font-size: 12px;
     background: transparent;
 }
@@ -41,31 +41,31 @@ QFrame#card {
     padding: 4px;
 }
 QLabel#card-title {
-    color: #143D30;
+    color: #3E352F;
     font-size: 13px;
     font-weight: 600;
     background: transparent;
 }
 QLabel#card-hint {
-    color: #94A3B8;
+    color: #9E948A;
     font-size: 11px;
     background: transparent;
 }
 
 /* ── Status pills — inline state indicators ───────────────────────── */
 QLabel#status-ok {
-    color: #14633F;
+    color: #16A34A;
     font-size: 12px;
     font-weight: 600;
     background: transparent;
 }
 QLabel#status-pending {
-    color: #94A3B8;
+    color: #9E948A;
     font-size: 12px;
     background: transparent;
 }
 QLabel#status-warning {
-    color: #D97706;
+    color: #EA580C;
     font-size: 12px;
     background: transparent;
 }
@@ -85,7 +85,7 @@ QPushButton {
     outline: none;
 }
 QPushButton#btn-primary {
-    background-color: #14633F;
+    background-color: #3396ad;
     color: #FFFFFF;
     border: none;
     border-radius: 8px;
@@ -94,26 +94,26 @@ QPushButton#btn-primary {
     padding: 10px 20px;
 }
 QPushButton#btn-primary:hover {
-    background-color: #0F2D23;
+    background-color: #297B8F;
 }
 QPushButton#btn-primary:disabled {
     background-color: #E2E8F0;
-    color: #94A3B8;
+    color: #9E948A;
 }
 QPushButton#btn-secondary {
     background-color: #FFFFFF;
-    color: #143D30;
-    border: 1px solid #CBD5E1;
+    color: #3E352F;
+    border: 1px solid #D5CFC9;
     border-radius: 8px;
     padding: 6px 14px;
 }
 QPushButton#btn-secondary:hover {
-    background-color: #F1F5F9;
-    border-color: #94A3B8;
+    background-color: #FDFBF7;
+    border-color: #3396ad;
 }
 QPushButton#btn-secondary:disabled {
-    color: #CBD5E1;
-    border-color: #E5E7EB;
+    color: #D5CFC9;
+    border-color: #E2E8F0;
 }
 QPushButton#btn-danger {
     background-color: #FFFFFF;
@@ -126,31 +126,31 @@ QPushButton#btn-danger:hover {
 }
 QPushButton#btn-ghost {
     background-color: transparent;
-    color: #64748B;
+    color: #8A7E72;
     border: none;
     font-size: 13px;
 }
 QPushButton#btn-ghost:hover {
-    color: #143D30;
-    background-color: #F1F5F9;
+    color: #3396ad;
+    background-color: #FDFBF7;
 }
 
-/* ── Radio buttons — sky-blue accent when selected ────────────────── */
+/* ── Radio buttons — Teal accent when selected ────────────────── */
 QRadioButton {
     background: transparent;
-    color: #374151;
+    color: #3E352F;
     spacing: 6px;
 }
 QRadioButton::indicator {
     width: 15px;
     height: 15px;
     border-radius: 8px;
-    border: 2px solid #CBD5E1;
+    border: 2px solid #D5CFC9;
     background: #FFFFFF;
 }
 QRadioButton::indicator:checked {
-    border-color: #3E89BD;
-    background: #3E89BD;
+    border-color: #3396ad;
+    background: #3396ad;
 }
 
 /* ── Progress bar — green fill on light track ─────────────────────── */
@@ -162,7 +162,7 @@ QProgressBar {
     text-align: center;
 }
 QProgressBar::chunk {
-    background-color: #14633F;
+    background-color: #16A34A;
     border-radius: 4px;
 }
 
@@ -179,11 +179,11 @@ QFrame#nav-bar {
     border-bottom: 1px solid #E2E8F0;
 }
 QLabel#counter-label {
-    color: #143D30;
+    color: #3E352F;
     font-size: 14px;
     font-weight: 600;
     background: transparent;
-    min-width: 140px;
+    min-width: 340px;
 }
 
 /* ── Content area — main display panel on the output screen ───────── */
@@ -193,12 +193,12 @@ QFrame#content-area {
     border-radius: 12px;
 }
 QLabel#content-placeholder {
-    color: #94A3B8;
+    color: #9E948A;
     font-size: 14px;
     background: transparent;
 }
 QLabel#schedule-text {
-    color: #143D30;
+    color: #3E352F;
     font-size: 12px;
     font-family: "Consolas", "Courier New", monospace;
     background: transparent;
@@ -208,9 +208,9 @@ QLabel#schedule-text {
    dark background while keeping the dark text color, producing an unreadable
    black-on-black rectangle. */
 QToolTip {
-    background-color: #143D30;
-    color: #F8FAFC;
-    border: 1px solid #0F2D23;
+    background-color: #3E352F;
+    color: #FDFBF7;
+    border: 1px solid #2B2521;
     border-radius: 6px;
     padding: 6px 10px;
     font-size: 12px;
@@ -232,7 +232,7 @@ QScrollBar::handle:vertical {
     min-height: 20px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #94A3B8;
+    background: #9E948A;
 }
 QScrollBar::add-line:vertical,
 QScrollBar::sub-line:vertical {
@@ -246,7 +246,7 @@ QGroupBox {
     border-radius: 10px;
     margin-top: 8px;
     font-weight: 600;
-    color: #143D30;
+    color: #3E352F;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
@@ -262,21 +262,21 @@ QFrame#action-bar {
 
 /* ── Info bar — solution metadata strip on the output screen ──────── */
 QFrame#info-bar {
-    background-color: #F8FAFC;
+    background-color: #FDFBF7;
     border-bottom: 1px solid #E2E8F0;
 }
 
 /* ── Status badges — neutral and success variants ─────────────────── */
 QLabel#badge {
     background-color: #F1F5F9;
-    color: #64748B;
+    color: #8A7E72;
     border-radius: 10px;
     padding: 2px 9px;
     font-size: 11px;
 }
 QLabel#badge-ok {
-    background-color: #E5F0EB;
-    color: #14633F;
+    background-color: #E8F5E9;
+    color: #16A34A;
     border-radius: 10px;
     padding: 2px 9px;
     font-size: 11px;

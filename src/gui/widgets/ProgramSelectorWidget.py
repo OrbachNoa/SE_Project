@@ -27,7 +27,7 @@ class _ProgramRow(QWidget):
 
     # Bar-Ilan sky-blue selection, neutral default, slate hover
     SELECTED_STYLE = (
-        "background-color: #EAF4FA; border: 1px solid #3E89BD; "
+        "background-color: #FAF5EC; border: 1px solid #3396ad; "
         "border-radius: 8px; padding: 0px;"
     )
     DEFAULT_STYLE = (
@@ -82,10 +82,10 @@ class _ProgramRow(QWidget):
         self._selected = value
         if value:
             self.setStyleSheet(self.SELECTED_STYLE)
-            self._id_label.setStyleSheet("color: #3E89BD; font-weight: 600; background: transparent;")
-            self._name_label.setStyleSheet("color: #143D30; font-weight: 600; background: transparent;")
+            self._id_label.setStyleSheet("color: #3396ad; font-weight: 600; background: transparent;")
+            self._name_label.setStyleSheet("color: #3E352F; font-weight: 600; background: transparent;")
             self._check_label.setText("✓")
-            self._check_label.setStyleSheet("color: #3E89BD; font-weight: bold; background: transparent;")
+            self._check_label.setStyleSheet("color: #3396ad; font-weight: bold; background: transparent;")
         else:
             self.setStyleSheet(self.DEFAULT_STYLE)
             self._id_label.setStyleSheet("color: #64748B; background: transparent;")

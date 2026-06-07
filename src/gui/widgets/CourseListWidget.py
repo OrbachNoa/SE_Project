@@ -24,7 +24,7 @@ class _CourseRow(QWidget):
     """One row displaying a single course's details."""
 
     # Green-tinted left border for exam-relevant courses
-    EXAM_STYLE = "background-color: #F0FAF5; border-left: 3px solid #14633F; border-radius: 0 4px 4px 0;"
+    EXAM_STYLE = "background-color: #F0FAF5; border-left: 3px solid #16A34A; border-radius: 0 4px 4px 0;"
     # Neutral left border for all other courses
     DEFAULT_STYLE = "background-color: #F8FAFC; border-left: 3px solid #E2E8F0; border-radius: 0 4px 4px 0;"
 
@@ -66,7 +66,7 @@ class _CourseRow(QWidget):
         req_lbl = QLabel(course_vm.requirement)
         req_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if "Obligatory" in course_vm.requirement:
-            req_color, req_bg = "#14633F", "#E5F0EB"
+            req_color, req_bg = "#16A34A", "#E8F5E9"
         else:
             req_color, req_bg = "#92400E", "#FEF3C7"
         req_lbl.setStyleSheet(
@@ -88,11 +88,11 @@ class _ProgramBlock(QWidget):
     # Dark green header matching the brand palette; Segoe UI for readability
     HEADER_STYLE = (
         "QPushButton {"
-        "  background-color: #143D30; color: white; border-radius: 8px;"
+        "  background-color: #3396ad; color: #FDFBF7; border-radius: 8px;"
         "  text-align: left; padding: 8px 14px;"
         "  font-family: 'Segoe UI'; font-size: 12px; font-weight: 600;"
         "}"
-        "QPushButton:hover { background-color: #0F2D23; }"
+        "QPushButton:hover { background-color: #297B8F; }"
     )
 
     def __init__(self, program_vm, parent=None):
@@ -134,7 +134,7 @@ class _ProgramBlock(QWidget):
             group_lbl = QLabel(group_key)
             group_lbl.setFont(QFont("Segoe UI", 11))
             group_lbl.setStyleSheet(
-                "color: #143D30; background: #EAF4FA; padding: 4px 12px; "
+                "color: #3E352F; background: #FAF5EC; padding: 4px 12px; "
                 "border-radius: 6px; font-weight: 600; margin: 4px 0px;"
             )
             body_layout.addWidget(group_lbl)

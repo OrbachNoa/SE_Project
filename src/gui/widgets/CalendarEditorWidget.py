@@ -39,7 +39,7 @@ class CalendarEditorWidget(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
 
         # --- Navigation Bar ---
-        style = "background-color: #008080; color: white; border-radius: 4px; padding: 5px; font-weight: bold; border: none;"
+        style = "background-color: #3396ad; color: #FDFBF7; border-radius: 4px; padding: 5px; font-weight: bold; border: none;"
         nav_layout = QHBoxLayout()
         self.prev_btn = QPushButton("◀")
         self.prev_btn.setFixedSize(20, 20)
@@ -48,7 +48,7 @@ class CalendarEditorWidget(QWidget):
         
         self.period_label = QLabel()
         self.period_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.period_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #143D30;")
+        self.period_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #3E352F;")
         
         self.next_btn = QPushButton("▶")
         self.next_btn.setFixedSize(20, 20)
@@ -87,7 +87,7 @@ class CalendarEditorWidget(QWidget):
         # --- Bottom Bar ---
         self.button_layout = QHBoxLayout()
         self.apply_btn = QPushButton("Save All Constraints")
-        self.apply_btn.setStyleSheet("background-color: #143D30; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
+        self.apply_btn.setStyleSheet("background-color: #3396ad; color: #FDFBF7; padding: 8px; border-radius: 4px; font-weight: bold;")
         self.apply_btn.clicked.connect(self._on_apply_clicked)
         self.button_layout.addStretch()
         self.button_layout.addWidget(self.apply_btn)

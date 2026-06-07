@@ -12,19 +12,20 @@ from __future__ import annotations
 
 from typing import List
 
-from gui.widgets.ProgramSelectorWidget import ProgramSelectorWidget
-from gui.widgets.ProgramSelectorDialog import ProgramSelectorDialog
+from gui.widgets.ProgramSelectorCardWidget import ProgramSelectorCardWidget
 from gui.widgets.CourseListWidget import CourseListWidget
-from src.application.viewmodels.ProgramViewModel import ProgramViewModel
-from data.programs import programs_data
 
 from PyQt6.QtWidgets import (
     QLabel, QVBoxLayout, QHBoxLayout, QPushButton,
-    QRadioButton, QButtonGroup, QFrame, QFileDialog,
+    QRadioButton, QButtonGroup, QFrame,
     QMessageBox, QProgressBar, QSizePolicy, QWidget,
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont
+
+from gui.widgets.HeaderWidget import HeaderWidget
+from gui.widgets.Common import create_divider, create_card, prompt_open_file
+from gui.widgets.ActionBarWidget import ActionBarWidget
 
 from gui.screen import Screen
 from src.application.ImportBoundary import ImportMode
@@ -36,21 +37,7 @@ SCREEN_OUTPUT = "output"
 MAX_PROGRAMS = 5
 
 
-def _card(parent=None) -> QFrame:
-    """Return a styled card frame (white background, rounded border)."""
-    f = QFrame(parent)
-    f.setObjectName("card")
-    f.setFrameShape(QFrame.Shape.NoFrame)
-    return f
-
-
-def _divider(parent=None) -> QFrame:
-    """Return a 1-pixel horizontal separator line."""
-    f = QFrame(parent)
-    f.setObjectName("divider")
-    f.setFrameShape(QFrame.Shape.HLine)
-    f.setFixedHeight(1)
-    return f
+# Shared helpers create_card and create_divider are imported from gui.widgets.Common
 
 
 class InputScreen(Screen):
@@ -71,138 +58,26 @@ class InputScreen(Screen):
         # each new run.
         self._already_navigated = False
 
-        # Committed program selection. The popup works on a copy and only
-        # writes back here when the user presses "Select", so closing the
-        # popup without confirming never loses the previous choice.
-        self._selected_program_ids: List[str] = []
-
-        # Built once from the static programs dictionary and reused every time
-        # the popup opens, so we never rebuild view models on each click.
-        self._program_view_models = [
-            ProgramViewModel(program_id=p_id, display_name=p_name, course_count=0)
-            for p_id, p_name in programs_data.items()
-        ]
+        # Reusable program selector card widget
+        self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, self)
+        self.program_selector_card.selection_changed.connect(self._refresh_generate_button)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
         # ── Header ─────────────────────────────────────────────────────────
-        # Green branding bar: icon + title on the left, breadcrumb on the right.
-        header = QFrame()
-        header.setObjectName("header")
-        header.setFixedHeight(70)
-        header.setStyleSheet("QFrame#header { background: #143D30; }")
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(28, 0, 28, 0)
-        h_layout.setSpacing(12)
-
-        # Rounded-square icon with "S" initial — placeholder for a logo asset.
-        icon_frame = QFrame()
-        icon_frame.setFixedSize(34, 34)
-        icon_frame.setStyleSheet("background: #3E89BD; border-radius: 8px;")
-        icon_inner = QHBoxLayout(icon_frame)
-        icon_inner.setContentsMargins(0, 0, 0, 0)
-        icon_lbl = QLabel("S")
-        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setStyleSheet(
-            "color: white; font-weight: bold; font-size: 16px; background: transparent;"
-        )
-        icon_inner.addWidget(icon_lbl)
-
-        title = QLabel("Exam Scheduler")
-        title.setObjectName("app-title")
-        title.setFont(QFont("Segoe UI", 15))
-        subtitle = QLabel("Schedule generation for academic institutions")
-        subtitle.setObjectName("app-subtitle")
-        subtitle.setStyleSheet("color: rgba(255,255,255,0.6); background: transparent;")
-
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
-        title_col.addWidget(title)
-        title_col.addWidget(subtitle)
-
-        h_layout.addWidget(icon_frame)
-        h_layout.addLayout(title_col)
-        h_layout.addStretch()
-
-        # Breadcrumb: active step in blue, next step dimmed.
-        bc_input = QLabel("Input")
-        bc_input.setStyleSheet("color: #5BA4D4; font-weight: 600; background: transparent;")
-        bc_sep = QLabel("›")
-        bc_sep.setStyleSheet("color: #475569; background: transparent;")
-        bc_output = QLabel("Output")
-        bc_output.setStyleSheet("color: #475569; background: transparent;")
-        bc_output.setEnabled(False)
-
-        h_layout.addWidget(bc_input)
-        h_layout.addWidget(bc_sep)
-        h_layout.addWidget(bc_output)
-
+        # Reusable gold header branding bar
+        header = HeaderWidget(active_step="input", parent=self)
         root.addWidget(header)
 
         # ── Action bar ─────────────────────────────────────────────────────
-        # File-load triggers on the left, import mode in the middle, the
-        # generate / cancel pair on the right. Stays pinned below the header.
-        action_bar = QFrame()
-        action_bar.setFixedHeight(56)
-        action_bar.setStyleSheet(
-            "QFrame { background: white; border-bottom: 1px solid #E2E8F0; }"
-        )
-        ab_layout = QHBoxLayout(action_bar)
-        ab_layout.setContentsMargins(20, 0, 20, 0)
-        ab_layout.setSpacing(10)
-
-        self._courses_load_btn = QPushButton("📂  Load Courses")
-        self._courses_load_btn.setObjectName("btn-secondary")
-        self._courses_load_btn.setFixedHeight(36)
-        self._courses_load_btn.clicked.connect(self._on_load_courses_clicked)
-
-        self._periods_load_btn = QPushButton("📅  Load Periods")
-        self._periods_load_btn.setObjectName("btn-secondary")
-        self._periods_load_btn.setFixedHeight(36)
-        self._periods_load_btn.clicked.connect(self._on_load_periods_clicked)
-
-        ab_layout.addWidget(self._courses_load_btn)
-        ab_layout.addWidget(self._periods_load_btn)
-
-        # Vertical divider between load buttons and the mode selector.
-        v_sep = QFrame()
-        v_sep.setFrameShape(QFrame.Shape.VLine)
-        v_sep.setFixedHeight(24)
-        v_sep.setStyleSheet("color: #E2E8F0;")
-        ab_layout.addWidget(v_sep)
-
-        mode_label = QLabel("Mode:")
-        mode_label.setStyleSheet("color: #64748B; background: transparent;")
-        self._mode_replace = QRadioButton("Replace")
-        self._mode_replace.setChecked(True)
-        self._mode_update = QRadioButton("Update")
-        self._mode_group = QButtonGroup(self)
-        self._mode_group.addButton(self._mode_replace)
-        self._mode_group.addButton(self._mode_update)
-
-        ab_layout.addWidget(mode_label)
-        ab_layout.addWidget(self._mode_replace)
-        ab_layout.addWidget(self._mode_update)
-        ab_layout.addStretch()
-
-        self._generate_btn = QPushButton("▶  Generate Schedule")
-        self._generate_btn.setObjectName("btn-primary")
-        self._generate_btn.setEnabled(False)
-        self._generate_btn.setFixedHeight(40)
-        self._generate_btn.clicked.connect(self._on_generate_clicked)
-
-        self._cancel_btn = QPushButton("✕  Cancel")
-        self._cancel_btn.setObjectName("btn-danger")
-        self._cancel_btn.setVisible(False)
-        self._cancel_btn.setFixedHeight(40)
-        self._cancel_btn.clicked.connect(self._on_cancel_clicked)
-
-        ab_layout.addWidget(self._generate_btn)
-        ab_layout.addWidget(self._cancel_btn)
-
-        root.addWidget(action_bar)
+        self.action_bar = ActionBarWidget(self)
+        self.action_bar.courses_load_btn.clicked.connect(self._on_load_courses_clicked)
+        self.action_bar.periods_load_btn.clicked.connect(self._on_load_periods_clicked)
+        self.action_bar.generate_btn.clicked.connect(self._on_generate_clicked)
+        self.action_bar.cancel_btn.clicked.connect(self._on_cancel_clicked)
+        root.addWidget(self.action_bar)
 
         # Hidden status badges kept so _mark_file_loaded / _set_running_mode can
         # update load state without depending on the visible layout structure.
@@ -213,11 +88,11 @@ class InputScreen(Screen):
 
         self._courses_row = {
             "count_lbl": self._courses_status_badge,
-            "load_btn": self._courses_load_btn,
+            "load_btn": self.action_bar.courses_load_btn,
         }
         self._periods_row = {
             "count_lbl": _periods_count_lbl,
-            "load_btn": self._periods_load_btn,
+            "load_btn": self.action_bar.periods_load_btn,
         }
 
         # ── Body — two columns ─────────────────────────────────────────────
@@ -231,7 +106,7 @@ class InputScreen(Screen):
         # Left column: program selector line + loaded course list.
         left_col = QVBoxLayout()
         left_col.setSpacing(16)
-        left_col.addWidget(self._build_program_selector_card())
+        left_col.addWidget(self.program_selector_card)
         left_col.addWidget(self._build_courses_card(), stretch=1)
 
         # Right column: reserved calendar editor placeholder.
@@ -277,69 +152,15 @@ class InputScreen(Screen):
         self._controller.error_occurred.connect(self._on_error_occurred)
         self._controller.early_results_ready.connect(self._on_early_results_ready)
 
-        self._refresh_program_summary()
         self._refresh_generate_button()
 
     # ── Body builders ───────────────────────────────────────────────────
 
-    def _build_program_selector_card(self) -> QFrame:
-        """Build the clickable program-selector line.
 
-        Shows a placeholder when nothing is chosen and a row of program chips
-        once the user has selected programs. Clicking anywhere on the card
-        opens the selection popup. The card grows vertically as chips wrap.
-        """
-        card = _card()
-        card.setObjectName("selector-card")
-        # Local rounded style + pointer cursor to signal it is clickable.
-        card.setStyleSheet(
-            "QFrame#selector-card {"
-            "  background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px;"
-            "}"
-            "QFrame#selector-card:hover { border-color: #3E89BD; }"
-        )
-        card.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(10)
-
-        # Header row: icon + title on the left, count badge + chevron on the right.
-        header_row = QHBoxLayout()
-        header_row.setSpacing(8)
-
-        prog_title = QLabel("📚  Study Programs")
-        prog_title.setObjectName("card-title")
-        header_row.addWidget(prog_title)
-        header_row.addStretch()
-
-        self._programs_count_badge = QLabel(f"0 / {MAX_PROGRAMS}")
-        self._programs_count_badge.setStyleSheet(
-            "color: #64748B; background: #F1F5F9; border-radius: 10px;"
-            "padding: 2px 10px; font-size: 11px;"
-        )
-        header_row.addWidget(self._programs_count_badge)
-
-        chevron = QLabel("▾")
-        chevron.setStyleSheet("color: #94A3B8; background: transparent; font-size: 13px;")
-        header_row.addWidget(chevron)
-        layout.addLayout(header_row)
-
-        # Summary area: rebuilt by _refresh_program_summary (placeholder or chips).
-        self._summary_container = QWidget()
-        self._summary_container.setStyleSheet("background: transparent;")
-        self._summary_layout = QVBoxLayout(self._summary_container)
-        self._summary_layout.setContentsMargins(0, 0, 0, 0)
-        self._summary_layout.setSpacing(6)
-        layout.addWidget(self._summary_container)
-
-        # Make the whole card open the popup, no matter where the user clicks.
-        card.mousePressEvent = self._on_selector_card_clicked
-        return card
 
     def _build_courses_card(self) -> QFrame:
         """Build the card holding the loaded-course catalogue widget."""
-        card = _card()
+        card = create_card()
         card.setStyleSheet(
             "QFrame#card { background: #FFFFFF; border: 1px solid #E2E8F0;"
             " border-radius: 14px; }"
@@ -361,7 +182,7 @@ class InputScreen(Screen):
         )
         header_row.addWidget(self._courses_visible_badge)
         layout.addLayout(header_row)
-        layout.addWidget(_divider())
+        layout.addWidget(create_divider())
 
         self._course_list_widget = CourseListWidget()
         layout.addWidget(self._course_list_widget, stretch=1)
@@ -409,69 +230,7 @@ class InputScreen(Screen):
         layout.addStretch()
         return frame
 
-    # ── Program selection popup ───────────────────────────────────────────
 
-    def _on_selector_card_clicked(self, event) -> None:
-        """Open the program selection popup when the selector card is clicked."""
-        self._open_program_dialog()
-
-    def _open_program_dialog(self) -> None:
-        """Show the modal popup and commit the new selection only on accept."""
-        dialog = ProgramSelectorDialog(
-            self._program_view_models,
-            preselected_ids=self._selected_program_ids,
-            parent=self,
-        )
-        if dialog.exec():
-            # Accepted ("Select" pressed) — commit the new selection.
-            self._selected_program_ids = dialog.selected_ids()
-            self._refresh_program_summary()
-            self._refresh_generate_button()
-
-    def _refresh_program_summary(self) -> None:
-        """Rebuild the selector summary: placeholder when empty, chips otherwise."""
-        # Remove any previously rendered summary widgets.
-        while self._summary_layout.count():
-            item = self._summary_layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.deleteLater()
-
-        count = len(self._selected_program_ids)
-        self._programs_count_badge.setText(f"{count} / {MAX_PROGRAMS}")
-
-        if count == 0:
-            placeholder = QLabel("Click to select programs")
-            placeholder.setStyleSheet(
-                "color: #94A3B8; font-size: 13px; background: transparent;"
-            )
-            self._summary_layout.addWidget(placeholder)
-            return
-
-        # Map program IDs back to display names for nicer chip labels.
-        name_by_id = {vm.program_id: vm.display_name for vm in self._program_view_models}
-
-        # Lay chips out in rows of up to three so the card grows gracefully.
-        row = None
-        for i, pid in enumerate(self._selected_program_ids):
-            if i % 3 == 0:
-                row = QHBoxLayout()
-                row.setSpacing(6)
-                row.setAlignment(Qt.AlignmentFlag.AlignLeft)
-                row_holder = QWidget()
-                row_holder.setStyleSheet("background: transparent;")
-                row_holder.setLayout(row)
-                self._summary_layout.addWidget(row_holder)
-
-            label = name_by_id.get(pid, pid)
-            chip = QLabel(f"{pid} · {label}")
-            chip.setStyleSheet(
-                "color: #143D30; background: #E5F0EB; border: 1px solid #14633F;"
-                "border-radius: 11px; padding: 3px 10px; font-size: 11px;"
-            )
-            row.addWidget(chip)
-        if row is not None:
-            row.addStretch()
 
     # ── File row state helpers ────────────────────────────────────────────
 
@@ -489,7 +248,7 @@ class InputScreen(Screen):
         if not self._periods_loaded:
             missing.append("periods file")
 
-        self._generate_btn.setEnabled(len(missing) == 0)
+        self.action_bar.generate_btn.setEnabled(len(missing) == 0)
 
         if missing:
             self._validation_label.setObjectName("status-error")
@@ -504,8 +263,8 @@ class InputScreen(Screen):
 
     def _set_running_mode(self, running: bool) -> None:
         """Toggle the UI between idle and running states."""
-        self._generate_btn.setVisible(not running)
-        self._cancel_btn.setVisible(running)
+        self.action_bar.generate_btn.setVisible(not running)
+        self.action_bar.cancel_btn.setVisible(running)
         self._progress_bar.setVisible(running)
         self._progress_label.setVisible(running)
         self._courses_row["load_btn"].setEnabled(not running)
@@ -518,7 +277,7 @@ class InputScreen(Screen):
 
     def _selected_mode(self) -> ImportMode:
         """Return the import mode currently selected in the radio buttons."""
-        return ImportMode.REPLACE if self._mode_replace.isChecked() else ImportMode.UPDATE
+        return ImportMode.REPLACE if self.action_bar.mode_replace.isChecked() else ImportMode.UPDATE
 
     def _on_load_courses_clicked(self) -> None:
         self.on_load_courses(self._selected_mode())
@@ -643,7 +402,7 @@ class InputScreen(Screen):
 
     def on_load_courses(self, mode: ImportMode) -> None:
         """Import a courses file and populate the course catalogue widget."""
-        path, _ = QFileDialog.getOpenFileName(self, "Select courses file", "", "All files (*)")
+        path = prompt_open_file(self, "Select courses file", "All files (*)")
         if not path:
             return
         result = self._controller.load_file(path, "courses", mode)
@@ -653,7 +412,7 @@ class InputScreen(Screen):
             self._mark_file_loaded(self._courses_row, result.loaded_count, "courses")
             self._courses_visible_badge.setText(f"✓  {result.loaded_count} courses")
             self._courses_visible_badge.setStyleSheet(
-                "color: #14633F; background: #E5F0EB; border-radius: 10px;"
+                "color: #16A34A; background: #E8F5E9; border-radius: 10px;"
                 "padding: 2px 10px; font-size: 11px; font-weight: 600;"
             )
             self._refresh_generate_button()
@@ -667,7 +426,7 @@ class InputScreen(Screen):
 
     def on_load_periods(self, mode: ImportMode) -> None:
         """Import a periods file and update the load state."""
-        path, _ = QFileDialog.getOpenFileName(self, "Select periods file", "", "All files (*)")
+        path = prompt_open_file(self, "Select periods file", "All files (*)")
         if not path:
             return
         result = self._controller.load_file(path, "periods", mode)
@@ -698,7 +457,7 @@ class InputScreen(Screen):
 
     def _collect_selected_program_ids(self) -> List[str]:
         """Return the program IDs the user has committed via the popup."""
-        return list(self._selected_program_ids)
+        return self.program_selector_card.selected_program_ids()
 
     # ── Screen lifecycle ───────────────────────────────────────────────
 

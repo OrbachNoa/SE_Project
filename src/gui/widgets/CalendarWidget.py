@@ -96,7 +96,7 @@ class CalendarWidget(QWidget):
                     row += 1 
                 
                 month_lbl = QLabel(month_str)
-                month_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #008080; padding: 12px 0 6px 0;")
+                month_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #3396ad; padding: 12px 0 6px 0;")
                 month_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 
                 # Span the header across all 7 columns
@@ -160,8 +160,8 @@ class CalendarWidget(QWidget):
                 
                 # Bar-Ilan light green background with dark green text replaces the blue palette
                 exam_lbl.setStyleSheet(
-                    "QLabel { background-color: #E5F0EB; color: #143D30; "
-                    "border: 1px solid #B7D4C5; font-size: 11px; border-radius: 4px; padding: 2px; }"
+                    "QLabel { background-color: #FAF5EC; color: #3E352F; "
+                    "border: 1px solid #3396ad; font-size: 11px; border-radius: 4px; padding: 2px; }"
                 )
                 container_layout.addWidget(exam_lbl)
 
