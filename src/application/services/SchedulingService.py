@@ -1,6 +1,7 @@
-"""Service for launching schedule generation in a background process."""
+"""Service for launching schedule generation across one or more background processes."""
 from __future__ import annotations
 
+import os
 from multiprocessing import Process, Queue, Event
 from typing import List, Optional
 
@@ -14,10 +15,10 @@ from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 # Sets a fallback limit for tracking backtrack results safely within boundaries
-DEFAULT_MAX_RESULTS = 1000000  
+DEFAULT_MAX_RESULTS = 1000000
+DEFAULT_BATCH_SIZE = 1000
 
-
-def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results):
+def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results, batch_size=DEFAULT_BATCH_SIZE):
     """
     Isolated process entry point running inside an independent OS child process.
     Instantiates conflict checkers locally to avoid heavy inter-process serialization overhead.
@@ -29,7 +30,7 @@ def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_even
         checkers = [program_checker, MoedOrderChecker()]
 
         # Execute the heavy back-tracking algorithm loop away from the main thread
-        runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results)
+        runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results, batch_size)
         runner.run()
     except Exception as e:
         queue.put(("ERROR", f"Fatal scheduling error: {type(e).__name__}: {str(e)}"))
@@ -58,34 +59,77 @@ class SchedulingService:
         courses: List[Course],
         periods: List[ExamPeriod],
         max_results: int = DEFAULT_MAX_RESULTS,
+        num_processes: Optional[int] = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> SchedulerWorker:
         """
-        Deploys an independent background process pipeline for heavy computations.
-        Spawns a synchronized QThread worker to monitor pipeline state events without UI lag.
+        Deploys parallel background processes that split the search space and stream
+        results into a single shared queue, monitored by one synchronized QThread worker.
         """
         # Formulate active scheduling constraints based on user selections
         slots = self.build_slots(program_ids, courses, periods)
 
-        # Establish isolated IPC channels and cancellation tokens for the child node
-        queue: Queue = Queue()
+        # Decide how many parallel workers to spawn. Leave one core for the GUI/main
+        # thread, and never spawn more workers than the root slot has candidate dates
+        # (each worker owns a disjoint subset of those dates).
+        if num_processes is None:
+            num_processes = max(1, (os.cpu_count() or 2) - 1)
+        if slots:
+            num_processes = max(1, min(num_processes, len(slots[0].candidateDates)))
+        else:
+            num_processes = 1
+
+        # Bounded IPC channel: gives natural backpressure so a fast engine cannot
+        # flood RAM with un-consumed batches while the writer drains to SQLite.
+        queue: Queue = Queue(maxsize=50)
         cancel_event = Event()
-        
-        # Allocate a dedicated operating system process thread for calculation isolation
-        process = Process(
-            target=_run_scheduler_process,
-            args=(slots, courses, program_ids, queue, cancel_event, max_results),
-            daemon=True,
-        )
+
+        # Split the root slot's dates into disjoint subtrees and divide the result
+        # budget evenly. When num_processes == 1 this reduces to the original behavior.
+        partitions = self._partition_slots(slots, num_processes)
+        per_process_max = max(1, max_results // num_processes)
+
+        # Allocate one isolated OS process per partition; all feed the same queue.
+        processes: List[Process] = []
+        for partition_slots in partitions:
+            process = Process(
+                target=_run_scheduler_process,
+                args=(partition_slots, courses, program_ids, queue, cancel_event, per_process_max, batch_size),
+                daemon=True,
+            )
+            processes.append(process)
 
         # Wire the long-running process monitoring pipeline inside an asynchronous worker wrapper
         self._worker = SchedulerWorker(
-            queue=queue, 
-            cancel_event=cancel_event, 
-            process=process,
-            repository=self._repository
+            queue=queue,
+            cancel_event=cancel_event,
+            processes=processes,
+            repository=self._repository,
         )
         self._worker.start()
         return self._worker
+
+    @staticmethod
+    def _partition_slots(slots: List[Slot], num_partitions: int) -> List[List[Slot]]:
+        """
+        Split the search space by dividing the root slot's candidate dates into
+        `num_partitions` disjoint groups. Each partition explores a subtree that
+        never overlaps another, so the union covers every valid schedule exactly
+        once. Round-robin slicing keeps the partitions roughly balanced.
+        """
+        if not slots:
+            return [slots]
+
+        root = slots[0]
+        tail = slots[1:]
+
+        partitions: List[List[Slot]] = []
+        for i in range(num_partitions):
+            # Round-robin: partition i owns dates[i], dates[i+K], dates[i+2K], ...
+            partition_dates = root.candidateDates[i::num_partitions]
+            partition_root = Slot(root.course, root.semester, root.moed, partition_dates)
+            partitions.append([partition_root] + tail)
+        return partitions
 
     def cancel(self) -> None:
         """Signals active running background worker nodes to abort operational loops cleanly."""

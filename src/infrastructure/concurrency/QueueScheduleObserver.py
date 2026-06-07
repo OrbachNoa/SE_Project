@@ -4,7 +4,8 @@ from __future__ import annotations
 from multiprocessing import Queue
 from multiprocessing.synchronize import Event
 from typing import Any
-
+import pickle
+import zlib
 from src.logic.observers.IScheduleObserver import IScheduleObserver
 from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
 
@@ -15,7 +16,7 @@ class QueueScheduleObserver(IScheduleObserver):
     Enables safe data streaming from the isolated background engine process back to the UI environment.
     """
 
-    def __init__(self, queue: Queue, cancel_event: Event, batch_size: int = 1000) -> None:
+    def __init__(self, queue: Queue, cancel_event: Event, batch_size: int) -> None:
         # The cross-process IPC communication pipe mapped directly to the parent process listener
         self._queue = queue
         # Shared cancellation flag monitored to interrupt execution loops early on user request
@@ -39,9 +40,12 @@ class QueueScheduleObserver(IScheduleObserver):
             self._flush_buffer()
 
     def _flush_buffer(self) -> None:
-        """Transfers accumulated data frame blocks onto the IPC queue pipe and flushes local memory references."""
+        """Compress the batch here (in the child process) and ship only the blob."""
         if self._buffer:
-            self._queue.put(("SCHEDULE_BATCH", self._buffer))
+            # The heavy pickle+compress runs in this worker process, in parallel
+            # with all the other partition processes.
+            data = zlib.compress(pickle.dumps(self._buffer, protocol=4), level=1)
+            self._queue.put(("SCHEDULE_BATCH", (data, len(self._buffer))))
             self._buffer = []
 
     def on_progress(self, value: int) -> None:

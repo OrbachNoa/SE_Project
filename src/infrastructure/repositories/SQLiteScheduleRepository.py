@@ -3,11 +3,13 @@
 Design choices:
   - One row per *batch* (not per schedule): pickling + compressing 1 000 DTOs
     at once gives ~8:1 compression because course names repeat heavily.
-    860 K results → ~860 rows instead of 860 000 rows.
   - zlib level=1 (fast mode): ~3x faster than default and still halves size.
   - WAL journal: allows the main thread to write while something else reads.
   - _total_count is tracked in memory (never need a COUNT(*) query).
   - Thread-safe using threading.Lock() since background thread writes and GUI reads.
+  - insert_compressed_batch accepts a pre-compressed blob produced by a child
+    process, so the expensive pickle+compress runs in parallel across workers
+    instead of serially in the parent writer thread.
 """
 from __future__ import annotations
 
@@ -69,16 +71,24 @@ class SQLiteScheduleRepository:
     # ── Write ──────────────────────────────────────────────────────────────
 
     def insert_batch(self, batch: List[ScheduleDTO]) -> None:
-        """Compress and store an entire batch as a single SQLite row.
+        """Compress and store a batch produced in the current process.
 
-        Compressing the full batch together (instead of per-item) exploits
-        the repetition of course names/ids across schedules, yielding much
-        better compression ratios at the same CPU cost.
+        Used by the CLI path and any caller that still holds live DTO objects.
+        Delegates to insert_compressed_batch after compressing locally.
         """
-        # Execute expensive serialization and compression workflows outside the critical section lock
+        # Execute expensive serialization and compression outside the critical section
         data = zlib.compress(pickle.dumps(batch, protocol=4), level=1)
-        batch_count = len(batch)
-        
+        self.insert_compressed_batch(data, len(batch))
+
+    def insert_compressed_batch(self, data: bytes, batch_count: int) -> None:
+        """Store an already-compressed blob produced by a child process.
+
+        The expensive pickle+compress ran inside the worker process (in parallel
+        with all other partition workers), so this method only pays for the
+        SQLite INSERT under the lock — keeping the writer thread lightweight.
+        The blob format is identical to what insert_batch produces, so
+        get_window decompresses and unpickles it without any changes.
+        """
         with self._lock:
             first_offset = self._total_count
             with self._connect() as conn:
@@ -96,7 +106,7 @@ class SQLiteScheduleRepository:
             self._total_count = 0
             with self._connect() as conn:
                 conn.execute("DELETE FROM schedule_batches")
-            
+
             # VACUUM must run outside a transaction — open a separate autocommit connection.
             conn = self._connect()
             conn.isolation_level = None  # autocommit mode
