@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import List, Dict
+import re
 from PyQt6.QtWidgets import QWidget, QGridLayout, QLabel, QVBoxLayout, QFrame, QScrollArea
 from PyQt6.QtCore import Qt, pyqtSignal, QDate
 
@@ -78,6 +79,12 @@ class CalendarWidget(QWidget):
         self._day_layouts.clear()
         self._day_frames.clear()
 
+        # Give every weekday column the same share of horizontal space. Without
+        # this, columns that have no content collapse and the filled columns
+        # stretch unevenly, making the grid look lopsided.
+        for c in range(7):
+            self.grid_layout.setColumnStretch(c, 1)
+
         if not date_list:
             return
 
@@ -105,8 +112,11 @@ class CalendarWidget(QWidget):
                 row += 1
                 current_month = month_str
                 
-                # Recalculate column offset for the first day of the new month
-                col = qdate.dayOfWeek() % 7
+                # Start from the leftmost column. The weekday-based offset was
+                # designed for the day-of-week header row, which is no longer
+                # visible, so placing cells by weekday only creates empty gaps
+                # on the left side of the grid.
+                col = 0
 
             # Generate bounding square shells contextually
             cell_frame = QFrame()
@@ -141,37 +151,63 @@ class CalendarWidget(QWidget):
                 row += 1
 
     def display_assignments(self, items: List[ScheduleItemViewModel]) -> None:
-        """Maps pre-composed presentation model details inside matched layout placeholders."""
+        """Place exam tiles into the matching day cells on the calendar grid.
+
+        Each cell shows the course name and its subtitle (course id, programs,
+        obligatory/elective). The subtitle may contain HTML markup produced by
+        the mapper, so we convert it to plain text before displaying: line break
+        tags become real newlines and any remaining tags are stripped out. The
+        full unabridged detail is also available in the tooltip on hover.
+        """
         for item in items:
             target_date = item.date
-            
-            # Validate if target exam placement calendar keys exist within the active viewport
+
             if target_date in self._day_layouts:
                 container_layout = self._day_layouts[target_date]
-                
-                exam_lbl = QLabel(f"{item.title}\n{item.subtitle}")
+
+                # Convert the subtitle from HTML to plain text. The mapper uses
+                # <br> for line breaks and <span> for coloring, which show up as
+                # raw tags when a QLabel is in plain text mode. We turn <br> into
+                # real newlines and strip every other tag so the cell is readable.
+                clean_subtitle = item.subtitle.replace("<br>", "\n")
+                clean_subtitle = re.sub(r"<[^>]+>", "", clean_subtitle)
+                # Drop the "ID: " prefix — the number alone is clear enough.
+                clean_subtitle = clean_subtitle.replace("ID: ", "")
+
+                exam_lbl = QLabel(f"{item.title}\n{clean_subtitle}")
                 exam_lbl.setWordWrap(True)
-                
-                # Apply explicit centralized texts alignments rules matching PyQt6 specifications
                 exam_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                
-                # Tooltip configuration using string streams prepared inside business mappers
+
+                # The tooltip keeps the complete detail for quick reference.
                 exam_lbl.setToolTip(item.tooltip)
-                
-                # Bar-Ilan light green background with dark green text replaces the blue palette
+
+                # Bar-Ilan light green tile with dark green text.
                 exam_lbl.setStyleSheet(
                     "QLabel { background-color: #E5F0EB; color: #143D30; "
-                    "border: 1px solid #B7D4C5; font-size: 11px; border-radius: 4px; padding: 2px; }"
+                    "border: 1px solid #B7D4C5; font-size: 11px; border-radius: 4px; padding: 4px; }"
                 )
                 container_layout.addWidget(exam_lbl)
 
     def set_date_excluded_style(self, date_str: str, is_excluded: bool) -> None:
-        """Grey out the cell if excluded, else normal."""
+        """Switch a cell between the included (green) and excluded (red) style.
+
+        This method is called by CalendarEditorWidget to colour its cells.
+        The output screen never calls this method, so changing these colours
+        here only affects the editor and never touches the output calendar.
+        Green signals the day is part of the exam period; red signals the user
+        has manually removed it.
+        """
         if date_str in self._day_frames:
             frame = self._day_frames[date_str]
             if is_excluded:
-                # Grey out the date so we don't have exams on our days off
-                frame.setStyleSheet("QFrame { background-color: #E2E8F0; border: 1px solid #CBD5E1; border-radius: 8px; min-height: 60px; }")
+                # Vivid red — this day has been removed from the exam period.
+                frame.setStyleSheet(
+                    "QFrame { background-color: #FEE2E2; border: 1px solid #FCA5A5;"
+                    " border-radius: 8px; min-height: 60px; }"
+                )
             else:
-                # Revert to normal
-                frame.setStyleSheet("QFrame { background-color: #FAFAFA; border: 1px solid #E2E8F0; border-radius: 8px; min-height: 60px; }")
+                # Vivid green — this day is included in the exam period.
+                frame.setStyleSheet(
+                    "QFrame { background-color: #D1FAE5; border: 1px solid #6EE7B7;"
+                    " border-radius: 8px; min-height: 60px; }"
+                )
