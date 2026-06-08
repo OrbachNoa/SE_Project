@@ -80,7 +80,8 @@ class _ProgramBlock(QWidget):
         self._header_btn = QPushButton(header_text)
         self._header_btn.setObjectName("course-list-header-btn")
         self._header_btn.setFixedHeight(40)
-        self._header_btn.clicked.connect(self._toggle)
+        self._header_btn.setCheckable(True)
+        self._header_btn.toggled.connect(self._set_expanded)
         root.addWidget(self._header_btn)
 
         # Body
@@ -109,9 +110,9 @@ class _ProgramBlock(QWidget):
         self._body.setVisible(False)
         root.addWidget(self._body)
 
-    def _toggle(self) -> None:
-        """Toggle the program block open or closed."""
-        self._expanded = not self._expanded
+    def _set_expanded(self, expanded: bool) -> None:
+        """Apply the expanded state emitted by the header button."""
+        self._expanded = expanded
         self._body.setVisible(self._expanded)
 
         current = self._header_btn.text()
@@ -121,15 +122,19 @@ class _ProgramBlock(QWidget):
             new_text = current.replace("▼", "►", 1)
         self._header_btn.setText(new_text)
 
+    def _toggle(self) -> None:
+        """Toggle the program block open or closed."""
+        self._header_btn.setChecked(not self._expanded)
+
     def expand(self) -> None:
         """Expand the program block."""
         if not self._expanded:
-            self._toggle()
+            self._header_btn.setChecked(True)
 
     def collapse(self) -> None:
         """Collapse the program block."""
         if self._expanded:
-            self._toggle()
+            self._header_btn.setChecked(False)
 
 
 # Main widget - Displays a scrollable list of expandable program blocks.
