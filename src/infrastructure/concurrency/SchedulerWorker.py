@@ -11,15 +11,18 @@ from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteSched
 
 class SchedulerWorker(QThread):
     """
-    Asynchronous worker thread that monitors one or more background scheduler
-    processes. All processes stream their results into a single shared queue;
-    this thread drains that queue, persists batches to SQLite, and forwards
-    lightweight status updates to the GUI thread via Qt signals.
+    Monitors the scheduler processes and updates the GUI safely. 
+    The heavy backtracking work runs in separate processes. 
+    This QThread listens to their shared queue, saves schedule batches to SQLite, 
+    and sends small status updates to the GUI using Qt signals.
     """
 
-    # --- PyQt Signals to safely communicate asynchronous engine events to the GUI thread ---
-    schedule_found        = pyqtSignal(object)      # Kept for backward compatibility profiles
-    schedules_batch_found = pyqtSignal(int)         # Emits lightweight packet size scalar to bypass UI event lag
+    # Signals are used because the GUI must be updated only from the Qt-safe signal system.
+    
+    # Old signal for sending one full schedule to the GUI.
+    # The current code uses batches instead, but this is kept so older code will not crash.
+    schedule_found        = pyqtSignal(object)      
+    schedules_batch_found = pyqtSignal(int)         # Sends how many schedules were saved in the last batch.
     progress_updated      = pyqtSignal(int)
     search_finished       = pyqtSignal()
     error_occurred        = pyqtSignal(str)
@@ -27,21 +30,21 @@ class SchedulerWorker(QThread):
     def __init__(self, queue: Queue, cancel_event: Event, processes: List[Process], repository: SQLiteScheduleRepository) -> None:
         super().__init__()
 
-        # Inter-process pipeline conduit feeding raw solution blocks from all child processes
+        # Shared queue used by all scheduler processes to send messages to this worker.
         self._queue = queue
-        # Shared cancellation state monitor flag to interrupt every partition mid-run
+        # Shared flag used to ask all scheduler processes to stop.
         self._cancel_event = cancel_event
-        # All parallel partition processes feeding the single shared queue
+        # All background processes that run parts of the scheduling search.
         self._processes = processes
-        # Local SQLite storage client invoked directly inside this background worker context
+        # Repository used to save compressed schedule batches to SQLite.
         self._repository = repository
 
-        # Each partition emits exactly one FINISHED when its subtree is exhausted;
-        # the whole search is complete only after every partition has reported in.
+        # Each process sends one FINISHED message when it completes. 
+        # The whole search is done only after all processes have finished.
         self._expected_finishes = len(processes)
         self._finished_count = 0
 
-        # Maps operational message string signatures over to active execution handler routes
+        # Maps each queue message type to the method that handles it.
         self._dispatch = {
             "SCHEDULE_BATCH": self._handle_schedule_batch,
             "PROGRESS": self._handle_progress,
@@ -50,45 +53,49 @@ class SchedulerWorker(QThread):
         }
 
     def run(self) -> None:
-        """Main loop: start every partition process and drain the shared queue."""
-        # Spin up all secondary heavy computation child processes
+        """Starts the scheduler processes and keeps reading messages from the queue."""
+        # Start all background processes that perform the heavy scheduling work.
         for process in self._processes:
             process.start()
 
         try:
             while True:
                 try:
-                    # Capture next signal transmission frame boundary passing down the stream
+                    # Wait for the next message from any scheduler process.
                     msg_type, payload = self._queue.get(timeout=1.0)
                 except queue.Empty:
-                    # The channel went quiet — only act once every process has exited.
+                    # No message arrived during the timeout. 
+                    # If all processes are dead, decide whether the search ended normally or crashed.
                     if not any(p.is_alive() for p in self._processes):
                         if self._cancel_event.is_set():
                             break
-                        # Crash-recovery fallback if a clean FINISHED handshake was skipped
+                        # Fallback for cases where a process ended without sending FINISHED.
                         self._emit_terminal_state()
                         break
+                    # Some processes are still alive, so keep waiting for more messages.
                     continue
                 except ValueError:
+                    # The queue was probably closed while this worker was waiting.
                     break
                 except Exception as e:
-                    # Trap unexpected marshaling or runtime crashes safely to prevent silent GUI lockups
+                    # Report unexpected queue/IPC errors instead of leaving the GUI waiting forever.
                     self.error_occurred.emit(f"IPC communication error with the scheduling engine: {str(e)}")
                     break
 
-                # Resolve packet identifiers against registered operation routes
+                # Choose the correct handler according to the message type.
                 handler = self._dispatch.get(msg_type)
+                # If the handler returns False, stop the monitoring loop.
                 if handler and not handler(payload):
                     break
         finally:
-            # Reap every child handle regardless of how the loop ended
+            # Always clean up child processes, even after errors or cancellation.
             self._shutdown()
 
     def _emit_terminal_state(self) -> None:
         """
-        Decides the final outcome when the queue drains and all processes died
-        without a clean FINISHED handshake. A non-zero exit on any partition
-        means the result set is incomplete and cannot be trusted.
+        Handles the case where all processes stopped but not all FINISHED messages arrived.
+        If any process exited with an error code, the result may be incomplete. 
+        Otherwise, we treat the search as finished.
         """
         crashed = [p for p in self._processes if p.exitcode not in (0, None)]
         if crashed:
@@ -99,23 +106,22 @@ class SchedulerWorker(QThread):
             self.search_finished.emit()
 
     def cancel(self) -> None:
-        """Signal every partition process to abort, then force-stop stragglers (UI-facing path)."""
+        """Requests cancellation and then stops any process that did not exit by itself."""
         if self._cancel_event is not None:
             self._cancel_event.set()
 
-        # Grace phase: all processes share the same cancel flag, so a short wait
-        # lets cooperative ones exit on their own before we force-terminate.
+        # First, give each process a short chance to stop normally.
         for process in self._processes:
             if process is not None and process.is_alive():
                 process.join(timeout=0.5)
 
-        # Force phase: terminate anything still running.
+        # Then force-stop any process that is still running.
         for process in self._processes:
             if process is not None and process.is_alive():
                 process.terminate()
                 process.join(timeout=1.0)
 
-        # Empty data remnants to release internal buffers and avoid pipeline deadlocks
+        # Clear remaining queue messages so old data will not stay in the IPC pipe.
         try:
             while not self._queue.empty():
                 self._queue.get_nowait()
@@ -124,12 +130,11 @@ class SchedulerWorker(QThread):
 
     def _shutdown(self) -> None:
         """
-        Stop and reap all partition processes when the monitoring loop ends, for
-        any reason. Handles the clean-finish case (nothing left alive — just join)
-        and the early-exit case (a partition errored while others were still
-        running — signal the rest, then terminate) uniformly. Emits no signals.
+        Cleans up all scheduler processes after the worker loop ends. 
+        This runs for every ending case: normal finish, error, or cancellation. 
+        It does not emit GUI signals; it only releases process and queue resources.
         """
-        # Early-exit case: survivors are still running, so signal them to stop first.
+        # If some processes are still alive, ask them to stop first.
         if any(p.is_alive() for p in self._processes):
             if self._cancel_event is not None:
                 self._cancel_event.set()
@@ -137,7 +142,7 @@ class SchedulerWorker(QThread):
                 if process.is_alive():
                     process.join(timeout=0.5)
 
-        # Reap every handle; force-terminate anything that ignored the flag.
+        # Join every process, and force-terminate processes that ignored the cancel flag.
         for process in self._processes:
             if process.is_alive():
                 process.terminate()
@@ -145,7 +150,7 @@ class SchedulerWorker(QThread):
             else:
                 process.join()
 
-        # Release any leftover IPC items so the queue's feeder thread can shut down.
+        # Clear leftover queue messages so the queue can close cleanly.
         try:
             while not self._queue.empty():
                 self._queue.get_nowait()
@@ -154,7 +159,7 @@ class SchedulerWorker(QThread):
         
 
     def _handle_schedule_batch(self, payload) -> bool:
-        """Receives a pre-compressed blob + its count; only writes bytes to SQLite."""
+        """Saves one compressed schedule batch and notifies the GUI how many schedules were added."""
         data, count = payload
         if count:
             self._repository.insert_compressed_batch(data, count)
@@ -162,22 +167,22 @@ class SchedulerWorker(QThread):
         return True
 
     def _handle_progress(self, payload) -> bool:
-        """Passes calculation progress indexes upwards to drive active interface components."""
+        """Sends a progress update to the GUI."""
         self.progress_updated.emit(payload)
         return True
 
     def _handle_error(self, payload) -> bool:
-        """Broadcasts an error message and halts monitoring; _shutdown stops any survivors."""
+        """Reports an error to the GUI and stops the worker loop."""
         self.error_occurred.emit(payload)
         return False
 
     def _handle_finished(self, payload) -> bool:
-        """
-        One partition just finished. Keep listening until every partition has
-        checked in; only then is the whole search genuinely complete.
+        """ Handles a FINISHED message from one scheduler process. 
+            The worker keeps listening until every process has sent FINISHED. 
+            Only then the whole scheduling search is complete. 
         """
         self._finished_count += 1
         if self._finished_count >= self._expected_finishes:
             self.search_finished.emit()
-            return False  # all partitions done — stop the loop
-        return True       # other partitions still streaming
+            return False  # All processes finished, so stop the loop.
+        return True       # Other processes may still send more results.

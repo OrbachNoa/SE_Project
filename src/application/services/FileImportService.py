@@ -1,12 +1,11 @@
 """Service for importing course and exam-period files into application state."""
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from typing import Dict
 
 from src.application.state.InputDataState import InputDataState
 from src.application.ImportBoundary import ImportMode, ImportResult
 from src.file_io.parsers.ParserFactory import ParserFactory
-from src.file_io.validators.ValidatorPipeline import ValidatorPipeline
 from src.file_io.validators import FileValidator as file_validator
 from src.application.services.InputCacheService import InputCacheService
 from src.application.services.InputDataMerger import InputDataMerger
@@ -18,13 +17,11 @@ class FileImportService:
         self,
         cache_service: InputCacheService,
         parser_factory: ParserFactory,
-        validators: ValidatorPipeline,
         merger: InputDataMerger,
         state: InputDataState,
     ) -> None:
         self._cache = cache_service
         self._parser_factory = parser_factory
-        self._validators = validators
         self._merger = merger
         self._state = state
         self._loaded_paths: Dict[str, str] = {}
@@ -50,7 +47,7 @@ class FileImportService:
         except (FileNotFoundError, ValueError) as e:
             return ImportResult(success=False, loaded_count=0, errors=[str(e)])
 
-        self._merger.merge(data, mode)
+        self._merger.merge(data, mode, file_type)
         self._cache.persist(self._state, paths)
 
         return ImportResult(success=True, loaded_count=len(data))

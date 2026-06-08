@@ -9,6 +9,7 @@ class Scheduler:
     """Builds valid schedules with backtracking."""
 
     def __init__(self, checkers: List[IConflictChecker]):
+        # Each checker represents one rule that a schedule must not break.
         self._checkers = checkers
 
     def generateSchedules(self, slots: List[Slot], observer: IScheduleObserver, max_results: int = 1_000_000) -> None:
@@ -40,29 +41,25 @@ class Scheduler:
         if observer.should_cancel():
             return
             
-        # Stop recursion early if max_results was reached.
+        # Stop searching after the requested number of schedules was found.
         if found_count[0] >= max_results:
             return
 
-        # Stream a schedule when every slot was assigned.
+        # If every slot was assigned, the current schedule is a complete valid schedule.
         if index == len(slots):
-            # Passes the original schedule directly because the Observer immediately maps it to a safe DTO.
-            # This saves CPU cycles by avoiding unnecessary object and list copying.
+            # This schedule will keep changing during backtracking.
+            # The observer must copy or convert it now if it wants to keep this result.
             observer.on_schedule_found(schedule)
             found_count[0] += 1
-            
-            # Updates progress every 10 schedules to prevent flooding the IPC queue and GUI thread.
-            if found_count[0] % 10 == 0:
-                observer.on_progress(found_count[0])
-                
             return
 
         slot = slots[index]
-        # Use slot dates directly, so no period lookup is needed.
+        # Try each allowed date for the current exam slot.
         for date in slot.candidateDates:
-            # Check maximum results inside the loop because a deep branch might have reached the limit.
+            # A deeper recursive call may have already reached the result limit.
             if found_count[0] >= max_results:
                 return
+            # Check cancellation inside the loop too, because the loop can be long.
             if observer.should_cancel():
                 return
             assignment = ExamAssignment(
@@ -76,8 +73,9 @@ class Scheduler:
                     conflict = True
                     break
 
-            # Proceed with the recursive search because no checker found a conflict.
+            # If no checker found a conflict, continue with this assignment.
             if not conflict:
                 schedule.addAssignment(assignment)
                 self._backtrack(index + 1, slots, schedule, observer, found_count, max_results)
+                # Remove the assignment before trying the next possible date.
                 schedule.removeAssignment(assignment)

@@ -5,8 +5,11 @@ Design choices:
     at once gives ~8:1 compression because course names repeat heavily.
   - zlib level=1 (fast mode): ~3x faster than default and still halves size.
   - WAL journal: allows the main thread to write while something else reads.
+  - synchronous=NORMAL: safe with WAL mode, avoids a full fsync on every write.
   - _total_count is tracked in memory (never need a COUNT(*) query).
-  - Thread-safe using threading.Lock() since background thread writes and GUI reads.
+  - Single persistent connection shared across all operations. Thread safety is
+    provided by self._lock — sqlite3's own check_same_thread is disabled because
+    our Lock already guarantees mutual exclusion.
   - insert_compressed_batch accepts a pre-compressed blob produced by a child
     process, so the expensive pickle+compress runs in parallel across workers
     instead of serially in the parent writer thread.
@@ -32,41 +35,44 @@ class SQLiteScheduleRepository:
 
     def __init__(self, db_path: str = _DEFAULT_DB) -> None:
         self._db_path = db_path
-        # In-memory counter to keep tracking total records at O(1) complexity
         self._total_count: int = 0
-        # Lock to prevent race conditions between background writer and UI reader thread
         self._lock = threading.Lock()
+        # One persistent connection for the lifetime of this repository.
+        # All callers go through self._lock, so no two threads ever touch
+        # the connection simultaneously — check_same_thread is therefore safe
+        # to disable.
+        self._conn: sqlite3.Connection = self._open_connection()
         self._init_db()
 
     # ── Init ───────────────────────────────────────────────────────────────
 
-    def _init_db(self) -> None:
-        """Initializes the database schema and indices under a thread lock."""
-        with self._lock:
-            with self._connect() as conn:
-                # Store schedules in compressed binary blocks (BLOBs) mapped by offset indices
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS schedule_batches (
-                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                        first_offset  INTEGER NOT NULL,
-                        batch_count   INTEGER NOT NULL,
-                        data          BLOB    NOT NULL
-                    )
-                    """
-                )
-                # Create index on offset tracking column to accelerate window query seek times
-                conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_offset "
-                    "ON schedule_batches(first_offset)"
-                )
-
-    def _connect(self) -> sqlite3.Connection:
-        """Creates a single connection session forced into WAL journal mode."""
-        conn = sqlite3.connect(self._db_path, timeout=10)
-        # WAL mode permits concurrent reads by the GUI thread while background writes execute
+    def _open_connection(self) -> sqlite3.Connection:
+        """Open the single shared connection with WAL mode and fast sync."""
+        conn = sqlite3.connect(self._db_path, timeout=10, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
+        # NORMAL skips the full fsync after each write. WAL mode guarantees
+        # durability without it, so this is safe and meaningfully faster.
+        conn.execute("PRAGMA synchronous=NORMAL")
         return conn
+
+    def _init_db(self) -> None:
+        """Initialize the schema under the lock on first construction."""
+        with self._lock:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schedule_batches (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    first_offset  INTEGER NOT NULL,
+                    batch_count   INTEGER NOT NULL,
+                    data          BLOB    NOT NULL
+                )
+                """
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_offset "
+                "ON schedule_batches(first_offset)"
+            )
+            self._conn.commit()
 
     # ── Write ──────────────────────────────────────────────────────────────
 
@@ -76,7 +82,6 @@ class SQLiteScheduleRepository:
         Used by the CLI path and any caller that still holds live DTO objects.
         Delegates to insert_compressed_batch after compressing locally.
         """
-        # Execute expensive serialization and compression outside the critical section
         data = zlib.compress(pickle.dumps(batch, protocol=4), level=1)
         self.insert_compressed_batch(data, len(batch))
 
@@ -86,32 +91,29 @@ class SQLiteScheduleRepository:
         The expensive pickle+compress ran inside the worker process (in parallel
         with all other partition workers), so this method only pays for the
         SQLite INSERT under the lock — keeping the writer thread lightweight.
-        The blob format is identical to what insert_batch produces, so
-        get_window decompresses and unpickles it without any changes.
         """
         with self._lock:
             first_offset = self._total_count
-            with self._connect() as conn:
-                conn.execute(
-                    "INSERT INTO schedule_batches (first_offset, batch_count, data) "
-                    "VALUES (?, ?, ?)",
-                    (first_offset, batch_count, data),
-                )
-            # Increment tracking scalar counter within the synchronized state boundaries
+            self._conn.execute(
+                "INSERT INTO schedule_batches (first_offset, batch_count, data) "
+                "VALUES (?, ?, ?)",
+                (first_offset, batch_count, data),
+            )
+            self._conn.commit()
             self._total_count += batch_count
 
     def clear(self) -> None:
-        """Delete all data and reclaim disk space (called at the start of each run)."""
+        """Delete all rows and reset the counter (called at the start of each run).
+
+        VACUUM is intentionally omitted: SQLite reuses the freed pages on the
+        next run's inserts, so skipping it costs nothing in performance.
+        VACUUM was rebuilding the entire database file on every warm start,
+        which made warm runs noticeably slower than cold ones.
+        """
         with self._lock:
             self._total_count = 0
-            with self._connect() as conn:
-                conn.execute("DELETE FROM schedule_batches")
-
-            # VACUUM must run outside a transaction — open a separate autocommit connection.
-            conn = self._connect()
-            conn.isolation_level = None  # autocommit mode
-            conn.execute("VACUUM")
-            conn.close()
+            self._conn.execute("DELETE FROM schedule_batches")
+            self._conn.commit()
 
     # ── Read ───────────────────────────────────────────────────────────────
 
@@ -122,28 +124,23 @@ class SQLiteScheduleRepository:
         unpacks them, and slices to the exact range requested.
         """
         with self._lock:
-            with self._connect() as conn:
-                # Query index records overlapping with the active navigation bounds window
-                rows = conn.execute(
-                    """
-                    SELECT first_offset, batch_count, data
-                    FROM   schedule_batches
-                    WHERE  first_offset + batch_count > :start
-                      AND  first_offset              < :end
-                    ORDER BY first_offset
-                    """,
-                    {"start": offset, "end": offset + limit},
-                ).fetchall()
+            rows = self._conn.execute(
+                """
+                SELECT first_offset, batch_count, data
+                FROM   schedule_batches
+                WHERE  first_offset + batch_count > :start
+                  AND  first_offset              < :end
+                ORDER BY first_offset
+                """,
+                {"start": offset, "end": offset + limit},
+            ).fetchall()
 
         result: List[ScheduleDTO] = []
         for first_off, batch_count, raw in rows:
-            # Decompress and reconstitute the raw binary block back into a native object list
             batch: List[ScheduleDTO] = pickle.loads(zlib.decompress(raw))
-            # Slice and capture only the sub-segments that sit within requested global boundaries
             local_start = max(0, offset - first_off)
-            local_end = min(batch_count, offset + limit - first_off)
+            local_end   = min(batch_count, offset + limit - first_off)
             result.extend(batch[local_start:local_end])
-            # Break parsing pipeline early if collected data satisfies boundary request thresholds
             if len(result) >= limit:
                 break
 
