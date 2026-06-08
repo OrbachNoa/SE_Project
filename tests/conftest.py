@@ -19,6 +19,10 @@ from src.models.Domain import (
     ExamSchedule,
 )
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
+from src.infrastructure.cache.DataCache import DataCache
+from src.application.services.ViewModelMapper import ViewModelMapper
+from src.application.state.AppState import AppState
 # endregion
 
 # region Path Setup
@@ -126,17 +130,17 @@ def collector_observer():
 def qapp():
     """Ensures a single QApplication instance exists for all PyQt tests."""
     from PyQt6.QtWidgets import QApplication
-    import sys
+    from PyQt6.QtGui import QFont
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
+    app.setFont(QFont("Segoe UI", 10))
     yield app
 
 
 @pytest.fixture
 def make_assignment_dto(make_assignment):
     """Provides a factory to build AssignmentDTOs with default values matched to the domain fixtures."""
-    from src.application.dto.ScheduleDTO import AssignmentDTO
     def _make(
         course_id=None,
         course_name=None,
@@ -160,7 +164,6 @@ def make_assignment_dto(make_assignment):
 @pytest.fixture
 def make_schedule_dto(make_assignment_dto):
     """Provides a factory to build ScheduleDTOs with default values."""
-    from src.application.dto.ScheduleDTO import ScheduleDTO
     def _make(assignments=None, total_assignments=None):
         if assignments is None:
             assignments = []
@@ -173,7 +176,6 @@ def make_schedule_dto(make_assignment_dto):
 @pytest.fixture
 def make_data_cache(make_course, make_period):
     """Provides a factory to build DataCaches with default values matched to domain fixtures."""
-    from src.infrastructure.cache.DataCache import DataCache
     def _make(courses=None, periods=None, source_hashes=None):
         if courses is None:
             c = make_course()
@@ -245,15 +247,10 @@ def mock_router():
 @pytest.fixture
 def viewmodel_mapper():
     """Provides a fresh ViewModelMapper instance."""
-    from src.application.services.ViewModelMapper import ViewModelMapper
     return ViewModelMapper()
 
 
 @pytest.fixture
 def app_state():
     """Provides a fresh AppState instance."""
-    from src.application.state.AppState import AppState
     return AppState()
-
-
-

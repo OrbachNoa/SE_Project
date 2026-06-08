@@ -15,6 +15,15 @@ def create_divider(parent: QWidget | None = None) -> QFrame:
     return line
 
 
+def create_vertical_divider(parent: QWidget | None = None, height: int = 24) -> QFrame:
+    """Return a styled vertical separator line."""
+    line = QFrame(parent)
+    line.setObjectName("vertical-divider")
+    line.setFrameShape(QFrame.Shape.VLine)
+    line.setFixedHeight(height)
+    return line
+
+
 def create_card(parent: QWidget | None = None) -> QFrame:
     """Return a styled card frame (white background, rounded border)."""
     card = QFrame(parent)
@@ -24,7 +33,8 @@ def create_card(parent: QWidget | None = None) -> QFrame:
 
 
 def create_scaled_pixmap(parent: QWidget, path: str, height: int) -> QPixmap:
-    """Load a pixmap and scale it smoothly based on the parent's device pixel ratio."""
+    """Load a pixmap and scale it smoothly based on the parent's device pixel ratio.
+    Used to scale images to the correct size for display."""
     pixmap = QPixmap(path)
     dpr = parent.devicePixelRatioF()
     scaled = pixmap.scaledToHeight(int(height * dpr), Qt.TransformationMode.SmoothTransformation)

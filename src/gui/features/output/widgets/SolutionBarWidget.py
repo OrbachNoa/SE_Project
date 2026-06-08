@@ -5,10 +5,8 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QLabel, QGroupBox,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence
 
-
+# Encapsulates the navigation, export and double-deck database paging toolbar
 class SolutionBarWidget(QFrame):
-    """Encapsulates the navigation, export and double-deck database paging toolbar."""
-
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("nav-bar")
@@ -17,8 +15,8 @@ class SolutionBarWidget(QFrame):
         layout.setContentsMargins(20, 4, 20, 4)
         layout.setSpacing(12)
 
-        # Back returns to the input screen using the router history. The
-        # Alt+Left shortcut makes it reachable from the keyboard as well.
+        # Back returns to the input screen using the router history. 
+        # The Alt+Left shortcut makes it reachable from the keyboard as well.
         self.back_btn = QPushButton("← Back")
         self.back_btn.setObjectName("btn-ghost")
         self.back_btn.setShortcut(QKeySequence("Alt+Left"))
@@ -33,14 +31,6 @@ class SolutionBarWidget(QFrame):
         self.export_btn.setToolTip("Save the current schedule as a PDF file")
         self.export_btn.setFixedHeight(36)
         self.export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.export_btn.setStyleSheet(
-            "QPushButton#btn-export {"
-            "  background-color: #3396ad; color: #FFFFFF; border: none;"
-            "  border-radius: 8px; padding: 0 18px; font-weight: 600; font-size: 13px;"
-            "}"
-            "QPushButton#btn-export:hover { background-color: #297B8F; }"
-            "QPushButton#btn-export:disabled { background-color: #CBD5E1; color: #F1F5F9; }"
-        )
         layout.addWidget(self.export_btn)
 
         layout.addStretch()
@@ -57,9 +47,8 @@ class SolutionBarWidget(QFrame):
         self.prev_btn.setFixedSize(70, 28)
 
         self.counter_label = QLabel("No solutions")
-        self.counter_label.setObjectName("counter-label")
+        self.counter_label.setObjectName("solution-counter-label")
         self.counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.counter_label.setStyleSheet("min-width: 150px; font-weight: 600; font-size: 12px; color: #3E352F;")
 
         self.next_btn = QPushButton("Next ▶")
         self.next_btn.setObjectName("btn-secondary")
@@ -83,21 +72,18 @@ class SolutionBarWidget(QFrame):
         self.first_page_btn.setFixedSize(75, 28)
 
         self.prev_page_btn = QPushButton("◀")
-        self.prev_page_btn.setObjectName("btn-secondary")
+        self.prev_page_btn.setObjectName("btn-page-arrow")
         self.prev_page_btn.setToolTip("Previous page")
         self.prev_page_btn.setFixedSize(28, 28)
-        self.prev_page_btn.setStyleSheet("padding: 0px;")
 
         self.page_label = QLabel("Page 1 / 1")
         self.page_label.setObjectName("page-label")
         self.page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.page_label.setStyleSheet("min-width: 90px; font-weight: 600; font-size: 12px; color: #3E352F;")
 
         self.next_page_btn = QPushButton("▶")
-        self.next_page_btn.setObjectName("btn-secondary")
+        self.next_page_btn.setObjectName("btn-page-arrow")
         self.next_page_btn.setToolTip("Next page")
         self.next_page_btn.setFixedSize(28, 28)
-        self.next_page_btn.setStyleSheet("padding: 0px;")
 
         self.last_page_btn = QPushButton("⏭ Last")
         self.last_page_btn.setObjectName("btn-secondary")

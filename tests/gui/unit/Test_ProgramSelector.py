@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from PyQt6.QtWidgets import QMessageBox
-from src.gui.widgets.ProgramSelectorDialog import ProgramSelectorDialog
+from src.gui.features.input.widgets.ProgramSelectorDialog import ProgramSelectorDialog
 from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 
 pytestmark = pytest.mark.usefixtures("qapp")

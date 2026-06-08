@@ -1,9 +1,9 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from PyQt6.QtWidgets import QStackedWidget
-from src.gui.ScreenRouter import ScreenRouter
-from src.gui.screens.InputScreen import InputScreen
-from src.gui.screens.OutputScreen import OutputScreen
+from src.gui.core.ScreenRouter import ScreenRouter
+from src.gui.features.input.InputScreen import InputScreen
+from src.gui.features.output.OutputScreen import OutputScreen
 
 pytestmark = pytest.mark.usefixtures("qapp")
 

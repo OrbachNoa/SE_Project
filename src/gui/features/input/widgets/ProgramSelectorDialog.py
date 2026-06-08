@@ -16,6 +16,8 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
     QFrame, QWidget, QMessageBox, QSizePolicy,
 )
+from gui.core.styles.Theme import APP_STYLESHEET
+from gui.core.styles.DialogStyles import DIALOG_STYLESHEET
 
 # Maximum number of programs the user may select at once.
 MAX_PROGRAMS = 5
@@ -24,16 +26,6 @@ MAX_PROGRAMS = 5
 class _ProgramCard(QFrame):
     """A single clickable program card with a selected / unselected state."""
 
-    SELECTED_STYLE = (
-        "QFrame#prog-card { background-color: #FAF5EC; border: 2px solid #3396ad;"
-        " border-radius: 12px; }"
-    )
-    DEFAULT_STYLE = (
-        "QFrame#prog-card { background-color: #FFFFFF; border: 1px solid #E2E8F0;"
-        " border-radius: 12px; }"
-        "QFrame#prog-card:hover { border-color: #CBD5E1; }"
-    )
-
     def __init__(self, program_id: str, display_name: str, on_toggle, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("prog-card")
@@ -41,7 +33,6 @@ class _ProgramCard(QFrame):
         self._selected = False
         self._on_toggle = on_toggle
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet(self.DEFAULT_STYLE)
         self.setMinimumHeight(60)
 
         layout = QHBoxLayout(self)
@@ -50,120 +41,67 @@ class _ProgramCard(QFrame):
 
         # Square check-box indicator on the left, drawn purely with styles.
         self._box = QLabel("")
+        self._box.setObjectName("prog-card-box")
         self._box.setFixedSize(20, 20)
         self._box.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._apply_box_style()
         layout.addWidget(self._box)
 
         # Program id (small, muted) above the program name.
         text_col = QVBoxLayout()
         text_col.setSpacing(1)
         self._id_lbl = QLabel(program_id)
-        self._id_lbl.setStyleSheet("color: #64748B; font-size: 11px; background: transparent; border: none;")
+        self._id_lbl.setObjectName("prog-card-id")
         self._name_lbl = QLabel(display_name)
         self._name_lbl.setWordWrap(True)
-        self._name_lbl.setStyleSheet("color: #334155; font-size: 13px; font-weight: 600; background: transparent; border: none;")
+        self._name_lbl.setObjectName("prog-card-name")
         text_col.addWidget(self._id_lbl)
         text_col.addWidget(self._name_lbl)
         layout.addLayout(text_col, stretch=1)
 
-    def _apply_box_style(self) -> None:
-        """Repaint the square indicator to match the current selection state."""
+        self._apply_styles()
+
+    def _apply_styles(self) -> None:
+        """Apply dynamic property for styling and force repaint."""
+        val_str = "true" if self._selected else "false"
+        self.setProperty("selected", val_str)
+        self._box.setProperty("selected", val_str)
+        self._id_lbl.setProperty("selected", val_str)
+        self._name_lbl.setProperty("selected", val_str)
+
+        # For check-box indicator text
         if self._selected:
             self._box.setText("✓")
-            self._box.setStyleSheet(
-                "color: #FFFFFF; background: #3396ad; border: 2px solid #3396ad;"
-                "border-radius: 6px; font-weight: bold; font-size: 12px;"
-            )
         else:
             self._box.setText("")
-            self._box.setStyleSheet(
-                "background: #FFFFFF; border: 2px solid #CBD5E1; border-radius: 6px;"
-            )
+
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self._box.style().unpolish(self._box)
+        self._box.style().polish(self._box)
+        self._id_lbl.style().unpolish(self._id_lbl)
+        self._id_lbl.style().polish(self._id_lbl)
+        self._name_lbl.style().unpolish(self._name_lbl)
+        self._name_lbl.style().polish(self._name_lbl)
 
     def set_selected(self, value: bool) -> None:
-        """Update the visual state of the card (border, background, check box)."""
+        """Update the selection state and refresh styles."""
         self._selected = value
-        self.setStyleSheet(self.SELECTED_STYLE if value else self.DEFAULT_STYLE)
-        self._apply_box_style()
-        if value:
-            self._name_lbl.setStyleSheet("color: #3E352F; font-size: 13px; font-weight: 700; background: transparent; border: none;")
-            self._id_lbl.setStyleSheet("color: #3396ad; font-size: 11px; font-weight: 600; background: transparent; border: none;")
-        else:
-            self._name_lbl.setStyleSheet("color: #334155; font-size: 13px; font-weight: 600; background: transparent; border: none;")
-            self._id_lbl.setStyleSheet("color: #64748B; font-size: 11px; background: transparent; border: none;")
+        self._apply_styles()
 
     def mousePressEvent(self, event) -> None:
-        # Delegate the actual toggle decision to the dialog so it can enforce
-        # the maximum-selection limit before flipping the card state.
+        """Delegate the actual toggle decision to the dialog so it can enforce the maximum-selection limit before flipping the card state."""
         self._on_toggle(self.program_id)
 
 
-# Local stylesheet for the dialog chrome (title, buttons, card container).
-_DIALOG_STYLE = """
-QDialog {
-    background-color: #FAFAFA;
-}
-QFrame#dialog-card {
-    background-color: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 18px;
-}
-QLabel#dialog-title {
-    color: #3E352F;
-    font-size: 17px;
-    font-weight: 700;
-    background: transparent;
-}
-QLabel#dialog-hint {
-    color: #8A7E72;
-    font-size: 12px;
-    background: transparent;
-}
-QLabel#dialog-counter {
-    color: #3E352F;
-    font-size: 12px;
-    font-weight: 600;
-    background: #FAF5EC;
-    border-radius: 11px;
-    padding: 4px 12px;
-}
-QPushButton#dialog-select {
-    background-color: #3396ad;
-    color: #FDFBF7;
-    border: none;
-    border-radius: 10px;
-    padding: 10px 26px;
-    font-size: 13px;
-    font-weight: 600;
-}
-QPushButton#dialog-select:hover {
-    background-color: #297B8F;
-}
-QPushButton#dialog-cancel {
-    background-color: #FFFFFF;
-    color: #64748B;
-    border: 1px solid #E2E8F0;
-    border-radius: 10px;
-    padding: 10px 20px;
-    font-size: 13px;
-}
-QPushButton#dialog-cancel:hover {
-    background-color: #F1F5F9;
-    border-color: #CBD5E1;
-}
-"""
-
-
+# Modal popup showing all programs as a clickable grid (no scrolling)
 class ProgramSelectorDialog(QDialog):
-    """Modal popup showing all programs as a clickable grid (no scrolling)."""
 
     def __init__(self, programs_vm, preselected_ids: List[str], parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Select Study Programs")
         self.setModal(True)
         self.setMinimumWidth(720)
-        self.setStyleSheet(_DIALOG_STYLE)
+        self.setStyleSheet(APP_STYLESHEET + DIALOG_STYLESHEET)
 
         # Selection state owned by the dialog. Start from the caller's choice.
         self._selected: List[str] = list(preselected_ids)

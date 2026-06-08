@@ -14,25 +14,24 @@ focused on navigation and display logic only.
 """
 from __future__ import annotations
 
-from gui.widgets.CalendarWidget import CalendarWidget
-from gui.widgets.SchedulePdfExporter import export_schedule_pdf
+from typing import List
+from datetime import datetime, timedelta
+from gui.common.components.CalendarWidget import CalendarWidget
+from gui.common.components.HeaderWidget import HeaderWidget
+from gui.common.helpers import create_divider
+from gui.features.output.widgets.SchedulePdfExporter import export_schedule_pdf
+from gui.features.output.widgets.SolutionBarWidget import SolutionBarWidget
+from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
 from PyQt6.QtWidgets import (
     QLabel, QMessageBox, QVBoxLayout, QHBoxLayout, QPushButton,
     QFrame, QScrollArea, QWidget,
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QKeySequence, QFont
+from gui.core.screen import Screen
 
-from gui.screen import Screen
-
-# One SQLite result page holds this many schedules. The same value is used by
-# the storage layer, so the two must always match. If they ever differ the page
-# navigation will jump to the wrong offsets.
+# Variable for max number of schedules in memory
 _PAGE_WINDOW = 10_000
-
-
-# Shared helper create_divider is imported from gui.widgets.Common
 
 
 class OutputScreen(Screen):
@@ -44,21 +43,21 @@ class OutputScreen(Screen):
         self._router = router
 
         # Index of the schedule shown inside the page that is loaded in memory.
-        # It is zero based and always stays within the current window.
         self._current_index: int = 0
 
         # Number of schedules held in the page currently loaded in memory.
         self._total: int = 0
 
         # Pagination state mirrored from the SQLite backed repository.
-        # Page numbers are zero based internally and shown to the user as one
-        # based. sqlite_count is the running number of schedules written to disk
-        # so far across every page, which is what lets us tell whether the next
-        # page is ready to be opened.
         self._current_page: int = 0
         self._total_pages: int = 0
         self._total_found: int = 0
         self._sqlite_count: int = 0
+
+        # Contiguous list of loaded period view models
+        self._available_periods: List[PeriodEditViewModel] = []
+        # Current active period index showing on the calendar
+        self._current_period_index: int = 0
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -71,22 +70,16 @@ class OutputScreen(Screen):
 
         # Show the initial empty state before any schedule is loaded.
         self._refresh_counter()
-
-        # Stay in sync while the search keeps running in the background.
-        # Every time the worker writes a batch of schedules to SQLite the
-        # controller emits total_count_updated. We use it to keep the counters
-        # and the Next page button state current without asking the user to
-        # reload the screen.
+        # Update page navigation status when new batches are written to disk
         self._controller.total_count_updated.connect(self._on_total_count_updated)
 
     def _build_header(self, root: QVBoxLayout) -> None:
         """Build the gold branding bar with active output breadcrumb at the top of the screen."""
-        header = HeaderWidget(active_step="output", parent=self)
+        header = HeaderWidget(parent=self)
         root.addWidget(header)
 
     def _build_solution_bar(self, root: QVBoxLayout) -> None:
         """Build the reusable solution navigation bar."""
-        from gui.widgets.SolutionBarWidget import SolutionBarWidget
         self.solution_bar = SolutionBarWidget(self)
         self.solution_bar.back_btn.clicked.connect(self._on_back)
         self.solution_bar.export_btn.clicked.connect(self._on_export_pdf)
@@ -101,11 +94,8 @@ class OutputScreen(Screen):
 
     def _build_calendar_area(self, root: QVBoxLayout) -> None:
         """
-        Build the scrollable area that holds the calendar widget.
-
-        The calendar widget is rebuilt for every schedule that is shown. We
-        hide its weekday header because the cells are laid out by exam date and
-        not by real weekday, so that header never lines up with the cells.
+        Build the scrollable area that holds the calendar widget,
+        including a navigation bar for switching between months.
         """
         body = QVBoxLayout()
         body.setContentsMargins(28, 20, 28, 20)
@@ -115,26 +105,41 @@ class OutputScreen(Screen):
         content_card.setObjectName("content-area")
         content_layout = QVBoxLayout(content_card)
         content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
+        # Period Navigation Bar - allows user to navigate between semester periods
+        month_nav_frame = QFrame()
+        month_nav_frame.setObjectName("month-nav-bar")
+        month_nav_layout = QHBoxLayout(month_nav_frame)
+        month_nav_layout.setContentsMargins(20, 10, 20, 10)
+        
+        self.prev_month_btn = QPushButton("← Prev Period")
+        self.prev_month_btn.setFixedWidth(130)
+        self.prev_month_btn.clicked.connect(self._on_prev_month)
+        
+        self.month_label = QLabel("")
+        self.month_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.next_month_btn = QPushButton("Next Period →")
+        self.next_month_btn.setFixedWidth(130)
+        self.next_month_btn.clicked.connect(self._on_next_month)
+        
+        month_nav_layout.addWidget(self.prev_month_btn)
+        month_nav_layout.addWidget(self.month_label, stretch=1)
+        month_nav_layout.addWidget(self.next_month_btn)
+        content_layout.addWidget(month_nav_frame)
 
         # A scroll area keeps a long calendar usable on small windows.
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self._scroll.setStyleSheet("background: transparent;")
 
         self._content_widget = QWidget()
-        self._content_widget.setStyleSheet("background: transparent;")
+        self._content_widget.setObjectName("calendar-scroll-content")
         content_inner = QVBoxLayout(self._content_widget)
         content_inner.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.calendar_grid = CalendarWidget()
-
-        # Hide the "Sun Mon Tue ..." header row from here, which keeps the
-        # calendar widget itself untouched. The header is misleading because
-        # the cells below are ordered by date rather than by weekday.
-        if hasattr(self.calendar_grid, "headers_frame"):
-            self.calendar_grid.headers_frame.setVisible(False)
-
         content_inner.addWidget(self.calendar_grid)
 
         self._scroll.setWidget(self._content_widget)
@@ -168,28 +173,24 @@ class OutputScreen(Screen):
         if not has_multiple_pages:
             return
 
+        # Refresh the page counter and button states
         self.solution_bar.page_label.setText(f"Page {self._current_page + 1} / {self._total_pages}")
         self.solution_bar.first_page_btn.setEnabled(self._current_page > 0)
         self.solution_bar.prev_page_btn.setEnabled(self._current_page > 0)
 
-        # Work out whether the next page is already fully written to disk.
+        # Check if the next page is ready
         next_page_index = self._current_page + 1
         rows_needed_on_disk = next_page_index * _PAGE_WINDOW
         next_page_is_ready = self._sqlite_count >= rows_needed_on_disk
         
+        # Enable/disable the next page buttons based on whether the next page is ready
         has_next = self._current_page < self._total_pages - 1
         self.solution_bar.next_page_btn.setEnabled(has_next and next_page_is_ready)
         self.solution_bar.last_page_btn.setEnabled(has_next and next_page_is_ready)
 
-    def _on_total_count_updated(self, total: int) -> None:
+    def _on_total_count_updated(self, _total: int) -> None:
         """
-        React to a new batch being written to disk while the search runs.
-
-        We re-read the authoritative page info from the controller so the local
-        state matches the repository exactly, even when several batches landed
-        between two repaints. On page 0 the in memory window keeps growing as
-        results arrive, so the solution counter is refreshed too. On later pages
-        only the page bar changes.
+        Update the total count of solutions and refresh the page bar.
         """
         info = self._controller.get_page_info()
         self._total_found = info["total_count"]
@@ -205,9 +206,8 @@ class OutputScreen(Screen):
     def _on_next_page(self) -> None:
         """Load the next page, reset to its first schedule and redraw."""
         target = self._current_page + 1
+        # Check if the next page is within the valid range
         if target >= self._total_pages:
-            # Discard clicks that arrived after the state already changed, for
-            # example a fast double click on the last enabled page.
             return
         self._controller.load_page(target)
         self._sync_page_info()
@@ -248,50 +248,91 @@ class OutputScreen(Screen):
         self._refresh_counter()
 
     def _show_current(self) -> None:
-        """Draw the schedule at the current index inside the calendar widget.
-
-        Repaints are suspended while the grid is torn down and rebuilt so the
-        user never sees a flash of empty content. The final result appears in
-        one frame once everything is ready.
+        """
+        Draw the schedule at the current index inside the calendar widget.
         """
         if self._total == 0:
             return
-        # Freeze the screen while the calendar is being rebuilt. Without this,
-        # all the widget deletions and creations happen in full view and the
-        # user sees a brief flicker of partially-drawn content.
+            
+        # Freeze the screen while the calendar is being rebuilt
         self.setUpdatesEnabled(False)
         try:
             view = self._controller.get_schedule_view(self._current_index)
-            # Build the empty calendar from the unique exam dates first.
-            active_dates = sorted({item.date for item in view.items})
-            self.calendar_grid.setup_month_grid(active_dates)
-            # Then place the exam tiles into their matching cells.
-            self.calendar_grid.display_assignments(view.items)
+            
+            # Make sure available periods are initialized
+            if not hasattr(self, "_available_periods") or not self._available_periods:
+                self._available_periods = self._get_available_periods()
+                self._current_period_index = 0
+                
+            # Bounds check current period index
+            if self._current_period_index >= len(self._available_periods):
+                self._current_period_index = max(0, len(self._available_periods) - 1)
+            if self._current_period_index < 0:
+                self._current_period_index = 0
+                
+            if not self._available_periods:
+                return
+                
+            selected_period = self._available_periods[self._current_period_index]
+            
+            # Update the period label text (e.g. "Semester FALL - Moed ALEPH (1/4)")
+            self.month_label.setText(
+                f"Semester {selected_period.semester} - Moed {selected_period.moed} "
+                f"({self._current_period_index + 1}/{len(self._available_periods)})"
+            )
+            
+            # Update navigation buttons enabled states
+            self.prev_month_btn.setEnabled(self._current_period_index > 0)
+            self.next_month_btn.setEnabled(self._current_period_index < len(self._available_periods) - 1)
+            
+            # Generate the dates only for the selected period range
+            start = datetime.strptime(selected_period.start_date, "%Y-%m-%d")
+            end = datetime.strptime(selected_period.end_date, "%Y-%m-%d")
+            
+            # Create a list of dates in the selected period range
+            date_list = []
+            if end >= start:
+                delta = end - start
+                for i in range(delta.days + 1):
+                    day = start + timedelta(days=i)
+                    date_list.append(day.strftime("%Y-%m-%d"))
+                
+            self.calendar_grid.setup_month_grid(date_list, show_month_header=False, show_month_banner=True)
+            
+            # Paint excluded dates in the output calendar with soft brown shade
+            for ex_date in selected_period.excluded_dates:
+                self.calendar_grid.set_date_excluded_output_style(ex_date)
+            
+            # Filter assignments to only show the ones in the selected period date range
+            filtered_items = [
+                item for item in view.items 
+                if item.date and selected_period.start_date <= item.date <= selected_period.end_date
+            ]
+            self.calendar_grid.display_assignments(filtered_items)
+            
         except Exception as error:
+            # Show error message if something goes wrong
             QMessageBox.critical(self, "Display Error", f"Failed to paint calendar: {error}")
         finally:
-            # Always re-enable repaints, even if an error occurred, otherwise
-            # the entire screen would stay frozen.
+            # Re-enable repaints
             self.setUpdatesEnabled(True)
 
     def _on_back(self) -> None:
-        """Return to the input screen using the router history."""
+        """
+        Return to the input screen using the router history.
+        """
         self._router.back()
 
     def _on_export_pdf(self) -> None:
         """
         Save the schedule that is currently on screen as a PDF.
-
-        Validation (empty state, empty view) stays here because it needs access
-        to self._total and the controller. The actual HTML build and PDF write
-        are delegated to SchedulePdfExporter to keep this file focused on
-        navigation and display logic.
         """
+        # Check if there is a schedule to export
         if self._total == 0:
             QMessageBox.information(self, "Nothing to export", "There is no schedule to export yet.")
             return
 
-        # Read the display data for the schedule currently shown.
+        # Read the display data for the schedule currently shown
         try:
             view = self._controller.get_schedule_view(self._current_index)
         except Exception as error:
@@ -302,18 +343,39 @@ class OutputScreen(Screen):
             QMessageBox.information(self, "Nothing to export", "This schedule has no exams to export.")
             return
 
-        # Delegate the file dialog, HTML build, PDF write and result dialog to
-        # the dedicated exporter module so this file stays lean.
+        # Delegate the file dialog, HTML build, PDF write and result dialog to the exporter.
         export_schedule_pdf(view, self._current_index, parent=self)
 
     def _sync_page_info(self) -> None:
-        """Copy the current paging state from the controller into this screen."""
+        """
+        Copy the current paging state from the controller into this screen.
+        """
         info = self._controller.get_page_info()
         self._current_page = info["current_page"]
         self._total_pages = info["total_pages"]
         self._total = info["window_size"]
         self._total_found = info["total_count"]
         self._sqlite_count = info.get("sqlite_count", 0)
+
+    def _get_available_periods(self) -> List[PeriodEditViewModel]:
+        """Get the mapped PeriodEditViewModel instances for all loaded periods."""
+        periods = self._controller.get_loaded_periods()
+        mapper = self._controller.get_mapper()
+        if mapper and periods:
+            return mapper.to_period_edit_vms(periods)
+        return []
+
+    def _on_prev_month(self) -> None:
+        """Switch calendar view to the previous period."""
+        if self._current_period_index > 0:
+            self._current_period_index -= 1
+            self._show_current()
+
+    def _on_next_month(self) -> None:
+        """Switch calendar view to the next period."""
+        if self._current_period_index < len(self._available_periods) - 1:
+            self._current_period_index += 1
+            self._show_current()
 
     def on_next(self) -> None:
         """Move forward one schedule inside the current page."""
@@ -332,17 +394,27 @@ class OutputScreen(Screen):
     def on_enter(self) -> None:
         """
         Prepare the screen each time the router makes it active.
-
-        We reset to the first schedule, refresh the paging state from the
-        controller, draw the calendar and put the focus on Back so the Alt+Left
-        shortcut works right away.
         """
         self._current_index = 0
         self._sync_page_info()
+        self._available_periods = self._get_available_periods()
+        self._current_period_index = 0
         self._show_current()
         self._refresh_counter()
         self.solution_bar.back_btn.setFocus()
 
     def on_leave(self) -> None:
-        """Called by the router when the user navigates away from this screen."""
+        """Called by the router when navigating away from this screen."""
         pass
+
+    @property
+    def _prev_btn(self):
+        return self.solution_bar.prev_btn
+
+    @property
+    def _next_btn(self):
+        return self.solution_bar.next_btn
+
+    @property
+    def _counter_label(self):
+        return self.solution_bar.counter_label
