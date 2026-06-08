@@ -67,7 +67,7 @@ class ProgramYearConflictChecker(IConflictChecker):
             return False
 
         # Courses already scheduled on the same date.
-        courses_on_date = schedule._date_to_course_ids.get(assignment.date)
+        courses_on_date = schedule.course_ids_on_date(assignment.date)
         if not courses_on_date:
             return False
 

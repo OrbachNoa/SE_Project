@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from src.gui.screens.InputScreen import InputScreen
+from src.gui.features.input.InputScreen import InputScreen
 from src.application.ImportBoundary import ImportMode
 
 pytestmark = pytest.mark.usefixtures("qapp")

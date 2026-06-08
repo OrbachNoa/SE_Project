@@ -16,7 +16,7 @@ class MoedOrderChecker(IConflictChecker):
     def check(self, assignment, schedule) -> bool:
         new_course_id = assignment.course.courseId
         new_moed_rank = self._moed_rank.get(assignment.moed, 0)
-        same_course = schedule._course_to_assignments.get(assignment.course.courseId)
+        same_course = schedule.assignments_for_course(assignment.course.courseId)
         if not same_course:
             return False
         # Compare the new assignment with exams already placed in the schedule.

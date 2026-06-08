@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 from PyQt6.QtCore import pyqtSignal, QObject
-from src.gui.screens.OutputScreen import OutputScreen
+from src.gui.features.output.OutputScreen import OutputScreen
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel, ScheduleItemViewModel
 
 pytestmark = pytest.mark.usefixtures("qapp")

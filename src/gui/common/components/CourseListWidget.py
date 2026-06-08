@@ -1,13 +1,11 @@
-""" CourseListWidget
-PyQt5 widget that displays expandable/collapsible program rows.
+""" 
+CourseListWidget
+PyQt6 widget that displays expandable/collapsible program rows.
 Each program row can be expanded to reveal its courses, grouped by academic year and semester.
 """
 
 from typing import Dict, List
-
-# Updated imports for PyQt6 core and widget components
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -21,13 +19,6 @@ from PyQt6.QtWidgets import (
 
 # Internal helper: a single course row inside an expanded program
 class _CourseRow(QWidget):
-    """One row displaying a single course's details."""
-
-    # Green-tinted left border for exam-relevant courses
-    EXAM_STYLE = "background-color: #F0FAF5; border-left: 3px solid #14633F; border-radius: 0 4px 4px 0;"
-    # Neutral left border for all other courses
-    DEFAULT_STYLE = "background-color: #F8FAFC; border-left: 3px solid #E2E8F0; border-radius: 0 4px 4px 0;"
-
     def __init__(self, course_vm, parent=None):
         """
         course_vm: CourseRowViewModel
@@ -50,58 +41,33 @@ class _CourseRow(QWidget):
         # Course ID — narrow fixed column, subdued slate colour
         id_lbl = QLabel(course_vm.course_id)
         id_lbl.setFixedWidth(44)
-        id_lbl.setFont(QFont("Segoe UI", 10))
-        id_lbl.setStyleSheet("color: #64748B;")
+        id_lbl.setObjectName("course-id-lbl")
         layout.addWidget(id_lbl)
 
         # Course name — stretches to fill remaining horizontal space
         name_lbl = QLabel(course_vm.course_name)
-        name_lbl.setFont(QFont("Segoe UI", 12))
-        name_lbl.setStyleSheet("color: #1E293B;")
+        name_lbl.setObjectName("course-name-lbl")
         name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(name_lbl, stretch=1)
 
         # Requirement badge — compact pill: green for Obligatory, amber for Elective.
-        # Evaluation badge and exam icon removed to reduce visual noise.
         req_lbl = QLabel(course_vm.requirement)
         req_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if "Obligatory" in course_vm.requirement:
-            req_color, req_bg = "#14633F", "#E5F0EB"
+            req_lbl.setObjectName("badge-ok")
         else:
-            req_color, req_bg = "#92400E", "#FEF3C7"
-        req_lbl.setStyleSheet(
-            f"color: {req_color}; background: {req_bg}; "
-            "border-radius: 4px; padding: 1px 6px; font-size: 11px;"
-        )
+            req_lbl.setObjectName("badge-warning")
         layout.addWidget(req_lbl)
 
-        border = self.EXAM_STYLE if course_vm.is_exam_relevant else self.DEFAULT_STYLE
-        self.setStyleSheet(f"QWidget {{ {border} }}")
+        if course_vm.is_exam_relevant:
+            self.setObjectName("course-row-exam")
+        else:
+            self.setObjectName("course-row-default")
 
 # Internal helper: one expandable program block
 class _ProgramBlock(QWidget):
-    """
-    A collapsible block for one program.
-    Header shows program name + course count; body shows course rows.
-    """
-
-    # Dark green header matching the brand palette; Segoe UI for readability
-    HEADER_STYLE = (
-        "QPushButton {"
-        "  background-color: #143D30; color: white; border-radius: 8px;"
-        "  text-align: left; padding: 8px 14px;"
-        "  font-family: 'Segoe UI'; font-size: 12px; font-weight: 600;"
-        "}"
-        "QPushButton:hover { background-color: #0F2D23; }"
-    )
 
     def __init__(self, program_vm, parent=None):
-        """
-        program_vm: ProgramCoursesViewModel
-            .program_id: str
-            .program_name: str
-            .courses: List[CourseRowViewModel]
-        """
         super().__init__(parent)
 
         self._expanded = False
@@ -110,9 +76,9 @@ class _ProgramBlock(QWidget):
         root.setSpacing(0)
 
         # Header button — course count removed to keep the label concise
-        header_text = f"▶  {program_vm.program_id} — {program_vm.program_name}"
+        header_text = f"►  {program_vm.program_id} — {program_vm.program_name}"
         self._header_btn = QPushButton(header_text)
-        self._header_btn.setStyleSheet(self.HEADER_STYLE)
+        self._header_btn.setObjectName("course-list-header-btn")
         self._header_btn.setFixedHeight(40)
         self._header_btn.clicked.connect(self._toggle)
         root.addWidget(self._header_btn)
@@ -129,16 +95,13 @@ class _ProgramBlock(QWidget):
             key = f"Year {c.year} — Semester {c.semester}"
             groups.setdefault(key, []).append(c)
 
+        # Year/semester sub-header
         for group_key in sorted(groups.keys()):
-            # Year/semester sub-header — light blue band separating groups
             group_lbl = QLabel(group_key)
-            group_lbl.setFont(QFont("Segoe UI", 11))
-            group_lbl.setStyleSheet(
-                "color: #143D30; background: #EAF4FA; padding: 4px 12px; "
-                "border-radius: 6px; font-weight: 600; margin: 4px 0px;"
-            )
+            group_lbl.setObjectName("course-group-lbl")
             body_layout.addWidget(group_lbl)
 
+            # Courses
             for course_vm in groups[group_key]:
                 row = _CourseRow(course_vm)
                 body_layout.addWidget(row)
@@ -147,32 +110,30 @@ class _ProgramBlock(QWidget):
         root.addWidget(self._body)
 
     def _toggle(self) -> None:
+        """Toggle the program block open or closed."""
         self._expanded = not self._expanded
         self._body.setVisible(self._expanded)
 
         current = self._header_btn.text()
         if self._expanded:
-            new_text = current.replace("▶", "▼", 1)
+            new_text = current.replace("►", "▼", 1)
         else:
-            new_text = current.replace("▼", "▶", 1)
+            new_text = current.replace("▼", "►", 1)
         self._header_btn.setText(new_text)
 
     def expand(self) -> None:
+        """Expand the program block."""
         if not self._expanded:
             self._toggle()
 
     def collapse(self) -> None:
+        """Collapse the program block."""
         if self._expanded:
             self._toggle()
 
 
-# Main widget
-
+# Main widget - Displays a scrollable list of expandable program blocks.
 class CourseListWidget(QWidget):
-    """ 
-    Displays a scrollable list of expandable program blocks.
-    """
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._blocks: Dict[str, _ProgramBlock] = {}
@@ -180,19 +141,16 @@ class CourseListWidget(QWidget):
         self._active_widgets: List[QWidget] = []
         self._build_ui()
     
-    # UI construction
     def _build_ui(self) -> None:
+        """Build the UI of the CourseListWidget."""
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(6)
 
-        # Title is intentionally absent here — the parent card in input_screen.py
-        # provides the "📋  Courses" heading so it is not duplicated.
-
         # Scrollable area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: 1px solid #e2e8f0; border-radius: 8px; }")
+        scroll.setObjectName("course-scroll-area")
 
         self._container = QWidget()
         self._container_layout = QVBoxLayout(self._container)
@@ -203,16 +161,9 @@ class CourseListWidget(QWidget):
         scroll.setWidget(self._container)
         root.addWidget(scroll)
 
-    # Public API
     def render(self, programs_vm) -> None:
         """
         Populate the widget from a list of ProgramCoursesViewModel objects.
-
-        programs_vm: List[ProgramCoursesViewModel]
-            Each item must have:
-              .program_id: str
-              .program_name: str
-              .courses: List[CourseRowViewModel]
         """
         # Clear existing blocks
         self._blocks.clear()
@@ -221,15 +172,15 @@ class CourseListWidget(QWidget):
             widget.deleteLater()
         self._active_widgets.clear()
 
+        # Display empty state if no programs are loaded
         if not programs_vm:
-            # Set placeholder text in English to match course standards
-            empty_lbl = QLabel("No study programs loaded into registry context.")
-            # Use fully qualified alignment flag for PyQt6 compliance
+            empty_lbl = QLabel("No study programs loaded into context.")
             empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
+            empty_lbl.setObjectName("course-empty-lbl")
             self._container_layout.insertWidget(0, empty_lbl)
             return
-
+        
+        # Add program blocks
         for vm in programs_vm:
             block = _ProgramBlock(vm)
             self._blocks[vm.program_id] = block
