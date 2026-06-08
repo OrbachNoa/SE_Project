@@ -78,4 +78,4 @@ class Scheduler:
                 schedule.addAssignment(assignment)
                 self._backtrack(index + 1, slots, schedule, observer, found_count, max_results)
                 # Remove the assignment before trying the next possible date.
-                schedule.removeAssignment(assignment)
+                schedule.pop_last_assignment()
