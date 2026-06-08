@@ -2,7 +2,7 @@
 
 Layout overview:
   - Header      : green branding bar with breadcrumb (Input › Output)
-  - Action bar  : Load Courses / Load Periods, import mode, Generate / Cancel
+  - Action bar  : Load Courses / Load Periods, import mode, Generate / Cancel / View Results
   - Body        : two columns
         left    -> program selector line (opens a popup) + loaded course list
         right   -> reserved placeholder for a future calendar date editor
@@ -11,16 +11,18 @@ Layout overview:
 from __future__ import annotations
 
 from typing import List
-
+from src.application.viewmodels.ProgramViewModel import ProgramViewModel
+from data.programs import programs_data
+from gui.widgets.ProgramSelectorDialog import ProgramSelectorDialog
 from gui.widgets.ProgramSelectorCardWidget import ProgramSelectorCardWidget
 from gui.widgets.CourseListWidget import CourseListWidget
 
 from PyQt6.QtWidgets import (
     QLabel, QVBoxLayout, QHBoxLayout, QPushButton,
     QRadioButton, QButtonGroup, QFrame,
-    QMessageBox, QProgressBar, QSizePolicy, QWidget,
+    QMessageBox, QProgressBar, QWidget,
 )
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from gui.widgets.HeaderWidget import HeaderWidget
@@ -58,9 +60,31 @@ class InputScreen(Screen):
         # each new run.
         self._already_navigated = False
 
+        # Keeps a reference to the active calendar editor so its signal can be
+        # disconnected before a new editor is connected on a second file load,
+        # preventing duplicate handler calls.
+        self._editor_widget = None
+
+        # Keeps a reference to the active calendar editor so its signal can be
+        # disconnected before a new editor is connected on a second file load,
+        # preventing duplicate handler calls.
+        self._editor_widget = None
+
         # Reusable program selector card widget
-        self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, self)
-        self.program_selector_card.selection_changed.connect(self._refresh_generate_button)
+        #self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, self)
+        #self.program_selector_card.selection_changed.connect(self._refresh_generate_button)
+
+        # Committed program selection. The popup works on a copy and only
+        # writes back here when the user presses "Select", so closing the
+        # popup without confirming never loses the previous choice.
+        #self._selected_program_ids: List[str] = []
+
+        # Built once from the static programs dictionary and reused every time
+        # the popup opens, so we never rebuild view models on each click.
+        self._program_view_models = [
+            ProgramViewModel(program_id=p_id, display_name=p_name, course_count=0)
+            for p_id, p_name in programs_data.items()
+        ]
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -95,7 +119,7 @@ class InputScreen(Screen):
             "load_btn": self.action_bar.periods_load_btn,
         }
 
-        # ── Body — two columns ─────────────────────────────────────────────
+        # Body: two-column layout.
         body = QVBoxLayout()
         body.setContentsMargins(20, 20, 20, 20)
         body.setSpacing(16)
@@ -120,7 +144,7 @@ class InputScreen(Screen):
 
         root.addLayout(body)
 
-        # ── Footer — validation + progress ─────────────────────────────────
+        # Footer: validation label + indeterminate progress bar + running counter.
         self._validation_label = QLabel("")
         self._validation_label.setObjectName("status-error")
         self._validation_label.setWordWrap(True)
@@ -140,12 +164,12 @@ class InputScreen(Screen):
         self._progress_label.setContentsMargins(24, 0, 24, 8)
         root.addWidget(self._progress_label)
 
-        # ── Connect controller signals ─────────────────────────────────────
-        # progress_updated    — running count (may not fire with the SQL engine)
-        # search_finished     — full background search completed
-        # error_occurred      — fatal scheduler error
-        # early_results_ready — first SQLite page is ready; jump to output now
-        #                       without waiting for the whole search to finish.
+        # Connect controller signals:
+        #   progress_updated    — running count (may not fire with the SQL engine)
+        #   search_finished     — full background search completed
+        #   error_occurred      — fatal scheduler error
+        #   early_results_ready — first SQLite page is ready; jump to output now
+        #                         without waiting for the whole search to finish.
         self._controller.schedule_found.connect(self._on_schedule_found)
         self._controller.progress_updated.connect(self._on_progress_updated)
         self._controller.search_finished.connect(self._on_search_finished)
@@ -153,8 +177,6 @@ class InputScreen(Screen):
         self._controller.early_results_ready.connect(self._on_early_results_ready)
 
         self._refresh_generate_button()
-
-    # ── Body builders ───────────────────────────────────────────────────
 
 
 
@@ -230,15 +252,71 @@ class InputScreen(Screen):
         layout.addStretch()
         return frame
 
+    def _on_selector_card_clicked(self, event) -> None:
+        """Open the program selection popup when the selector card is clicked."""
+        self._open_program_dialog()
 
+    def _open_program_dialog(self) -> None:
+        """Show the modal popup and commit the new selection only on accept."""
+        dialog = ProgramSelectorDialog(
+            self._program_view_models,
+            preselected_ids=self._selected_program_ids,
+            parent=self,
+        )
+        if dialog.exec():
+            # Accepted ("Select" pressed) — commit the new selection.
+            self._selected_program_ids = dialog.selected_ids()
+            self._refresh_program_summary()
+            self._refresh_generate_button()
 
-    # ── File row state helpers ────────────────────────────────────────────
+    def _refresh_program_summary(self) -> None:
+        """Rebuild the selector summary: placeholder when empty, chips otherwise."""
+        # Remove any previously rendered summary widgets.
+        while self._summary_layout.count():
+            item = self._summary_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+
+        count = len(self._selected_program_ids)
+        self._programs_count_badge.setText(f"{count} / {MAX_PROGRAMS}")
+
+        if count == 0:
+            placeholder = QLabel("Click to select programs")
+            placeholder.setStyleSheet(
+                "color: #94A3B8; font-size: 13px; background: transparent;"
+            )
+            self._summary_layout.addWidget(placeholder)
+            return
+
+        # Map program IDs back to display names for nicer chip labels.
+        name_by_id = {vm.program_id: vm.display_name for vm in self._program_view_models}
+
+        # Lay chips out in rows of up to three so the card grows gracefully.
+        row = None
+        for i, pid in enumerate(self._selected_program_ids):
+            if i % 3 == 0:
+                row = QHBoxLayout()
+                row.setSpacing(6)
+                row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+                row_holder = QWidget()
+                row_holder.setStyleSheet("background: transparent;")
+                row_holder.setLayout(row)
+                self._summary_layout.addWidget(row_holder)
+
+            label = name_by_id.get(pid, pid)
+            chip = QLabel(f"{pid} · {label}")
+            chip.setStyleSheet(
+                "color: #143D30; background: #E5F0EB; border: 1px solid #14633F;"
+                "border-radius: 11px; padding: 3px 10px; font-size: 11px;"
+            )
+            row.addWidget(chip)
+        if row is not None:
+            row.addStretch()
 
     def _mark_file_loaded(self, row: dict, count: int, label: str) -> None:
         """Record a successful file load on the (hidden) status badge."""
         row["count_lbl"].setText(f"✓  {count} {label}")
-
-    # ── Validation ─────────────────────────────────────────────────────
 
     def _refresh_generate_button(self) -> None:
         """Enable Generate only when both files are loaded; warn otherwise."""
@@ -259,8 +337,6 @@ class InputScreen(Screen):
         else:
             self._validation_label.setText("")
 
-    # ── Running state ──────────────────────────────────────────────────
-
     def _set_running_mode(self, running: bool) -> None:
         """Toggle the UI between idle and running states."""
         self.action_bar.generate_btn.setVisible(not running)
@@ -272,17 +348,20 @@ class InputScreen(Screen):
         if running:
             self._last_count = 0
             self._progress_label.setText("Initialising scheduler…")
-
-    # ── Event handlers ─────────────────────────────────────────────────
+            # Hide "View Results" while a new run is in progress so the user
+            # cannot jump to stale results from a previous generation.
+            self._view_results_btn.setVisible(False)
 
     def _selected_mode(self) -> ImportMode:
         """Return the import mode currently selected in the radio buttons."""
         return ImportMode.REPLACE if self.action_bar.mode_replace.isChecked() else ImportMode.UPDATE
 
     def _on_load_courses_clicked(self) -> None:
+        """Relay the load-courses button click using the currently selected import mode."""
         self.on_load_courses(self._selected_mode())
 
     def _on_load_periods_clicked(self) -> None:
+        """Relay the load-periods button click using the currently selected import mode."""
         self.on_load_periods(self._selected_mode())
 
     def _on_generate_clicked(self) -> None:
@@ -305,20 +384,25 @@ class InputScreen(Screen):
         self._set_running_mode(False)
         self._progress_label.setText("")
 
+    def _on_view_results_clicked(self) -> None:
+        """Jump back to the output screen without re-running the scheduler.
+
+        This button is only visible after the user has already navigated to
+        the output screen at least once, so results are guaranteed to exist.
+        """
+        self._router.show(SCREEN_OUTPUT)
+
     def _on_constraints_saved(self, updated_vms: list) -> None:
         """Triggered when the user saves constraints in the calendar editor."""
         # Push the edited periods into the model so generation uses them.
         self._controller.update_exam_periods(updated_vms)
         self._refresh_generate_button()
-        
-        # Debug print to verify it works:
-        print(f"InputScreen received {len(updated_vms)} updated periods from calendar.")
-
-    # ── Controller signal handlers ─────────────────────────────────────
 
     def _on_schedule_found(self, dto) -> None:
-        # Per-result notifications are not used here; the output screen reads
-        # results on demand once it becomes active.
+        """Receive per-result notifications from the scheduler.
+
+        Not used here — the output screen reads results on demand once active.
+        """
         pass
 
     def _on_progress_updated(self, count: int) -> None:
@@ -329,10 +413,16 @@ class InputScreen(Screen):
         )
 
     def _navigate_to_output(self) -> None:
-        """Switch to the output screen exactly once per run."""
+        """Switch to the output screen exactly once per run.
+
+        Also reveals the "View Results" button so the user can return here
+        from the input screen and jump back to the output at any time.
+        """
         if self._already_navigated:
             return
         self._already_navigated = True
+        # Show the button now that results exist and the output screen is active.
+        self._view_results_btn.setVisible(True)
         self._router.show(SCREEN_OUTPUT)
 
     def _result_count(self) -> int:
@@ -379,8 +469,6 @@ class InputScreen(Screen):
         """Show a critical error dialog and restore the idle UI."""
         self._set_running_mode(False)
         QMessageBox.critical(self, "Scheduler error", message)
-
-    # ── File loading ───────────────────────────────────────────────────
 
     def _get_loaded_courses(self) -> list:
         """Return the list of currently loaded courses."""
@@ -436,30 +524,36 @@ class InputScreen(Screen):
             self._mark_file_loaded(self._periods_row, result.loaded_count, "periods")
             self._refresh_generate_button()
 
-            # --- Inject the dynamic calendar editor ---
             periods = self._get_loaded_periods()
             mapper = self._get_mapper()
             if periods and mapper:
                 period_vms = mapper.to_period_edit_vms(periods)
                 if period_vms:
-                    # Remove the static placeholder UI
+                    # Remove the static placeholder before inserting the real editor.
                     if self._placeholder:
                         self._placeholder.deleteLater()
                         self._placeholder = None
-                    
-                    # Insert the interactive calendar editor with all loaded periods
+
+                    # Disconnect the previous editor's signal before replacing it
+                    # to avoid accumulating duplicate handler connections across
+                    # multiple file loads in the same session.
+                    if self._editor_widget is not None:
+                        try:
+                            self._editor_widget.constraints_saved.disconnect(
+                                self._on_constraints_saved
+                            )
+                        except RuntimeError:
+                            pass  # Already disconnected — harmless to ignore.
+
                     from src.gui.widgets.CalendarEditorWidget import CalendarEditorWidget
                     self._editor_widget = CalendarEditorWidget(period_vms)
                     self._editor_widget.constraints_saved.connect(self._on_constraints_saved)
                     self.right_col.insertWidget(0, self._editor_widget, stretch=1)
 
-    # ── Program selection ──────────────────────────────────────────────
-
     def _collect_selected_program_ids(self) -> List[str]:
         """Return the program IDs the user has committed via the popup."""
-        return self.program_selector_card.selected_program_ids()
-
-    # ── Screen lifecycle ───────────────────────────────────────────────
+        #return self.program_selector_card.selected_program_ids()
+        return list(self._selected_program_ids)
 
     def on_enter(self) -> None:
         """Called by the router when this screen becomes active."""
