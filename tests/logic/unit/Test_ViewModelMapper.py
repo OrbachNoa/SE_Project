@@ -49,7 +49,7 @@ def test_viewmodel_mapper_to_schedule_vm_with_items(make_assignment_dto):
     item = vm.items[0]
     assert item.date == "2026-06-05"
     assert item.title == "Calculus 1"
-    assert "Program 83101: Obligatory" in item.tooltip
+    assert "Prog 83101 (Obligatory)" in item.tooltip
 
 
 # ===========================================================================
@@ -69,11 +69,11 @@ def test_viewmodel_mapper_to_schedule_vm_none_raises_value_error():
 # ===========================================================================
 @pytest.mark.parametrize("selected_programs, expected_in, expected_not_in", [
     # Case A: Filtered selection includes only one program
-    (["83101"], ["Program 83101: Obligatory"], ["Program 83102"]),
+    (["83101"], ["Prog 83101 (Obligatory)"], ["Prog 83102"]),
     # Case B: Filtered selection has no overlap (empty program block)
-    (["83103"], [], ["Program"]),
+    (["83103"], [], ["Prog"]),
     # Case C: Filtered selection is None (acts as bypass/default to show all)
-    (None, ["Program 83101: Obligatory", "Program 83102: Elective"], [])
+    (None, ["Prog 83101 (Obligatory)", "Prog 83102 (Elective)"], [])
 ])
 def test_viewmodel_mapper_tooltip_filtering(make_assignment_dto, selected_programs, expected_in, expected_not_in):
     # Arrange

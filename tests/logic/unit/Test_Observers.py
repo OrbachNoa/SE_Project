@@ -1,4 +1,6 @@
 import pytest
+import zlib
+import pickle
 from unittest.mock import MagicMock
 from datetime import date
 from src.infrastructure.concurrency.QueueScheduleObserver import QueueScheduleObserver
@@ -55,7 +57,9 @@ def test_queue_schedule_observer_buffering_and_flush(make_assignment):
     assert call_count_after_second == 1
     assert msg_type == "SCHEDULE_BATCH"
     assert len(payload) == 2
-    assert payload[0].assignments[0].course_id == "10101"
+    buffer = pickle.loads(zlib.decompress(payload[0]))
+    assert len(buffer) == 2
+    assert buffer[0].assignments[0].course_id == "10101"
 
 
 # ===========================================================================
@@ -94,7 +98,10 @@ def test_queue_schedule_observer_lifecycle(make_assignment):
     assert error_call == ("ERROR", "Fatal Error")
     assert finished_call_count == 2
     assert calls[0][0] == "SCHEDULE_BATCH"
-    assert len(calls[0][1]) == 1
+    batch_data, batch_size = calls[0][1]
+    assert batch_size == 1
+    buffer = pickle.loads(zlib.decompress(batch_data))
+    assert len(buffer) == 1
     assert calls[1] == ("FINISHED", None)
 
 

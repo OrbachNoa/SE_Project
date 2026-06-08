@@ -42,7 +42,7 @@ def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cl
     mock_process_cls.return_value = mock_process
     
     # Act
-    worker = service.generate_async(["83101"], [c], [p], max_results=50)
+    worker = service.generate_async(["83101"], [c], [p], max_results=50, num_processes=1)
     
     # Assert
     # assert the process is created and is a daemon
@@ -161,10 +161,11 @@ def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mo
     p = make_period()
     
     # Act
-    service.generate_async(["83101"], [c], [p])
+    service.generate_async(["83101"], [c], [p], num_processes=1)
     
     # Assert
     assert mock_process_cls.call_count == 1
     args, kwargs = mock_process_cls.call_args
     process_args = kwargs.get("args") or args[0]
-    assert process_args[-1] == 1000000
+    assert process_args[-2] == 1000000
+    assert process_args[-1] == 1000
