@@ -36,13 +36,22 @@ class FileChangeDetector:
         paths: list[str | Path],
         stored_hashes: dict[str, str],
     ) -> bool:
-        """Checks if files differ from stored hashes because we need to know if we should re-parse them."""
-        
-        # Returns True if stored_hashes is empty because it means this is the first run.
+        """Checks whether any of the given files differ from their stored hashes.
+
+        Only the files in `paths` are checked. Extra entries in `stored_hashes`
+        (belonging to files not yet loaded in this session) are intentionally
+        ignored, so a partial load does not cause a spurious cache miss.
+        """
         if not stored_hashes:
             return True
 
-        current_hashes = self.compute_hashes(paths)
-        
-        # Compares the dictionaries because any missing, added, or changed key means the cache is outdated.
-        return current_hashes != stored_hashes
+        for path in paths:
+            key = str(path)
+            # A file that was never hashed before is treated as changed.
+            if key not in stored_hashes:
+                return True
+            # Stop immediately on the first content mismatch.
+            if self.compute_hash(path) != stored_hashes[key]:
+                return True
+
+        return False

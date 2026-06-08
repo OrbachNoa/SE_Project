@@ -20,7 +20,32 @@ class InputCacheService:
         return None
 
     def persist(self, state: InputDataState, paths: List[str]) -> None:
-        """Serializes state to cache and stamps current file hashes."""
-        cache = state.to_cache()
-        cache.source_hashes = self._detector.compute_hashes(paths)
-        self._repository.save(cache)
+        """Serializes state to cache, merging with any previously cached data.
+
+        When the user loads files one at a time, the state only contains the data
+        loaded so far. A naive overwrite would erase cached data for files not yet
+        loaded in this session. Instead we:
+          1. Merge source_hashes: existing entries are kept, new ones override.
+          2. Preserve courses/periods from the existing cache when the current
+             state does not yet have them (i.e. that file type has not been loaded
+             this session). Note: file validators reject empty files before persist
+             is ever called, so an empty list in state genuinely means "not loaded".
+        """
+        existing = self._repository.load()
+        new_hashes = self._detector.compute_hashes(paths)
+
+        final = state.to_cache()
+
+        if existing is not None:
+            # Keep all previously stored hashes; overwrite only the ones just updated.
+            final.source_hashes = {**existing.source_hashes, **new_hashes}
+
+            # Carry forward cached courses/periods that are absent from the current state.
+            if not final.courses and existing.courses:
+                final.courses = existing.courses
+            if not final.periods and existing.periods:
+                final.periods = existing.periods
+        else:
+            final.source_hashes = new_hashes
+
+        self._repository.save(final)

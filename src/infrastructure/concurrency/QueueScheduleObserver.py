@@ -12,26 +12,28 @@ from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
 
 class QueueScheduleObserver(IScheduleObserver):
     """
-    Pushes computation lifecycle events into a multiprocessing Queue.
-    Enables safe data streaming from the isolated background engine process back to the UI environment.
+    Sends scheduler updates from the background process to the main UI process. 
+    The scheduler works in a separate process, so it cannot update the GUI directly. 
+    This observer converts schedules to DTOs and sends them through a Queue.
     """
 
     def __init__(self, queue: Queue, cancel_event: Event, batch_size: int) -> None:
-        # The cross-process IPC communication pipe mapped directly to the parent process listener
+        # Queue used to send messages from the scheduler process to the main process.
         self._queue = queue
-        # Shared cancellation flag monitored to interrupt execution loops early on user request
+        # Shared flag used to stop the scheduler when the user clicks cancel.
         self._cancel_event = cancel_event
-        # Threshold limit configuring the max capacity frame footprint of localized item packages
+        # Number of schedules to collect before sending them through the queue.
         self._batch_size = batch_size
-        # Local memory storage buffer that aggregates processed data packets before flushing
+        # Temporary buffer for schedules waiting to be sent as one batch.
         self._buffer: list[ScheduleDTO] = []
-        # Suppresses redundant traffic updates by blocking unchanged sequential progress values
+        # Remembers the last progress value that was sent. 
+        # # For example,  if 50% was already reported, another 50% update will not be sent again.
         self._last_progress_sent: int = -1
 
     def on_schedule_found(self, schedule: Any) -> None:
         """
-        Transforms domain objects into pure data primitives and queues them inside the local buffer.
-        Flushes data over the IPC line only when the batch fills to optimize context-switching costs.
+        Converts a found schedule to a DTO and stores it in the local batch buffer.
+        The buffer is sent only when it reaches the configured batch size.
         """
         dto = self._to_schedule_dto(schedule)
         self._buffer.append(dto)
@@ -40,40 +42,45 @@ class QueueScheduleObserver(IScheduleObserver):
             self._flush_buffer()
 
     def _flush_buffer(self) -> None:
-        """Compress the batch here (in the child process) and ship only the blob."""
+        """Sends the current schedule batch through the queue."""
         if self._buffer:
-            # The heavy pickle+compress runs in this worker process, in parallel
-            # with all the other partition processes.
+            # Convert the DTO list to bytes and compress it before sending.
+            # This reduces the amount of data passed between processes.
             data = zlib.compress(pickle.dumps(self._buffer, protocol=4), level=1)
+            # Send a typed message through the queue.
+            # "SCHEDULE_BATCH" tells the receiver that this message contains a batch of schedules, 
+            # because the same queue is also used for progress, finish, and error messages.
             self._queue.put(("SCHEDULE_BATCH", (data, len(self._buffer))))
+            # Clear the buffer after the batch was sent.
             self._buffer = []
 
     def on_progress(self, value: int) -> None:
         """
-        Pushes search progression values down the channel context tree.
-        Suppresses identical duplicate signals to drop communication packet costs from O(N) to O(100).
+        Sends a progress update to the main process. 
+        Duplicate progress values are skipped to reduce unnecessary queue messages.
         """
         if value != self._last_progress_sent:
             self._last_progress_sent = value
             self._queue.put(("PROGRESS", value))
 
     def should_cancel(self) -> bool:
-        """Interrogates shared memory flag status criteria to determine if generation parameters were aborted."""
+        """Returns True if the user requested to cancel the scheduling process."""
         return self._cancel_event is not None and self._cancel_event.is_set()
 
     def on_finished(self) -> None:
-        """Flushes remaining cached record allocations and transmits a termination sequence message."""
+        """Sends all remaining schedules and then reports that the search is finished."""
         self._flush_buffer()
         self._queue.put(("FINISHED", None))
 
     def on_error(self, message: str) -> None:
-        """Formats error crash reports into standard IPC signals to pop open notifications inside user views."""
+        """Sends an error message to the main process."""
         self._queue.put(("ERROR", message))
 
     def _to_schedule_dto(self, schedule: Any) -> ScheduleDTO:
         """
-        Deconstructs heavy domain object graphs into flat, primitive-based DTO structures.
-        Guarantees memory nodes are clean and safe for pipe marshaling across OS boundary lines.
+        Converts a domain ExamSchedule into a simple DTO. 
+        This is needed because DTOs contain only simple data, 
+        so they are safer and easier to send between processes.
         """
         assignments = [
             AssignmentDTO(
@@ -83,11 +90,8 @@ class QueueScheduleObserver(IScheduleObserver):
                 date=assignment.date.isoformat() if assignment.date else "",
                 semester=assignment.semester.value if hasattr(assignment.semester, 'value') else assignment.semester,
                 moed=assignment.moed.value if hasattr(assignment.moed, 'value') else assignment.moed,
-                # Carry the (program id, requirement) pair for every program the course
-                # belongs to. The UI uses this to show which programs the course is in
-                # and whether it is obligatory or elective in each one.
-                # requirement is an enum, so .value gives the plain "OBLIGATORY" / "ELECTIVE"
-                # string, which keeps the DTO picklable across the process boundary.
+                # Keep each related program with its requirement type. 
+                # The UI uses this to show where the course belongs and whether it is obligatory or elective.
                 program_requirements=[
                     (
                         entry.programId,

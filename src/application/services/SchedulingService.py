@@ -18,7 +18,8 @@ from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteSched
 DEFAULT_MAX_RESULTS = 1000000
 DEFAULT_BATCH_SIZE = 1000
 
-def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results, batch_size=DEFAULT_BATCH_SIZE):
+
+def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results, batch_size):
     """
     Isolated process entry point running inside an independent OS child process.
     Instantiates conflict checkers locally to avoid heavy inter-process serialization overhead.
@@ -60,7 +61,6 @@ class SchedulingService:
         periods: List[ExamPeriod],
         max_results: int = DEFAULT_MAX_RESULTS,
         num_processes: Optional[int] = None,
-        batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> SchedulerWorker:
         """
         Deploys parallel background processes that split the search space and stream
@@ -70,12 +70,12 @@ class SchedulingService:
         slots = self.build_slots(program_ids, courses, periods)
 
         # Decide how many parallel workers to spawn. Leave one core for the GUI/main
-        # thread, and never spawn more workers than the root slot has candidate dates
-        # (each worker owns a disjoint subset of those dates).
+        # thread, never spawn more workers than the root slot has candidate dates,
+        # and never spawn more workers than max_results (avoids zero-budget processes).
         if num_processes is None:
             num_processes = max(1, (os.cpu_count() or 2) - 1)
         if slots:
-            num_processes = max(1, min(num_processes, len(slots[0].candidateDates)))
+            num_processes = max(1, min(num_processes, len(slots[0].candidateDates), max_results))
         else:
             num_processes = 1
 
@@ -84,17 +84,20 @@ class SchedulingService:
         queue: Queue = Queue(maxsize=50)
         cancel_event = Event()
 
-        # Split the root slot's dates into disjoint subtrees and divide the result
-        # budget evenly. When num_processes == 1 this reduces to the original behavior.
+        # Split the root slot's dates into disjoint subtrees. Distribute the result
+        # budget so the total across all processes equals exactly max_results:
+        # process 0 absorbs the remainder from floor division so no results are lost.
         partitions = self._partition_slots(slots, num_processes)
-        per_process_max = max(1, max_results // num_processes)
+        base_budget = max_results // num_processes
+        remainder   = max_results % num_processes
 
         # Allocate one isolated OS process per partition; all feed the same queue.
         processes: List[Process] = []
-        for partition_slots in partitions:
+        for i, partition_slots in enumerate(partitions):
+            budget = base_budget + (remainder if i == 0 else 0)
             process = Process(
                 target=_run_scheduler_process,
-                args=(partition_slots, courses, program_ids, queue, cancel_event, per_process_max, batch_size),
+                args=(partition_slots, courses, program_ids, queue, cancel_event, budget, DEFAULT_BATCH_SIZE),
                 daemon=True,
             )
             processes.append(process)

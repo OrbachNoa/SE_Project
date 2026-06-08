@@ -25,7 +25,6 @@ from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteSched
 from src.infrastructure.cache.DiskCacheRepository import DiskCacheRepository
 from src.infrastructure.cache.FileChangeDetector import FileChangeDetector
 from src.file_io.parsers.ParserFactory import ParserFactory
-from src.file_io.validators.ValidatorPipeline import ValidatorPipeline
 from gui.core.app import App
 from src.application.AppController import AppController
 from src.file_io.writers.TextFileWriter import TextFileWriter
@@ -50,7 +49,6 @@ def build_controller() -> AppController:
     importer = FileImportService(
         cache_service=InputCacheService(cache_repository, cache_detector),
         parser_factory=ParserFactory(),
-        validators=ValidatorPipeline(),
         merger=InputDataMerger(input_state),
         state=input_state,
     )

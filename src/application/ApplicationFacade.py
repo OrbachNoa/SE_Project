@@ -53,7 +53,7 @@ class ApplicationFacade:
 
         # Extract required input parameters cached inside the state layer
         input_state = self._state.get_input_state()
-        
+        input_state.set_selected_programs(program_ids)
         # Deploy the background process worker with correct state properties
         worker = self._scheduler.generate_async(
             program_ids, input_state.get_courses(), input_state.get_periods()
@@ -114,10 +114,10 @@ class ApplicationFacade:
         self._scheduler.cancel()
 
     def get_schedule_vm(self, index: int) -> ScheduleViewModel:
-        """Resolves raw data structures into fully localized display ViewModels, stamping context metrics on the fly."""
         schedule_state = self._state.get_schedule_state()
         dto = schedule_state.get_schedule(index)
-        return self._mapper.to_schedule_vm(dto, current_index=index, total=schedule_state.count())
+        selected = self._state.get_input_state().get_selected_programs()
+        return self._mapper.to_schedule_vm(dto, current_index=index, total=schedule_state.count(), selected_programs=selected)
 
     def export(self, index: int, path: str) -> None:
         """Routes targeted on-memory result profiles directly out towards concrete disk serialization endpoints."""

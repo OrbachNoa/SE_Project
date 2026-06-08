@@ -34,7 +34,7 @@ class ExamSchedule:
         return [a for a in self.assignments if a.date == target_date]
 
     # Remove the latest assignment, so backtracking can try another option.
-    def removeAssignment(self, a: ExamAssignment = None) -> None:
+    def pop_last_assignment(self) -> None:
         if not self.assignments:
             return
         removed = self.assignments.pop()
@@ -44,3 +44,15 @@ class ExamSchedule:
         course_assignments = self._course_to_assignments.get(removed.course.courseId)
         if course_assignments:
             course_assignments.pop()
+
+    def course_ids_on_date(self, date) -> set:
+        """Return the set of course IDs scheduled on the given date.
+        Do not mutate the returned set.
+        """
+        return self._date_to_course_ids.get(date, set())
+
+    def assignments_for_course(self, course_id: str) -> list:
+        """Return the list of assignments for the given course.
+        Do not mutate the returned list.
+        """
+        return self._course_to_assignments.get(course_id, [])

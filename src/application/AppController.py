@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional, TYPE_CHECKING
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
 from src.application.ImportBoundary import ImportMode, ImportRequest, ImportResult
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
@@ -37,6 +37,8 @@ class AppController(QObject):
         self._worker: Optional["SchedulerWorker"] = None
         # State flag to guarantee early navigation signal triggers exactly once per operational run
         self._early_nav_fired: bool = False
+        # Polls repository count periodically instead of relying on per-schedule queue messages
+        self._progress_timer: Optional[QTimer] = None
 
     # ------------------------------------------------------------------
     # File loading & input state updates
@@ -77,14 +79,19 @@ class AppController(QObject):
         # Establish concurrent execution pipeline routing mappings
         self._worker.schedules_batch_found.connect(self._handle_schedules_batch_found)
         self._worker.schedule_found.connect(self._handle_schedule_found)
-        self._worker.progress_updated.connect(self._handle_progress_updated)
         self._worker.search_finished.connect(self._handle_search_finished)
         self._worker.error_occurred.connect(self._handle_error_occurred)
 
+        # Poll the repository count every 500 ms and emit progress_updated.
+        # This replaces the old per-schedule queue messages from the Scheduler,
+        # keeping the IPC channel free for SCHEDULE_BATCH and FINISHED only.
+        self._start_progress_timer()
+
     def cancel_scheduling(self) -> None:
-        """Stops the active running scheduling job safely without trapping process execution loops."""
         if self._worker is not None and self._worker.isRunning():
             self._facade.cancel_scheduling()
+            self._stop_progress_timer()
+            self.search_finished.emit()
 
     def _disconnect_worker(self) -> None:
         """
@@ -96,7 +103,6 @@ class AppController(QObject):
         try:
             self._worker.schedules_batch_found.disconnect(self._handle_schedules_batch_found)
             self._worker.schedule_found.disconnect(self._handle_schedule_found)
-            self._worker.progress_updated.disconnect(self._handle_progress_updated)
             self._worker.search_finished.disconnect(self._handle_search_finished)
             self._worker.error_occurred.disconnect(self._handle_error_occurred)
         except RuntimeError:
@@ -175,15 +181,30 @@ class AppController(QObject):
             self._early_nav_fired = True
             self.early_results_ready.emit()
 
-    def _handle_progress_updated(self, count: int) -> None:
-        """Passes search progression percentages up into application views."""
-        self.progress_updated.emit(count)
+    def _start_progress_timer(self) -> None:
+        """Start polling the repository count every 500 ms during an active run."""
+        self._progress_timer = QTimer(self)
+        self._progress_timer.setInterval(500)
+        self._progress_timer.timeout.connect(self._poll_progress)
+        self._progress_timer.start()
+
+    def _stop_progress_timer(self) -> None:
+        """Stop the polling timer when the run ends or is cancelled."""
+        if self._progress_timer is not None and self._progress_timer.isActive():
+            self._progress_timer.stop()
+        self._progress_timer = None
+
+    def _poll_progress(self) -> None:
+        """Emit the current schedule count so the GUI label stays up to date."""
+        self.progress_updated.emit(self._facade.get_total_count())
 
     def _handle_search_finished(self) -> None:
         """Handles completion steps cleanly and resets control state logic for subsequent jobs."""
+        self._stop_progress_timer()
         self._early_nav_fired = False
         self.search_finished.emit()
 
     def _handle_error_occurred(self, message: str) -> None:
         """Routes pipeline validation crashes up into interface message dialog display handlers."""
+        self._stop_progress_timer()
         self.error_occurred.emit(message)
