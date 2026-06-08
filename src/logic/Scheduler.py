@@ -51,11 +51,6 @@ class Scheduler:
             # The observer must copy or convert it now if it wants to keep this result.
             observer.on_schedule_found(schedule)
             found_count[0] += 1
-            
-            # Report progress only sometimes, to avoid too many GUI or queue updates.
-            if found_count[0] % 10 == 0:
-                observer.on_progress(found_count[0])
-                
             return
 
         slot = slots[index]

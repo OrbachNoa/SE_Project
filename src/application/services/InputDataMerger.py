@@ -1,41 +1,43 @@
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Tuple
 from src.application.state.InputDataState import InputDataState
 from src.application.ImportBoundary import ImportMode
 
 
 class InputDataMerger:
-    """Applies parsed data onto InputDataState according to ImportMode."""
+    """Applies parsed data onto InputDataState according to ImportMode and file_type."""
 
     def __init__(self, state: InputDataState) -> None:
         self._state = state
-        self._handlers: Dict[ImportMode, Callable[[list], None]] = {
+        self._handlers: Dict[ImportMode, Callable[[list, str], None]] = {
             ImportMode.REPLACE: self._merge_replace,
             ImportMode.UPDATE:  self._merge_update,
         }
 
-    def merge(self, data: list, mode: ImportMode) -> None:
+    def merge(self, data: list, mode: ImportMode, file_type: str) -> None:
+        """Merge parsed data into state.
+
+        file_type must be 'courses' or 'periods'. It is passed explicitly so
+        the merger never has to inspect the data itself to decide which state
+        field to update — eliminating the fragile hasattr guard.
+        """
         handler = self._handlers.get(mode)
         if handler is None:
             raise ValueError(f"unsupported import mode: {mode}")
-        handler(data)
+        handler(data, file_type)
 
-    def _merge_replace(self, data: list) -> None:
-        if self._is_periods(data):
+    def _merge_replace(self, data: list, file_type: str) -> None:
+        if file_type == "periods":
             self._state.replace_periods(data)
         else:
             self._state.replace_courses(data)
 
-    def _merge_update(self, data: list) -> None:
-        if self._is_periods(data):
+    def _merge_update(self, data: list, file_type: str) -> None:
+        if file_type == "periods":
             merged = _merge_periods(self._state.get_periods(), data)
             self._state.replace_periods(merged)
         else:
             merged = _merge_courses(self._state.get_courses(), data)
             self._state.replace_courses(merged)
-
-    @staticmethod
-    def _is_periods(data: list) -> bool:
-        return bool(data) and hasattr(data[0], "moed")
 
 
 def _merge_courses(existing: List, incoming: List) -> List:
