@@ -2,7 +2,7 @@
 
 Layout overview:
   - Header      : green branding bar with breadcrumb (Input › Output)
-  - Action bar  : Load Courses / Load Periods, import mode, Generate / Cancel
+  - Action bar  : Load Courses / Load Periods, import mode, Generate / Cancel / View Results
   - Body        : two columns
         left    -> program selector line (opens a popup) + loaded course list
         right   -> reserved placeholder for a future calendar date editor
@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import List
 
-from gui.widgets.ProgramSelectorWidget import ProgramSelectorWidget
 from gui.widgets.ProgramSelectorDialog import ProgramSelectorDialog
 from gui.widgets.CourseListWidget import CourseListWidget
 from src.application.viewmodels.ProgramViewModel import ProgramViewModel
@@ -21,9 +20,9 @@ from data.programs import programs_data
 from PyQt6.QtWidgets import (
     QLabel, QVBoxLayout, QHBoxLayout, QPushButton,
     QRadioButton, QButtonGroup, QFrame, QFileDialog,
-    QMessageBox, QProgressBar, QSizePolicy, QWidget,
+    QMessageBox, QProgressBar, QWidget,
 )
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from gui.screen import Screen
@@ -71,6 +70,11 @@ class InputScreen(Screen):
         # each new run.
         self._already_navigated = False
 
+        # Keeps a reference to the active calendar editor so its signal can be
+        # disconnected before a new editor is connected on a second file load,
+        # preventing duplicate handler calls.
+        self._editor_widget = None
+
         # Committed program selection. The popup works on a copy and only
         # writes back here when the user presses "Select", so closing the
         # popup without confirming never loses the previous choice.
@@ -87,8 +91,9 @@ class InputScreen(Screen):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Header ─────────────────────────────────────────────────────────
         # Green branding bar: icon + title on the left, breadcrumb on the right.
+        # Matches the OutputScreen header exactly so both screens feel like one
+        # product — same emoji, same font weight, same letter spacing.
         header = QFrame()
         header.setObjectName("header")
         header.setFixedHeight(70)
@@ -97,39 +102,42 @@ class InputScreen(Screen):
         h_layout.setContentsMargins(28, 0, 28, 0)
         h_layout.setSpacing(12)
 
-        # Rounded-square icon with "S" initial — placeholder for a logo asset.
-        icon_frame = QFrame()
-        icon_frame.setFixedSize(34, 34)
-        icon_frame.setStyleSheet("background: #3E89BD; border-radius: 8px;")
-        icon_inner = QHBoxLayout(icon_frame)
-        icon_inner.setContentsMargins(0, 0, 0, 0)
-        icon_lbl = QLabel("S")
-        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setStyleSheet(
-            "color: white; font-weight: bold; font-size: 16px; background: transparent;"
-        )
-        icon_inner.addWidget(icon_lbl)
+        # Calendar emoji shown directly on the green bar, matching the output screen.
+        icon_glyph = QLabel("\U0001F4C5")  # 📅 calendar emoji
+        icon_glyph.setStyleSheet("font-size: 30px; background: transparent;")
+        icon_glyph.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
+        # App title with DemiBold weight and letter spacing, identical to the
+        # output screen so the header looks the same on both pages.
         title = QLabel("Exam Scheduler")
         title.setObjectName("app-title")
-        title.setFont(QFont("Segoe UI", 15))
+        title_font = QFont("Segoe UI Semibold", 17)
+        title_font.setWeight(QFont.Weight.DemiBold)
+        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.4)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #FFFFFF; background: transparent;")
+
         subtitle = QLabel("Schedule generation for academic institutions")
         subtitle.setObjectName("app-subtitle")
         subtitle.setStyleSheet("color: rgba(255,255,255,0.6); background: transparent;")
 
+        # Wrap title and subtitle in a vertically centered group, same structure
+        # as the output screen so both headers align identically.
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
+        title_col.addStretch()
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
+        title_col.addStretch()
 
-        h_layout.addWidget(icon_frame)
+        h_layout.addWidget(icon_glyph, alignment=Qt.AlignmentFlag.AlignVCenter)
         h_layout.addLayout(title_col)
         h_layout.addStretch()
 
         # Breadcrumb: active step in blue, next step dimmed.
         bc_input = QLabel("Input")
         bc_input.setStyleSheet("color: #5BA4D4; font-weight: 600; background: transparent;")
-        bc_sep = QLabel("›")
+        bc_sep = QLabel("\u203a")
         bc_sep.setStyleSheet("color: #475569; background: transparent;")
         bc_output = QLabel("Output")
         bc_output.setStyleSheet("color: #475569; background: transparent;")
@@ -141,9 +149,9 @@ class InputScreen(Screen):
 
         root.addWidget(header)
 
-        # ── Action bar ─────────────────────────────────────────────────────
         # File-load triggers on the left, import mode in the middle, the
-        # generate / cancel pair on the right. Stays pinned below the header.
+        # generate / cancel / view-results group on the right.
+        # Stays pinned below the header.
         action_bar = QFrame()
         action_bar.setFixedHeight(56)
         action_bar.setStyleSheet(
@@ -199,8 +207,19 @@ class InputScreen(Screen):
         self._cancel_btn.setFixedHeight(40)
         self._cancel_btn.clicked.connect(self._on_cancel_clicked)
 
+        # "View Results" button — only visible after the user has already
+        # navigated to the output screen at least once in the current run.
+        # Lets the user jump back to the output without re-running the scheduler.
+        # Hidden by default; shown by _navigate_to_output once results are ready.
+        self._view_results_btn = QPushButton("📊  View Results")
+        self._view_results_btn.setObjectName("btn-secondary")
+        self._view_results_btn.setFixedHeight(40)
+        self._view_results_btn.setVisible(False)
+        self._view_results_btn.clicked.connect(self._on_view_results_clicked)
+
         ab_layout.addWidget(self._generate_btn)
         ab_layout.addWidget(self._cancel_btn)
+        ab_layout.addWidget(self._view_results_btn)
 
         root.addWidget(action_bar)
 
@@ -220,7 +239,7 @@ class InputScreen(Screen):
             "load_btn": self._periods_load_btn,
         }
 
-        # ── Body — two columns ─────────────────────────────────────────────
+        # Body: two-column layout.
         body = QVBoxLayout()
         body.setContentsMargins(20, 20, 20, 20)
         body.setSpacing(16)
@@ -245,7 +264,7 @@ class InputScreen(Screen):
 
         root.addLayout(body)
 
-        # ── Footer — validation + progress ─────────────────────────────────
+        # Footer: validation label + indeterminate progress bar + running counter.
         self._validation_label = QLabel("")
         self._validation_label.setObjectName("status-error")
         self._validation_label.setWordWrap(True)
@@ -265,12 +284,12 @@ class InputScreen(Screen):
         self._progress_label.setContentsMargins(24, 0, 24, 8)
         root.addWidget(self._progress_label)
 
-        # ── Connect controller signals ─────────────────────────────────────
-        # progress_updated    — running count (may not fire with the SQL engine)
-        # search_finished     — full background search completed
-        # error_occurred      — fatal scheduler error
-        # early_results_ready — first SQLite page is ready; jump to output now
-        #                       without waiting for the whole search to finish.
+        # Connect controller signals:
+        #   progress_updated    — running count (may not fire with the SQL engine)
+        #   search_finished     — full background search completed
+        #   error_occurred      — fatal scheduler error
+        #   early_results_ready — first SQLite page is ready; jump to output now
+        #                         without waiting for the whole search to finish.
         self._controller.schedule_found.connect(self._on_schedule_found)
         self._controller.progress_updated.connect(self._on_progress_updated)
         self._controller.search_finished.connect(self._on_search_finished)
@@ -279,8 +298,6 @@ class InputScreen(Screen):
 
         self._refresh_program_summary()
         self._refresh_generate_button()
-
-    # ── Body builders ───────────────────────────────────────────────────
 
     def _build_program_selector_card(self) -> QFrame:
         """Build the clickable program-selector line.
@@ -409,8 +426,6 @@ class InputScreen(Screen):
         layout.addStretch()
         return frame
 
-    # ── Program selection popup ───────────────────────────────────────────
-
     def _on_selector_card_clicked(self, event) -> None:
         """Open the program selection popup when the selector card is clicked."""
         self._open_program_dialog()
@@ -473,13 +488,9 @@ class InputScreen(Screen):
         if row is not None:
             row.addStretch()
 
-    # ── File row state helpers ────────────────────────────────────────────
-
     def _mark_file_loaded(self, row: dict, count: int, label: str) -> None:
         """Record a successful file load on the (hidden) status badge."""
         row["count_lbl"].setText(f"✓  {count} {label}")
-
-    # ── Validation ─────────────────────────────────────────────────────
 
     def _refresh_generate_button(self) -> None:
         """Enable Generate only when both files are loaded; warn otherwise."""
@@ -500,8 +511,6 @@ class InputScreen(Screen):
         else:
             self._validation_label.setText("")
 
-    # ── Running state ──────────────────────────────────────────────────
-
     def _set_running_mode(self, running: bool) -> None:
         """Toggle the UI between idle and running states."""
         self._generate_btn.setVisible(not running)
@@ -513,17 +522,20 @@ class InputScreen(Screen):
         if running:
             self._last_count = 0
             self._progress_label.setText("Initialising scheduler…")
-
-    # ── Event handlers ─────────────────────────────────────────────────
+            # Hide "View Results" while a new run is in progress so the user
+            # cannot jump to stale results from a previous generation.
+            self._view_results_btn.setVisible(False)
 
     def _selected_mode(self) -> ImportMode:
         """Return the import mode currently selected in the radio buttons."""
         return ImportMode.REPLACE if self._mode_replace.isChecked() else ImportMode.UPDATE
 
     def _on_load_courses_clicked(self) -> None:
+        """Relay the load-courses button click using the currently selected import mode."""
         self.on_load_courses(self._selected_mode())
 
     def _on_load_periods_clicked(self) -> None:
+        """Relay the load-periods button click using the currently selected import mode."""
         self.on_load_periods(self._selected_mode())
 
     def _on_generate_clicked(self) -> None:
@@ -546,20 +558,25 @@ class InputScreen(Screen):
         self._set_running_mode(False)
         self._progress_label.setText("")
 
+    def _on_view_results_clicked(self) -> None:
+        """Jump back to the output screen without re-running the scheduler.
+
+        This button is only visible after the user has already navigated to
+        the output screen at least once, so results are guaranteed to exist.
+        """
+        self._router.show(SCREEN_OUTPUT)
+
     def _on_constraints_saved(self, updated_vms: list) -> None:
         """Triggered when the user saves constraints in the calendar editor."""
         # Push the edited periods into the model so generation uses them.
         self._controller.update_exam_periods(updated_vms)
         self._refresh_generate_button()
-        
-        # Debug print to verify it works:
-        print(f"InputScreen received {len(updated_vms)} updated periods from calendar.")
-
-    # ── Controller signal handlers ─────────────────────────────────────
 
     def _on_schedule_found(self, dto) -> None:
-        # Per-result notifications are not used here; the output screen reads
-        # results on demand once it becomes active.
+        """Receive per-result notifications from the scheduler.
+
+        Not used here — the output screen reads results on demand once active.
+        """
         pass
 
     def _on_progress_updated(self, count: int) -> None:
@@ -570,10 +587,16 @@ class InputScreen(Screen):
         )
 
     def _navigate_to_output(self) -> None:
-        """Switch to the output screen exactly once per run."""
+        """Switch to the output screen exactly once per run.
+
+        Also reveals the "View Results" button so the user can return here
+        from the input screen and jump back to the output at any time.
+        """
         if self._already_navigated:
             return
         self._already_navigated = True
+        # Show the button now that results exist and the output screen is active.
+        self._view_results_btn.setVisible(True)
         self._router.show(SCREEN_OUTPUT)
 
     def _result_count(self) -> int:
@@ -620,8 +643,6 @@ class InputScreen(Screen):
         """Show a critical error dialog and restore the idle UI."""
         self._set_running_mode(False)
         QMessageBox.critical(self, "Scheduler error", message)
-
-    # ── File loading ───────────────────────────────────────────────────
 
     def _get_loaded_courses(self) -> list:
         """Return the list of currently loaded courses."""
@@ -677,30 +698,35 @@ class InputScreen(Screen):
             self._mark_file_loaded(self._periods_row, result.loaded_count, "periods")
             self._refresh_generate_button()
 
-            # --- Inject the dynamic calendar editor ---
             periods = self._get_loaded_periods()
             mapper = self._get_mapper()
             if periods and mapper:
                 period_vms = mapper.to_period_edit_vms(periods)
                 if period_vms:
-                    # Remove the static placeholder UI
+                    # Remove the static placeholder before inserting the real editor.
                     if self._placeholder:
                         self._placeholder.deleteLater()
                         self._placeholder = None
-                    
-                    # Insert the interactive calendar editor with all loaded periods
+
+                    # Disconnect the previous editor's signal before replacing it
+                    # to avoid accumulating duplicate handler connections across
+                    # multiple file loads in the same session.
+                    if self._editor_widget is not None:
+                        try:
+                            self._editor_widget.constraints_saved.disconnect(
+                                self._on_constraints_saved
+                            )
+                        except RuntimeError:
+                            pass  # Already disconnected — harmless to ignore.
+
                     from src.gui.widgets.CalendarEditorWidget import CalendarEditorWidget
                     self._editor_widget = CalendarEditorWidget(period_vms)
                     self._editor_widget.constraints_saved.connect(self._on_constraints_saved)
                     self.right_col.insertWidget(0, self._editor_widget, stretch=1)
 
-    # ── Program selection ──────────────────────────────────────────────
-
     def _collect_selected_program_ids(self) -> List[str]:
         """Return the program IDs the user has committed via the popup."""
         return list(self._selected_program_ids)
-
-    # ── Screen lifecycle ───────────────────────────────────────────────
 
     def on_enter(self) -> None:
         """Called by the router when this screen becomes active."""
