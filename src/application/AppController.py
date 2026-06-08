@@ -88,9 +88,10 @@ class AppController(QObject):
         self._start_progress_timer()
 
     def cancel_scheduling(self) -> None:
-        """Stops the active running scheduling job safely without trapping process execution loops."""
         if self._worker is not None and self._worker.isRunning():
             self._facade.cancel_scheduling()
+            self._stop_progress_timer()
+            self.search_finished.emit()
 
     def _disconnect_worker(self) -> None:
         """
