@@ -10,6 +10,24 @@ from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 from gui.common.helpers import create_scaled_pixmap
 from data.programs import programs_data
 
+
+class _ProgramSelectionController:
+    """Owns the modal selection flow for the program selector card."""
+
+    def __init__(self, program_view_models: List[ProgramViewModel]) -> None:
+        self._program_view_models = program_view_models
+
+    def choose_program_ids(self, parent: QWidget, current_ids: List[str]) -> List[str] | None:
+        dialog = ProgramSelectorDialog(
+            self._program_view_models,
+            preselected_ids=current_ids,
+            parent=parent,
+        )
+        if dialog.exec():
+            return dialog.selected_ids()
+        return None
+
+
 # Program selector card widget for selecting study programs on the input screen.
 class ProgramSelectorCardWidget(QFrame):
     # Signal emitted when the selection changes
@@ -25,6 +43,7 @@ class ProgramSelectorCardWidget(QFrame):
             ProgramViewModel(program_id=p_id, display_name=p_name, course_count=0)
             for p_id, p_name in programs_data.items()
         ]
+        self._selection_controller = _ProgramSelectionController(self._program_view_models)
 
         self.setObjectName("selector-card")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -77,16 +96,16 @@ class ProgramSelectorCardWidget(QFrame):
 
     def _open_program_dialog(self) -> None:
         """Show the modal popup and commit the new selection only on accept."""
-        dialog = ProgramSelectorDialog(
-            self._program_view_models,
-            preselected_ids=self._selected_program_ids,
-            parent=self,
+        selected_ids = self._selection_controller.choose_program_ids(
+            self,
+            self._selected_program_ids,
         )
-        # if "Select" pressed -> commit the new selection
-        if dialog.exec():
-            self._selected_program_ids = dialog.selected_ids()
-            self._refresh_program_summary()
-            self.selection_changed.emit()
+        if selected_ids is None:
+            return
+
+        self._selected_program_ids = selected_ids
+        self._refresh_program_summary()
+        self.selection_changed.emit()
 
     def _refresh_program_summary(self) -> None:
         """Rebuild the selector summary: placeholder when empty, chips otherwise."""

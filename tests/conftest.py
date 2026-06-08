@@ -10,6 +10,14 @@ from pathlib import Path
 import sys
 from unittest.mock import MagicMock
 import pytest
+
+# Add 'src' and project root to sys.path so pytest can resolve absolute imports inside the src directory.
+SRC_ROOT = Path(__file__).resolve().parent.parent / "src"
+PROJECT_ROOT = SRC_ROOT.parent
+for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
 from src.models.Enums import EvalType, Semester, Moed, Requirement
 from src.models.Domain import (
     Course,
@@ -23,15 +31,6 @@ from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
 from src.infrastructure.cache.DataCache import DataCache
 from src.application.services.ViewModelMapper import ViewModelMapper
 from src.application.state.AppState import AppState
-# endregion
-
-# region Path Setup
-# Add 'src' and project root to sys.path so pytest can resolve absolute imports inside the src directory.
-SRC_ROOT = Path(__file__).resolve().parent.parent / "src"
-PROJECT_ROOT = SRC_ROOT.parent
-for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
 # endregion
 
 
