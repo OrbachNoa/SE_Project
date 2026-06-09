@@ -144,8 +144,8 @@ class OutputScreen(Screen):
     def render_calendar(self, date_list: list[str], excluded_dates: list[str], assignments: list) -> None:
         self.calendar_grid.setup_month_grid(
             date_list,
-            show_month_header=False,
-            show_month_banner=True,
+            show_month_header=True,
+            show_month_banner=False,
         )
         for excluded_date in excluded_dates:
             self.calendar_grid.set_date_excluded_output_style(excluded_date)
