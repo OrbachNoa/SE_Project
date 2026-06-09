@@ -264,6 +264,8 @@ def test_update_import_and_generate(qtbot, viewmodel_mapper):
     router.show("input")
     
     qtbot.addWidget(stack)
+    stack.show()
+    qtbot.waitExposed(stack)
     
     courses_path = "tests/fixtures/sample_courses.csv"
     periods_path = "tests/fixtures/sample_periods.csv"
