@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [ "**" ] 
 
-
 jobs:
   test:
     name: Run pytest suite
@@ -30,12 +29,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
-      # Step 3 — Install dependencies
+      # Step 3 — Install Python dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov flake8 pytest-qt
+
+      # Step 3.2 — Install Headless GUI System Dependencies
+      # Placed here so that all subsequent pytest sessions have system libraries ready
+      - name: Install Headless GUI Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-shape0
 
       # Step 3.5 — Run Linters and Static Code Analysis
       - name: Run flake8 linter
@@ -45,16 +51,10 @@ jobs:
           # exit-zero treats all errors as warnings.
           flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-      # Step 4 — Run logic tests (fast, no GUI libraries required)
+      # Step 4 — Run logic tests (fast, no virtual screen required but safe to run now)
       - name: Run logic tests
         run: |
           pytest tests/logic/ -m "not performance" -v --tb=short
-
-      # Step 4.5 — Install Headless GUI Dependencies (needed for GUI tests on all branches)
-      - name: Install Headless GUI Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-shape0
 
       # Step 4.6 — Run GUI tests (using Xvfb virtual frame buffer)
       - name: Run GUI tests
@@ -65,20 +65,16 @@ jobs:
       # Performance tests must complete within 30 seconds per SRS §5.1.
       - name: Run performance tests
         if: matrix.python-version == '3.12' && github.event_name == 'pull_request'
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: |
-          pytest tests/performance/ -m performance -v --tb=short
+          xvfb-run --server-args="-screen 0 1024x768x24" pytest tests/performance/ -m performance -v --tb=short
 
       # Step 6 — Generate coverage report (only on Python 3.12)
       - name: Generate coverage report
         if: matrix.python-version == '3.12'
         continue-on-error: true
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: |
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/dev-branch" ]; then
-            pytest tests/ -m "not performance" --cov=src --cov-report=term-missing --cov-report=xml
+            xvfb-run --server-args="-screen 0 1024x768x24" pytest tests/ -m "not performance" --cov=src --cov-report=term-missing --cov-report=xml
           else
             pytest tests/logic/ -m "not performance" --cov=src --cov-report=term-missing --cov-report=xml
           fi
