@@ -68,16 +68,16 @@ class SolutionBarWidget(QFrame):
         solutions_layout.addWidget(self.next_btn)
         layout.addWidget(self.solutions_group)
 
-        # ── Group 2: DATABASE PAGES (10k sets / pg) ──
-        self.pages_group = QGroupBox("DATABASE PAGES (10k sets / pg)")
+        # ── Group 2: DATABASE PAGES (10k solutions / pg) ──
+        self.pages_group = QGroupBox("DATABASE PAGES (10k solutions per page)")
         pages_layout = QHBoxLayout(self.pages_group)
         pages_layout.setContentsMargins(10, 10, 10, 6)
         pages_layout.setSpacing(8)
 
-        self.first_page_btn = QPushButton("⏮ First")
+        self.first_page_btn = QPushButton("First")
         self.first_page_btn.setObjectName("btn-secondary")
         self.first_page_btn.setToolTip("First page")
-        self.first_page_btn.setFixedSize(75, 28)
+        self.first_page_btn.setFixedSize(60, 28)
 
         self.prev_page_btn = QPushButton("◀")
         self.prev_page_btn.setObjectName("btn-page-arrow")
@@ -93,10 +93,10 @@ class SolutionBarWidget(QFrame):
         self.next_page_btn.setToolTip("Next page")
         self.next_page_btn.setFixedSize(28, 28)
 
-        self.last_page_btn = QPushButton("⏭ Last")
+        self.last_page_btn = QPushButton("Last")
         self.last_page_btn.setObjectName("btn-secondary")
         self.last_page_btn.setToolTip("Last page")
-        self.last_page_btn.setFixedSize(75, 28)
+        self.last_page_btn.setFixedSize(60, 28)
 
         pages_layout.addWidget(self.first_page_btn)
         pages_layout.addWidget(self.prev_page_btn)
