@@ -37,10 +37,15 @@ class FileImportService:
         self._loaded_paths[file_type] = path
         paths = list(self._loaded_paths.values())
 
-        cached = self._cache.try_load(paths)
-        if cached is not None:
-            self._state.load_cache(cached)
-            return ImportResult(success=True, loaded_count=self._loaded_count(file_type))
+        # Cache is only used for UPDATE mode.
+        # REPLACE must always parse fresh: the cache stores a merged state that
+        # may include data from previous UPDATE sessions, so a cache hit would
+        # silently return stale merged data instead of only the new file's data.
+        if mode == ImportMode.UPDATE:
+            cached = self._cache.try_load(paths)
+            if cached is not None:
+                self._state.load_cache(cached)
+                return ImportResult(success=True, loaded_count=self._loaded_count(file_type))
 
         try:
             data = self._parser_factory.create(file_type).parse(path)
