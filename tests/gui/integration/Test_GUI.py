@@ -280,6 +280,7 @@ def test_update_import_and_generate(qtbot, viewmodel_mapper):
         # Act
         # Toggle mode to UPDATE
         qtbot.mouseClick(input_screen.action_bar.mode_update, Qt.MouseButton.LeftButton)
+        assert input_screen.action_bar.mode_update.isChecked() is True
         
         # Load courses (in update mode)
         qtbot.mouseClick(input_screen.action_bar.courses_load_btn, Qt.MouseButton.LeftButton)
@@ -294,9 +295,7 @@ def test_update_import_and_generate(qtbot, viewmodel_mapper):
         # Click generate
         qtbot.mouseClick(input_screen.action_bar.generate_btn, Qt.MouseButton.LeftButton)
         
-        # Assert
-        assert input_screen.action_bar.mode_update.isChecked() is True
-        
+        # Assert        
         assert controller.load_file.call_count == 2
         assert controller.load_file.call_args_list[0][0] == (courses_path, "courses", ImportMode.UPDATE)
         assert controller.load_file.call_args_list[1][0] == (periods_path, "periods", ImportMode.UPDATE)
