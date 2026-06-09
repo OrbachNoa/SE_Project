@@ -13,7 +13,7 @@ QPushButton#course-list-header-btn {{
     border-radius: 8px;
     text-align: left;
     padding: 8px 14px;
-    font-family: 'Segoe UI';
+    font-family: 'Segoe UI Symbol', 'Segoe UI';
     font-size: 12px;
     font-weight: 600;
 }}
