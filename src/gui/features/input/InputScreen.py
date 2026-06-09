@@ -127,7 +127,7 @@ class InputScreen(Screen):
         self.program_selector_card.selection_changed.connect(self._presenter.refresh_generate_button)
         self.action_bar.courses_load_btn.clicked.connect(self._presenter.on_load_courses_clicked)
         self.action_bar.periods_load_btn.clicked.connect(self._presenter.on_load_periods_clicked)
-        self.action_bar.generate_btn.clicked.connect(self._presenter.on_generate_clicked)
+        self.action_bar.generate_btn.clicked.connect(self._on_generate_clicked)
         self.action_bar.cancel_btn.clicked.connect(self._presenter.on_cancel_clicked)
         self.action_bar.view_results_btn.clicked.connect(self._presenter.on_view_results_clicked)
 
@@ -274,7 +274,6 @@ class InputScreen(Screen):
             self._editor_widget.deleteLater()
 
         self._editor_widget = CalendarEditorWidget(period_vms)
-        self._editor_widget.constraints_saved.connect(save_callback)
         self.right_col.insertWidget(0, self._editor_widget, stretch=1)
 
     def show_import_error(self, data_label: str, detail: str) -> None:
@@ -334,6 +333,10 @@ class InputScreen(Screen):
         self._presenter.on_load_periods_clicked()
 
     def _on_generate_clicked(self) -> None:
+        if self._editor_widget is not None:
+            updated_vms = self._editor_widget.apply_and_get_constraints()
+            self._presenter.on_constraints_saved(updated_vms)
+        self.set_view_results_visible(False)
         self._presenter.on_generate_clicked()
 
     def _on_cancel_clicked(self) -> None:

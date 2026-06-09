@@ -18,9 +18,6 @@ class CalendarEditorWidget(QWidget):
     ExclusionModel owns the editable period state. This widget only syncs Qt
     controls to the model and repaints the calendar grid.
     """
-
-    constraints_saved = pyqtSignal(list)
-
     def __init__(self, view_models: List[PeriodEditViewModel], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._model = ExclusionModel(view_models)
@@ -80,14 +77,6 @@ class CalendarEditorWidget(QWidget):
         self.calendar_grid.date_clicked.connect(self.toggle_date_exclusion)
         self.main_layout.addWidget(self.calendar_grid, stretch=1)
 
-        self.button_layout = QHBoxLayout()
-        self.apply_btn = QPushButton("Save All Constraints")
-        self.apply_btn.setObjectName("btn-apply-constraints")
-        self.apply_btn.clicked.connect(self._on_apply_clicked)
-        self.button_layout.addStretch()
-        self.button_layout.addWidget(self.apply_btn)
-        self.main_layout.addLayout(self.button_layout)
-
         self._refresh_ui()
 
     def _refresh_ui(self) -> None:
@@ -146,12 +135,7 @@ class CalendarEditorWidget(QWidget):
         is_excluded = self._model.toggle(date_str)
         self.calendar_grid.set_date_excluded_style(date_str, is_excluded)
 
-    def _on_apply_clicked(self) -> None:
+    def apply_and_get_constraints(self) -> list:
+        """Applies current UI state to the model and returns the updated periods."""
         self._sync_date_controls_to_model()
-        updated_periods = self._model.apply()
-        self.constraints_saved.emit(updated_periods)
-        QMessageBox.information(
-            self,
-            "Saved",
-            f"Constraints saved successfully for all {self._model.total} periods.",
-        )
+        return self._model.apply()
