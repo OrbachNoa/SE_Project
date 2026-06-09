@@ -18,6 +18,9 @@ class CalendarEditorWidget(QWidget):
     ExclusionModel owns the editable period state. This widget only syncs Qt
     controls to the model and repaints the calendar grid.
     """
+
+    data_changed = pyqtSignal()
+
     def __init__(self, view_models: List[PeriodEditViewModel], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._model = ExclusionModel(view_models)
@@ -110,6 +113,7 @@ class CalendarEditorWidget(QWidget):
     def _on_dates_changed(self) -> None:
         self._sync_date_controls_to_model()
         self._render_calendar()
+        self.data_changed.emit()
 
     def _sync_date_controls_to_model(self) -> None:
         self._model.set_date_range(
@@ -134,6 +138,7 @@ class CalendarEditorWidget(QWidget):
     def toggle_date_exclusion(self, date_str: str) -> None:
         is_excluded = self._model.toggle(date_str)
         self.calendar_grid.set_date_excluded_style(date_str, is_excluded)
+        self.data_changed.emit()
 
     def apply_and_get_constraints(self) -> list:
         """Applies current UI state to the model and returns the updated periods."""

@@ -88,7 +88,7 @@ class InputScreenPresenter:
 
         period_vms = mapper.to_period_edit_vms(periods)
         if period_vms:
-            self._view.show_period_editor(period_vms, self.on_constraints_saved)
+            self._view.show_period_editor(period_vms)
 
     def on_generate_clicked(self) -> None:
         if not self.validate_programs():

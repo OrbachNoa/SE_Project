@@ -122,9 +122,12 @@ class InputScreen(Screen):
         self._presenter = InputScreenPresenter(self, controller, router, SCREEN_OUTPUT)
         self._connect_events()
         self._presenter.refresh_generate_button()
+        # Track whether inputs have changed since the last generation to prevent unnecessary regenerations.
+        self._inputs_dirty = True
 
     def _connect_events(self) -> None:
         self.program_selector_card.selection_changed.connect(self._presenter.refresh_generate_button)
+        self.program_selector_card.selection_changed.connect(self.mark_inputs_dirty)
         self.action_bar.courses_load_btn.clicked.connect(self._presenter.on_load_courses_clicked)
         self.action_bar.periods_load_btn.clicked.connect(self._presenter.on_load_periods_clicked)
         self.action_bar.generate_btn.clicked.connect(self._on_generate_clicked)
@@ -211,8 +214,13 @@ class InputScreen(Screen):
         return file_path
 
     def set_generate_button_state(self, enabled: bool, tooltip: str) -> None:
-        self.action_bar.generate_btn.setEnabled(enabled)
-        self.action_bar.generate_btn.setToolTip(tooltip)
+        # If inputs are not dirty, disable the generate button to prevent unnecessary regenerations.
+        if enabled and not self._inputs_dirty:
+            self.action_bar.generate_btn.setEnabled(False)
+            self.action_bar.generate_btn.setToolTip("No new changes to generate")
+        else:
+            self.action_bar.generate_btn.setEnabled(enabled)
+            self.action_bar.generate_btn.setToolTip(tooltip)
 
     def set_validation_message(self, message: str) -> None:
         self._validation_label.setText(message)
@@ -247,6 +255,7 @@ class InputScreen(Screen):
         if fname:
             self.course_file_label.setText(f"Courses: ✔ {fname}")
             self._last_file_name = ""
+        self.mark_inputs_dirty()
 
     def mark_periods_loaded(self, count: int) -> None:
         self._mark_file_loaded(self._periods_row, count, "periods")
@@ -255,25 +264,23 @@ class InputScreen(Screen):
         if fname:
             self.period_file_label.setText(f"Periods: ✔ {fname}")
             self._last_file_name = ""
+        self.mark_inputs_dirty()
 
     def render_courses(self, programs_vm) -> None:
         self._course_list_widget.render(programs_vm)
 
-    def show_period_editor(self, period_vms: list, save_callback: Callable[[list], None]) -> None:
+    def show_period_editor(self, period_vms: list) -> None:
         if self._placeholder is not None:
             self.right_col.removeWidget(self._placeholder)
             self._placeholder.deleteLater()
             self._placeholder = None
 
         if self._editor_widget is not None:
-            try:
-                self._editor_widget.constraints_saved.disconnect()
-            except (RuntimeError, TypeError):
-                pass
             self.right_col.removeWidget(self._editor_widget)
             self._editor_widget.deleteLater()
 
         self._editor_widget = CalendarEditorWidget(period_vms)
+        self._editor_widget.data_changed.connect(self.mark_inputs_dirty)
         self.right_col.insertWidget(0, self._editor_widget, stretch=1)
 
     def show_import_error(self, data_label: str, detail: str) -> None:
@@ -288,6 +295,11 @@ class InputScreen(Screen):
     def _refresh_widget_style(self, widget) -> None:
         widget.style().unpolish(widget)
         widget.style().polish(widget)
+    
+    def mark_inputs_dirty(self, *args, **kwargs) -> None:
+        """Marks that user inputs have changed"""
+        self._inputs_dirty = True
+        self._refresh_generate_button()
 
     @property
     def _courses_load_btn(self):
@@ -336,6 +348,8 @@ class InputScreen(Screen):
         if self._editor_widget is not None:
             updated_vms = self._editor_widget.apply_and_get_constraints()
             self._presenter.on_constraints_saved(updated_vms)
+                
+        self._inputs_dirty = False 
         self.set_view_results_visible(False)
         self._presenter.on_generate_clicked()
 
