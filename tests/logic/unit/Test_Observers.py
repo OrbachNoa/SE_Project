@@ -22,7 +22,7 @@ def test_collecting_schedule_observer_collects_snapshots(make_assignment):
     # Act
     observer.on_schedule_found(schedule)
     collected = observer.schedules[0]
-    schedule.removeAssignment() # Mutate original schedule
+    schedule.pop_last_assignment()
     
     # Assert
     assert observer.should_cancel() is False

@@ -78,9 +78,10 @@ def test_generate_schedules_starts_worker(mock_facade, controller):
     # Verify signal connections
     assert mock_worker.schedules_batch_found.connect.call_count == 1
     assert mock_worker.schedule_found.connect.call_count == 1
-    assert mock_worker.progress_updated.connect.call_count == 1
     assert mock_worker.search_finished.connect.call_count == 1
     assert mock_worker.error_occurred.connect.call_count == 1
+    assert controller._progress_timer is not None
+    assert controller._progress_timer.isActive() is True
 
 # ===========================================================================
 # TC-AC-006: test cancel_scheduling when worker is active and running
@@ -252,19 +253,21 @@ def test_handle_schedules_batch_found_early_nav_only_once(mock_facade, controlle
     assert controller._early_nav_fired is True
 
 # ===========================================================================
-# TC-AC-017: test handle_progress_updated emits progress_updated signal
+# TC-AC-017: test poll_progress emits progress_updated signal with total count
 # ===========================================================================
-def test_handle_progress_updated(controller):
+def test_poll_progress(mock_facade, controller):
     # Arrange
     mock_slot = MagicMock()
     controller.progress_updated.connect(mock_slot)
+    mock_facade.get_total_count.return_value = 85
 
     # Act
-    controller._handle_progress_updated(85)
+    controller._poll_progress()
 
     # Assert
     assert mock_slot.call_count == 1
     assert mock_slot.call_args[0][0] == 85
+    assert mock_facade.get_total_count.call_count == 1
 
 # ===========================================================================
 # TC-AC-018: test handle_search_finished emits search_finished signal

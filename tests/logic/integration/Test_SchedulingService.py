@@ -104,7 +104,7 @@ def test_run_scheduler_process_helper(mock_runner_cls):
     cancel_event = MagicMock()
     
     # Act
-    _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results=10)
+    _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results=10, batch_size=1000)
     
     # Assert
     assert mock_runner_cls.call_count == 1

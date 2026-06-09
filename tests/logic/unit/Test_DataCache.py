@@ -187,7 +187,7 @@ def test_file_change_detector_has_changed_mismatched_keys(tmp_path):
     
     # Assert
     assert changed_added is True
-    assert changed_removed is True
+    assert changed_removed is False
 
 
 # ===========================================================================

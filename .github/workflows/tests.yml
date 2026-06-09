@@ -50,16 +50,14 @@ jobs:
         run: |
           pytest tests/logic/ -m "not performance" -v --tb=short
 
-      # Step 4.5 — Install Headless GUI Dependencies (only needed for GUI tests)
+      # Step 4.5 — Install Headless GUI Dependencies (needed for GUI tests on all branches)
       - name: Install Headless GUI Dependencies
-        if: github.event_name == 'push' && github.ref == 'refs/heads/dev-branch'
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-shape0
 
       # Step 4.6 — Run GUI tests (using offscreen platform buffer)
       - name: Run GUI tests
-        if: github.event_name == 'push' && github.ref == 'refs/heads/dev-branch'
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
