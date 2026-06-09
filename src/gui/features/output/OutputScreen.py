@@ -92,6 +92,7 @@ class OutputScreen(Screen):
         self.solution_bar.export_btn.clicked.connect(self._presenter.on_export_pdf)
         self.solution_bar.prev_btn.clicked.connect(self._presenter.on_prev_solution)
         self.solution_bar.next_btn.clicked.connect(self._presenter.on_next_solution)
+        self.solution_bar.solution_input.returnPressed.connect(self._presenter.on_jump_to_solution)
         self.solution_bar.first_page_btn.clicked.connect(self._presenter.on_first_page)
         self.solution_bar.prev_page_btn.clicked.connect(self._presenter.on_prev_page)
         self.solution_bar.next_page_btn.clicked.connect(self._presenter.on_next_page)
@@ -100,7 +101,16 @@ class OutputScreen(Screen):
         self.next_month_btn.clicked.connect(self._presenter.on_next_period)
 
     def set_solution_counter(self, text: str) -> None:
-        self.solution_bar.counter_label.setText(text)
+        # Extract just the solution number from text like "Solution 3 / 10" 
+        if "Solution" in text and "/" in text:
+            parts = text.split("/")
+            solution_num = parts[0].replace("Solution", "").strip()
+            # Only update if the user hasn't actively edited the field
+            if not self.solution_bar.solution_input.hasFocus():
+                self.solution_bar.solution_input.setText(solution_num)
+        else:
+            if not self.solution_bar.solution_input.hasFocus():
+                self.solution_bar.solution_input.clear()
 
     def set_solution_controls(self, can_prev: bool, can_next: bool, can_export: bool) -> None:
         self.solution_bar.prev_btn.setEnabled(can_prev)
@@ -158,6 +168,14 @@ class OutputScreen(Screen):
 
     def focus_back_button(self) -> None:
         self.solution_bar.back_btn.setFocus()
+
+    def get_jump_to_value(self) -> str:
+        """Get the value from the jump-to input field."""
+        return self.solution_bar.solution_input.text()
+
+    def clear_jump_to_input(self) -> None:
+        """Clear the jump-to input field."""
+        self.solution_bar.solution_input.clear()
 
     def _refresh_counter(self) -> None:
         self._presenter.refresh_counter()

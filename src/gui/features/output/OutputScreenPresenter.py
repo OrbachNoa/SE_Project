@@ -164,6 +164,30 @@ class OutputScreenPresenter:
             self.show_current()
             self.refresh_counter()
 
+    def on_jump_to_solution(self) -> None:
+        """Jump to a specific solution number entered by the user."""
+        try:
+            input_text = self._view.get_jump_to_value().strip()
+            if not input_text:
+                return
+            
+            solution_num = int(input_text)
+            # Convert from 1-based to 0-based indexing
+            target_index = solution_num - 1
+            
+            # Validate the target is within valid range
+            if target_index < 0 or target_index >= self._total:
+                self._view.show_display_error(
+                    f"Invalid solution number. Please enter a number between 1 and {self._total}."
+                )
+                return
+            
+            self._current_index = target_index
+            self.show_current()
+            self.refresh_counter()
+        except ValueError:
+            self._view.show_display_error("Please enter a valid number")
+
     def on_enter(self) -> None:
         self._current_index = 0
         self._sync_page_info()

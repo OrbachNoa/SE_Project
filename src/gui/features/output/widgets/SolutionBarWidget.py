@@ -1,9 +1,9 @@
 """Solution navigation bar widget containing back, export, within-page solutions navigator, and page flippers."""
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QLabel, QGroupBox, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QLabel, QGroupBox, QWidget, QLineEdit
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtGui import QKeySequence, QIntValidator
 
 # Encapsulates the navigation, export and double-deck database paging toolbar
 class SolutionBarWidget(QFrame):
@@ -46,9 +46,16 @@ class SolutionBarWidget(QFrame):
         self.prev_btn.setToolTip("Previous solution")
         self.prev_btn.setFixedSize(70, 28)
 
-        self.counter_label = QLabel("No solutions")
-        self.counter_label.setObjectName("solution-counter-label")
-        self.counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.solution_input = QLineEdit()
+        self.solution_input.setValidator(QIntValidator(1, 10000))
+        self.solution_input.setPlaceholderText("Solution number")
+        self.solution_input.setToolTip("Current solution number - Enter a number (1-10000) and press Enter to jump")
+        self.solution_input.setFixedWidth(80)
+        self.solution_input.setFixedHeight(28)
+        self.solution_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.total_solutions_label = QLabel("/ 10,000")
+        self.total_solutions_label.setObjectName("total-solutions-label")
 
         self.next_btn = QPushButton("Next ▶")
         self.next_btn.setObjectName("btn-secondary")
@@ -56,7 +63,8 @@ class SolutionBarWidget(QFrame):
         self.next_btn.setFixedSize(70, 28)
 
         solutions_layout.addWidget(self.prev_btn)
-        solutions_layout.addWidget(self.counter_label)
+        solutions_layout.addWidget(self.solution_input)
+        solutions_layout.addWidget(self.total_solutions_label)
         solutions_layout.addWidget(self.next_btn)
         layout.addWidget(self.solutions_group)
 
