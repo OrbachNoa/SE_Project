@@ -54,14 +54,12 @@ jobs:
       - name: Install Headless GUI Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-shape0
+          sudo apt-get install -y xvfb libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-shape0
 
-      # Step 4.6 — Run GUI tests (using offscreen platform buffer)
+      # Step 4.6 — Run GUI tests (using Xvfb virtual frame buffer)
       - name: Run GUI tests
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: |
-          pytest tests/gui/ -v --tb=short
+          xvfb-run --server-args="-screen 0 1024x768x24" pytest tests/gui/ -v --tb=short
 
       # Step 5 — Run performance tests (only on Pull Requests on Python 3.12 to save CI time/cost)
       # Performance tests must complete within 30 seconds per SRS §5.1.
