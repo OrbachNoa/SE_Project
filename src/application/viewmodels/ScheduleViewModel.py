@@ -17,10 +17,14 @@ class ScheduleItemViewModel:
     date: str
     # Course name
     title: str
-    # Course id / semester / moed
+    # Course id / semester / moed — pre-composed HTML for the subtitle area
     subtitle: str
     # Full hover text
     tooltip: str
+    # Instructor name — dedicated field so consumers don't need to parse subtitle
+    instructor: str = ""
+    # EvalType value string (e.g. "EXAM", "PROJECT") — dedicated field for the same reason
+    evaluation: str = ""
 
 
 @dataclass

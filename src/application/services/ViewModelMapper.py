@@ -64,10 +64,16 @@ class ViewModelMapper:
         tooltip = (
             f"{a.course_name} ({a.course_id})\n"
             f"{a.date} · {a.semester} · Moed {a.moed}\n"
+            f"Instructor: {a.instructor} · {a.evaluation}\n"
             f"{req_str.replace('<br>', ', ')}"
         )
         return ScheduleItemViewModel(
-            date=a.date, title=title, subtitle=subtitle, tooltip=tooltip
+            date=a.date,
+            title=title,
+            subtitle=subtitle,
+            tooltip=tooltip,
+            instructor=a.instructor,
+            evaluation=a.evaluation,
         )
 
     def to_schedule_vm(
