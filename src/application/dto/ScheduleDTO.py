@@ -33,6 +33,10 @@ class AssignmentDTO:
     # Plain strings only — keeps this DTO picklable across process boundaries.
     program_requirements: List[Tuple[str, str]] = field(default_factory=list)
 
+    # EvalType value string (e.g. "EXAM", "PROJECT", "ATTENDANCE").
+    # Default is empty string so older pickled DTOs remain deserializable.
+    evaluation: str = ""
+
 
 @dataclass(slots=True)
 class ScheduleDTO:

@@ -47,33 +47,41 @@ def export_schedule_pdf(view, current_index: int, parent) -> None:
 def _build_schedule_html(view) -> str:
     """
     Build a printable HTML table from a schedule view model.
-    Table contains 4 columns: Date, Course, Details and Programs.
+    Table contains 5 columns: Date, Course, Instructor, Details and Programs.
     """
     # Column widths, in percent
-    width_date = "15%"
-    width_course = "30%"
-    width_details = "31%"
-    width_programs = "24%"
+    width_date = "13%"
+    width_course = "25%"
+    width_instructor = "17%"
+    width_details = "25%"
+    width_programs = "20%"
     # Looping over the items in the view model
     rows_html = []
     for row_index, item in enumerate(sorted(view.items, key=lambda it: it.date)):
         date_text = html.escape(str(item.date))
         course_text = html.escape(str(item.title))
 
-        # Clean up the subtitle: remove HTML tags and split into lines.
+        # Instructor column — use the dedicated field directly (no string parsing needed).
+        instructor_text = html.escape(item.instructor) if item.instructor else "<span style='color:#94A3B8;'>—</span>"
+
+        # Details column: course id · semester · moed · evaluation.
+        # Extract semester/moed from tooltip line 2 (existing format: "date · SEM · Moed X").
+        # course_id comes from the subtitle; evaluation comes from its dedicated field.
         clean_sub = item.subtitle.replace("<br>", "\n")
         clean_sub = re.sub(r"<[^>]+>", "", clean_sub)
         clean_sub = clean_sub.replace("ID: ", "")
         sub_parts = [p.strip() for p in clean_sub.split("\n") if p.strip()]
-
-        # Build the Details column from tooltip
         course_id_text = sub_parts[0] if sub_parts else ""
+
         tooltip_lines = str(item.tooltip).split("\n")
         if len(tooltip_lines) >= 2:
-            meta_pieces = tooltip_lines[1].strip().split(" \u00b7 ", 1)
+            meta_pieces = tooltip_lines[1].strip().split(" · ", 1)
             if len(meta_pieces) > 1:
-                # Append the semester and moed after the course id.
-                course_id_text += " \u00b7 " + meta_pieces[1]
+                course_id_text += " · " + meta_pieces[1]
+
+        if item.evaluation:
+            course_id_text += f" · {item.evaluation}"
+
         details_text = html.escape(course_id_text)
 
         # Build the Programs column
@@ -81,7 +89,7 @@ def _build_schedule_html(view) -> str:
         if prog_parts:
             programs_text = "<br>".join(html.escape(p) for p in prog_parts)
         else:
-            programs_text = "<span style='color:#94A3B8;'>\u2014</span>"
+            programs_text = "<span style='color:#94A3B8;'>—</span>"
 
         # Alternate the row background so long tables stay easy to read.
         row_background = "#FFFFFF" if row_index % 2 == 0 else COLOR_BG
@@ -90,6 +98,7 @@ def _build_schedule_html(view) -> str:
             f"<tr bgcolor='{row_background}'>"
             f"<td width='{width_date}' style='color:{COLOR_PRIMARY}; font-weight:bold;'>{date_text}</td>"
             f"<td width='{width_course}' style='color:{COLOR_TEXT}; font-weight:bold;'>{course_text}</td>"
+            f"<td width='{width_instructor}' style='color:{COLOR_MUTED};'>{instructor_text}</td>"
             f"<td width='{width_details}' style='color:{COLOR_MUTED};'>{details_text}</td>"
             f"<td width='{width_programs}' style='color:{COLOR_TEXT};'>{programs_text}</td>"
             "</tr>"
@@ -103,11 +112,12 @@ def _build_schedule_html(view) -> str:
     return (
         "<html><body>"
         f"<h1 style='color:{COLOR_PRIMARY}; margin:0 0 2pt 0;'>Exam Schedule</h1>"
-        f"<p style='color:{COLOR_MUTED}; margin:0 0 14pt 0;'>{solution_line} &nbsp;\u00b7&nbsp; {exam_count} exams</p>"
+        f"<p style='color:{COLOR_MUTED}; margin:0 0 14pt 0;'>{solution_line} &nbsp;·&nbsp; {exam_count} exams</p>"
         "<table width='100%' cellspacing='0' cellpadding='7'>"
         f"<tr bgcolor='{COLOR_GOLD}'>"
         f"<td width='{width_date}' style='color:{COLOR_TEXT}; font-weight:bold;'>Date</td>"
         f"<td width='{width_course}' style='color:{COLOR_TEXT}; font-weight:bold;'>Course</td>"
+        f"<td width='{width_instructor}' style='color:{COLOR_TEXT}; font-weight:bold;'>Instructor</td>"
         f"<td width='{width_details}' style='color:{COLOR_TEXT}; font-weight:bold;'>Details</td>"
         f"<td width='{width_programs}' style='color:{COLOR_TEXT}; font-weight:bold;'>Programs</td>"
         "</tr>"
