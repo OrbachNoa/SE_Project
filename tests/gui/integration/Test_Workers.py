@@ -20,12 +20,12 @@ def test_worker_dispatches_messages():
     mock_repository = MagicMock(spec=SQLiteScheduleRepository)
     
     mock_queue.get.side_effect = [
-        ("SCHEDULE_BATCH", ["dto1", "dto2"]),
+        ("SCHEDULE_BATCH", (b"compressed_data", 2)),
         ("PROGRESS", 50),
         ("FINISHED", None)
     ]
     
-    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process, mock_repository)
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
     
     batch_counts = []
     progress_vals = []
@@ -41,7 +41,7 @@ def test_worker_dispatches_messages():
     worker.run()
     
     # Assert
-    mock_repository.insert_batch.assert_called_once_with(["dto1", "dto2"])
+    mock_repository.insert_compressed_batch.assert_called_once_with(b"compressed_data", 2)
     assert batch_counts == [2]
     assert progress_vals == [50]
     assert getattr(sys.modules[__name__], "finished_called") is True
@@ -63,7 +63,7 @@ def test_worker_process_crash_drainage_path():
     mock_process.exitcode = 137
     mock_cancel_event.is_set.return_value = False
     
-    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process, mock_repository)
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
     
     error_msg = None
     def on_error(msg):
@@ -93,7 +93,7 @@ def test_worker_cancel_graceful_and_terminate():
     mock_process.is_alive.return_value = True
     mock_queue.empty.side_effect = [False, False, True]
     
-    worker = SchedulerWorker(mock_queue, mock_cancel_event, mock_process, mock_repository)
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
     
     # Act
     worker.cancel()
@@ -122,7 +122,7 @@ def test_process_runner_success(mock_obs_cls, mock_sched_cls):
     slots = []
     checkers = []
     
-    runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results=10)
+    runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results=10, batch_size=1000)
     
     # Act
     runner.run()
@@ -155,7 +155,7 @@ def test_process_runner_error_handling(mock_obs_cls, mock_sched_cls):
     slots = []
     checkers = []
     
-    runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results=10)
+    runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results=10, batch_size=1000)
     
     # Act
     runner.run()

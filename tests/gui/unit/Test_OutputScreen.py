@@ -6,6 +6,7 @@ from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel, Sche
 
 pytestmark = pytest.mark.usefixtures("qapp")
 
+# --- Mock controller for testing purposes. ---
 class MockController(QObject):
     total_count_updated = pyqtSignal(int)
     
@@ -20,10 +21,60 @@ class MockController(QObject):
         })
         self.get_schedule_view = MagicMock()
 
+@pytest.fixture
+def mock_controller(viewmodel_mapper):
+    controller = MockController()
+    from datetime import date
+    from src.models.Domain import ExamPeriod
+    from src.models.Enums import Semester, Moed
+    p = ExamPeriod(semester=Semester.FALL, moed=Moed.ALEPH, start_date=date(2026, 6, 1), end_date=date(2026, 6, 30), excluded_dates=[])
+    controller.get_loaded_periods = MagicMock(return_value=[p])
+    controller.get_mapper = MagicMock(return_value=viewmodel_mapper)
+    return controller
+
 # ===========================================================================
-# TC-UI-OU-001: test previous schedule button.
+# TC-OU-UI-001: test initial solution navigation button states.
 # ===========================================================================
-def test_previous_schedule_button(mock_controller, mock_router):
+def test_solution_navigation_initial_state(mock_controller, mock_router):
+    # Arrange
+    view = ScheduleViewModel(items=[], current_index=0, total=2)
+    mock_controller.get_schedule_view.return_value = view
+    
+    screen = OutputScreen(mock_controller, mock_router)
+    
+    # Act
+    screen.on_enter()
+    
+    # Assert
+    assert screen._prev_btn.isEnabled() is False
+    assert screen._next_btn.isEnabled() is True
+
+
+# ===========================================================================
+# TC-OU-UI-002: test next schedule button navigates forward.
+# ===========================================================================
+def test_next_schedule_button_navigates_forward(mock_controller, mock_router):
+    # Arrange
+    view0 = ScheduleViewModel(items=[], current_index=0, total=2)
+    view1 = ScheduleViewModel(items=[], current_index=1, total=2)
+    mock_controller.get_schedule_view.side_effect = [view0, view1]  
+    
+    screen = OutputScreen(mock_controller, mock_router)
+    screen.on_enter()
+    
+    # Act
+    screen.on_next()
+    
+    # Assert
+    assert screen._prev_btn.isEnabled() is True
+    assert screen._next_btn.isEnabled() is False
+    assert screen._presenter.current_index == 1
+
+
+# ===========================================================================
+# TC-OU-UI-003: test previous schedule button navigates backward.
+# ===========================================================================
+def test_previous_schedule_button_navigates_backward(mock_controller, mock_router):
     # Arrange
     view0 = ScheduleViewModel(items=[], current_index=0, total=2)
     view1 = ScheduleViewModel(items=[], current_index=1, total=2)
@@ -31,47 +82,19 @@ def test_previous_schedule_button(mock_controller, mock_router):
     
     screen = OutputScreen(mock_controller, mock_router)
     screen.on_enter()
-    
-    # Assert initial
-    assert screen._prev_btn.isEnabled() is False
-    assert screen._next_btn.isEnabled() is True
-    
-    # Act
-    screen.on_next()
-    
-    # Assert
-    assert screen._prev_btn.isEnabled() is True
-    assert screen._current_index == 1
+    screen.on_next()  # Setup state: now at index 1
     
     # Act
     screen.on_prev()
-    assert screen._current_index == 0
+    
+    # Assert
+    assert screen._presenter.current_index == 0
     assert screen._prev_btn.isEnabled() is False
-
-# ===========================================================================
-# TC-UI-OU-002: test next schedule button.
-# ===========================================================================
-def test_next_schedule_button(mock_controller, mock_router):
-    # Arrange
-    view0 = ScheduleViewModel(items=[], current_index=0, total=2)
-    view1 = ScheduleViewModel(items=[], current_index=1, total=2)
-    mock_controller.get_schedule_view.side_effect = [view0, view1]
-    
-    screen = OutputScreen(mock_controller, mock_router)
-    screen.on_enter()
-    
-    # Assert
     assert screen._next_btn.isEnabled() is True
-    
-    # Act
-    screen.on_next()
-    
-    # Assert
-    assert screen._next_btn.isEnabled() is False
-    assert screen._current_index == 1
+
 
 # ===========================================================================
-# TC-UI-OU-003: test schedule counter updates.
+# TC-OU-UI-004: test schedule counter updates.
 # ===========================================================================
 def test_schedule_counter_updates(mock_controller, mock_router):
     # Arrange
@@ -82,17 +105,17 @@ def test_schedule_counter_updates(mock_controller, mock_router):
     screen = OutputScreen(mock_controller, mock_router)
     screen.on_enter()
     
-    # Assert
-    assert screen._counter_label.text() == "Solution  1 / 2"
+    # Assert - initial state
+    assert screen._counter_label.text() == "Solution 1 / 2"
     
     # Act
     screen.on_next()
     
-    # Assert
-    assert screen._counter_label.text() == "Solution  2 / 2"
+    # Assert - after navigation
+    assert screen._counter_label.text() == "Solution 2 / 2"
 
 # ===========================================================================
-# TC-UI-OU-004: test calendar shows selected month.
+# TC-OU-UI-005: test calendar shows selected month.
 # ===========================================================================
 def test_calendar_shows_selected_month(mock_controller, mock_router):
     # Arrange
@@ -120,3 +143,18 @@ def test_calendar_shows_selected_month(mock_controller, mock_router):
     
     # Assert
     assert "2026-06-05" in screen.calendar_grid._day_layouts
+
+
+# ===========================================================================
+# TC-OU-UI-006: test that clicking the back button navigates back to input.
+# ===========================================================================
+def test_back_button_navigates_to_input_screen(mock_controller, mock_router):
+    # Arrange
+    screen = OutputScreen(mock_controller, mock_router)
+    
+    # Act
+    screen.solution_bar.back_btn.click()
+    
+    # Assert
+    assert mock_router.back.call_count == 1
+
