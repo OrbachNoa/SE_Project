@@ -65,6 +65,7 @@ class ViewModelMapper:
             f"{a.course_name} ({a.course_id})\n"
             f"{a.date} · {a.semester} · Moed {a.moed}\n"
             f"Instructor: {a.instructor} · {a.evaluation}\n"
+            # Strip HTML <br> tags since tooltips render plain text, not HTML.
             f"{req_str.replace('<br>', ', ')}"
         )
         return ScheduleItemViewModel(
@@ -94,7 +95,7 @@ class ViewModelMapper:
         if dto is None:
             raise ValueError("to_schedule_vm received None; expected a ScheduleDTO")
 
-        # None sentinel \u2192 empty list so _item_from_assignment receives a consistent type.
+        # If selected_programs is None, use an empty list
         effective_programs = selected_programs if selected_programs is not None else []
 
         items = [self._item_from_assignment(a, effective_programs) for a in dto.assignments]
@@ -106,6 +107,7 @@ class ViewModelMapper:
         if dto is None:
             raise ValueError("to_calendar_vm received None; expected a ScheduleDTO")
 
+        # Group assignments by date; multiple exams on the same day share a cell.
         by_date: dict[str, List[ScheduleItemViewModel]] = {}
         for a in dto.assignments:
             by_date.setdefault(a.date, []).append(self._item_from_assignment(a))
@@ -185,6 +187,7 @@ class ViewModelMapper:
 
         result: List[ProgramCoursesViewModel] = []
         for pid in sorted(rows_by_program.keys()):
+            # Sort courses within each program by course_id for consistent display order.
             rows = sorted(rows_by_program[pid], key=lambda r: r.course_id)
             result.append(
                 ProgramCoursesViewModel(

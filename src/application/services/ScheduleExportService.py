@@ -19,7 +19,7 @@ class ScheduleExportService:
 
         # Ensure the output directory exists so a user-chosen path from a file dialog does not cause a mid-write failure.
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-
+        # Wrap the DTO in an adapter to match the interface expected by the writer.
         adapted = ScheduleDTOAdapter(schedule_dto)
         self._writer.write([adapted], path)
 
