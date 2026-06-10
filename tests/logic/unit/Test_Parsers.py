@@ -199,7 +199,7 @@ def test_courses_parser_accepts_sentence_case_requirement(
 
 
 # ===========================================================================
-# TC-PRS-10: Test that invalid Requirement values are rejected.
+# TC-PRS-010: Test that invalid Requirement values are rejected.
 # A course requirement must be either 'Obligatory' or 'Elective'.
 # Anything else should cause an error.
 # ===========================================================================
@@ -222,7 +222,7 @@ def test_courses_parser_rejects_invalid_requirement(tmp_path):
 
 
 # ===========================================================================
-# TC-PRS-11: Test that invalid Evaluation values are rejected.
+# TC-PRS-011: Test that invalid Evaluation values are rejected.
 # A course evaluation must be 'Exam', 'Project', or 'Attendance'.
 # ===========================================================================
 def test_courses_parser_rejects_invalid_evaluation(tmp_path):
@@ -244,7 +244,7 @@ def test_courses_parser_rejects_invalid_evaluation(tmp_path):
 
 
 # ===========================================================================
-# TC-PRS-12: Test that an empty courses file is handled properly.
+# TC-PRS-012: Test that an empty courses file is handled properly.
 # If the courses file has absolutely no text in it, the system should 
 # either reject it safely or return an empty list. It must not crash.
 # ===========================================================================
@@ -471,8 +471,7 @@ def test_programs_parser_rejects_different_separator(tmp_path):
 
 
 # ===========================================================================
-# TC-PARS-023: Duplicate (semester, moed) period entries are rejected.
-# Regression test for bug #2 (silent absorption of duplicate period).
+# TC-PRS-023: Duplicate (semester, moed) period entries are rejected.
 # Each (semester, moed) pair must appear at most once in periods.txt;
 # multiple entries cause silent data loss in the Scheduler and must be
 # rejected at parse time.
@@ -502,7 +501,7 @@ def test_periods_parser_rejects_duplicate_semester_moed(tmp_path):
 
 
 # ===========================================================================
-# TC-PARS-024: A second moed (BET) for the same semester is allowed — not a duplicate.
+# TC-PRS-024: A second moed (BET) for the same semester is allowed — not a duplicate.
 # ===========================================================================
 def test_periods_parser_accepts_different_moed_same_semester(tmp_path):
     f = tmp_path / "periods_diff_moed.txt"
@@ -519,11 +518,11 @@ def test_periods_parser_accepts_different_moed_same_semester(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# ParserFactory tests - TC-PARS-025..029
+# ParserFactory tests - TC-PRS-025..029
 # ---------------------------------------------------------------------------
 
 # ===========================================================================
-# TC-PARS-025: test that ParserFactory returns the supported file types.
+# TC-PRS-025: test that ParserFactory returns the supported file types.
 # ===========================================================================
 def test_parser_factory_supported_types():
     # Act - Get the supported file types from the ParserFactory
@@ -535,7 +534,7 @@ def test_parser_factory_supported_types():
     assert "programs" in supported
 
 # ===========================================================================
-# TC-PARS-026: test that ParserFactory creates a valid parser for a given file type.
+# TC-PRS-026: test that ParserFactory creates a valid parser for a given file type.
 # ===========================================================================
 def test_parser_factory_create_valid():
     # Act - Get the supported file types from the ParserFactory
@@ -545,7 +544,7 @@ def test_parser_factory_create_valid():
     assert isinstance(parser, CoursesFileParser)
 
 # ===========================================================================
-# TC-PARS-027: test that ParserFactory raises an error for an invalid file type.
+# TC-PRS-027: test that ParserFactory raises an error for an invalid file type.
 # ===========================================================================
 def test_parser_factory_create_invalid():
     # Act + Assert - Try to create an invalid parser
@@ -554,7 +553,7 @@ def test_parser_factory_create_invalid():
     assert "Unknown file type 'nonexistent'" in str(exc.value)
 
 # ===========================================================================
-# TC-PARS-028: test that ParserFactory raises an error when a duplicate parser type is registered.
+# TC-PRS-028: test that ParserFactory raises an error when a duplicate parser type is registered.
 # ===========================================================================
 def test_parser_factory_register_duplicate():
     # Act + Assert - Try to register a duplicate parser type
@@ -563,7 +562,7 @@ def test_parser_factory_register_duplicate():
     assert "already registered" in str(exc.value)
 
 # ===========================================================================
-# TC-PARS-029: test that ParserFactory can parse multiple files.
+# TC-PRS-029: test that ParserFactory can parse multiple files.
 # ===========================================================================
 def test_parser_factory_parse_files(tmp_path):
     # Arrange - Create multiple files
