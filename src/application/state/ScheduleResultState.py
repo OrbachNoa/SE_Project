@@ -12,7 +12,7 @@ from src.application.dto.ScheduleDTO import ScheduleDTO
 
 
 class ScheduleResultState:
-    """Holds the list of generated schedules and tracks the active UI rendering view index cursor."""
+    """Holds the list of generated schedules and tracks the active viewing index."""
 
     def __init__(self) -> None:
         # Allocates a local collection array buffer for caching operational display elements
@@ -20,19 +20,16 @@ class ScheduleResultState:
         self._current_index: int = 0
 
     def set_schedules(self, schedules: List[ScheduleDTO]) -> None:
-        """Replaces the entire stored reference collection buffer and resets the navigation view to the start."""
+        """Replace all stored schedules and reset navigation to the first item."""
         self._schedules = list(schedules)
         self._current_index = 0
 
     def add_schedule(self, schedule_dto: ScheduleDTO) -> None:
-        """Appends a single distinct schedule record object directly to the active collection block."""
+        """Append a single schedule to the list."""
         self._schedules.append(schedule_dto)
 
     def add_schedules_batch(self, batch: int | List[ScheduleDTO]) -> None:
-        """
-        Accepts incoming structural frames into memory.
-        Supports both legacy lists and raw scalar integers to maintain contract polymorphic balance.
-        """
+        """Add a batch of schedules."""
         if isinstance(batch, int):
             # No-op in base class as background worker persistence tracks records out-of-process
             pass
@@ -41,7 +38,7 @@ class ScheduleResultState:
             self._schedules.extend(batch)
 
     def get_schedule(self, index: int) -> ScheduleDTO:
-        """Retrieves the schedule record residing at the specified index position boundary."""
+        """Return the schedule at the given index."""
         if index < 0 or index >= len(self._schedules):
             raise IndexError(
                 f"schedule index {index} out of range (have {len(self._schedules)})"
@@ -49,49 +46,46 @@ class ScheduleResultState:
         return self._schedules[index]
 
     def count(self) -> int:
-        """Returns the immediate volumetric count dimension sizing of the held collection segment."""
+        """Return the number of stored schedules."""
         return len(self._schedules)
 
     # --- page-navigation contract (overridden by HybridScheduleResultState) ---
 
     @property
     def current_page(self) -> int:
-        """0-based index of the page currently shown. Always returns 0 for non-hybrid memory structures."""
+        """0-based index of the currently shown page. Always 0 for the base class."""
         return 0
 
     def total_pages(self) -> int:
-        """Returns total calculated frame pages available. Constrained to 1 frame max for raw layouts."""
+        """Total number of pages. 1 if any schedules are loaded, 0 otherwise."""
         return 1 if self._schedules else 0
 
     def load_page(self, page: int) -> None:
-        """
-        Rotates visible pipeline elements onto an active window frame target page index.
-        Acts as a clean stub hook overridden completely inside polymorphic subclasses.
-        """
+        """Stub — overridden by HybridScheduleResultState to page through disk-backed results."""
         pass
 
     def is_first_window_ready(self) -> bool:
-        """Validates if elements have entered the active view cache frame to open display pipelines safely."""
+        """Return True if at least one schedule is loaded and ready to display."""
         return len(self._schedules) > 0
 
     def current_window_size(self) -> int:
-        """Measures the active memory footprint sizing parameters of the currently visible rendering view."""
+        """Return the number of schedules currently in memory."""
         return len(self._schedules)
 
     def sqlite_count(self) -> int:
-        """Tracks records spilled into disk overflow database blocks. Static at 0 for base memory arrays."""
+        """Number of schedules spilled to SQLite. Always 0 for the base in-memory class."""
         return 0
 
     # --- view-position helpers (current_index is in the UML field list) -----
 
     @property
     def current_index(self) -> int:
-        """Exposes the active navigation item element cursor tracking location coordinate."""
+        """0-based index of the schedule currently shown in the UI."""
         return self._current_index
 
     @current_index.setter
     def current_index(self, value: int) -> None:
-        """Mutates the internal item position tracker, enforcing strict collection out-of-bounds safety guards."""
+        """Set the active schedule index; raises IndexError if out of bounds."""
         if value < 0 or value >= len(self._schedules):
             raise IndexError(
                 f"current_index {value} out of range (have {len(self._schedules)})"

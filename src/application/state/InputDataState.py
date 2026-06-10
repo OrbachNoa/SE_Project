@@ -94,7 +94,7 @@ class InputDataState:
                     excluded_dates=[date.fromisoformat(d) for d in vm.excluded_dates],
                 )
             )
-
+        # Atomically replace the periods list only after all edits succeeded.
         self._periods = rebuilt
 
     # --- cache bridge (lead's two extra methods) ---------------------------
@@ -146,6 +146,7 @@ class InputDataState:
         """
         rebuilt_courses: List[Course] = []
         for cd in cache.courses:
+            # Rebuild program entries; default to empty list if key is missing.
             entries = [
                 ProgramEntry(
                     program_id=ed["programId"],
@@ -173,9 +174,10 @@ class InputDataState:
                     moed=Moed(pd["moed"]),
                     start_date=date.fromisoformat(pd["startDate"]),
                     end_date=date.fromisoformat(pd["endDate"]),
+                    # Default to empty list if excludedDates is missing from older cache files.
                     excluded_dates=[date.fromisoformat(d) for d in pd.get("excludedDates", [])],
                 )
             )
-
+        # Replace state only after both lists are fully rebuilt.
         self._courses = rebuilt_courses
         self._periods = rebuilt_periods

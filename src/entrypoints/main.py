@@ -19,6 +19,7 @@ from src.infrastructure.cache.DiskCacheRepository import DiskCacheRepository
 from src.infrastructure.cache.FileChangeDetector import FileChangeDetector
 from src.infrastructure.cache.CachedInputLoader import CachedInputLoader
 from src.file_io.validators.ValidatorPipeline import ValidatorPipeline
+from src.file_io.validators.ValidationResult import ValidationResult
 
 
 
@@ -51,8 +52,9 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
     # Execute early validation on selected programs
     pipeline = ValidatorPipeline(validators)
     result = pipeline.validate(programs)
+    # If validation fails, raise an error with the collected messages
     if not result.is_valid:
-        raise ValueError("\n".join(result.errors))
+        return result
 
     # Build scheduling slots
     if slot_builder is None:
@@ -129,12 +131,17 @@ def main():
         streaming_observer = StreamingScheduleObserver(output_path)
 
         # Run the scheduling pipeline
-        run_pipeline(
+        result = run_pipeline(
             courses=courses,
             periods=periods,
             programs_file=args.programs,
             schedule_observer=streaming_observer,
         )
+        
+         # Check if validation flagged bad input and report errors without proceeding to scheduling
+        if isinstance(result, ValidationResult) and not result.is_valid:
+            print("Validation failed:\n" + "\n".join(result.errors), file=sys.stderr)
+            sys.exit(1)
 
         end_time = time.perf_counter()
         total_time = end_time - start_time
