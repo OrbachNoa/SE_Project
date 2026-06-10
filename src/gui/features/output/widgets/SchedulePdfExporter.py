@@ -15,6 +15,7 @@ from PyQt6.QtGui import QPageSize
 from gui.core.styles.Palette import COLOR_PRIMARY, COLOR_GOLD, COLOR_TEXT, COLOR_BG, COLOR_MUTED
 
 
+# The main entry point that coordinates asking the user for a path and triggering the export
 def export_schedule_pdf(view, current_index: int, parent) -> None:
     """
     Run the full PDF export flow for the schedule currently on screen.
@@ -24,49 +25,51 @@ def export_schedule_pdf(view, current_index: int, parent) -> None:
     path, _ = QFileDialog.getSaveFileName(
         parent, "Save schedule as PDF", default_name, "PDF files (*.pdf)"
     )
+    # If the user closed the dialog without choosing a file, stop here.
     if not path:
-        # The user closed the dialog without choosing a file.
         return
+    # Add .pdf extension if the user forgot it.
     if not path.lower().endswith(".pdf"):
         path += ".pdf"
 
-    # Build the HTML and render it to the chosen file.
+    # Build the HTML structure and send it to the PDF engine.
     try:
         document_html = _build_schedule_html(view)
         _write_html_to_pdf(document_html, path)
     except Exception as error:
-        # Show an error message if the PDF export fails.
+        # Show an error alert if something goes wrong during the saving process.
         QMessageBox.critical(parent, "Export error", f"Failed to create the PDF:\n{error}")
         return
 
+    # Let the user know the process was successful.
     QMessageBox.information(
         parent, "Export complete", f"Schedule saved to:\n{os.path.abspath(path)}"
     )
 
 
+# A helper function that transforms your data model into a structured HTML string
 def _build_schedule_html(view) -> str:
     """
     Build a printable HTML table from a schedule view model.
     Table contains 5 columns: Date, Course, Instructor, Details and Programs.
     """
-    # Column widths, in percent
+    # Defining column widths to make the PDF look balanced
     width_date = "13%"
     width_course = "25%"
     width_instructor = "17%"
     width_details = "25%"
     width_programs = "20%"
-    # Looping over the items in the view model
+
+    # Looping over the schedule items and creating a table row for each exam
     rows_html = []
     for row_index, item in enumerate(sorted(view.items, key=lambda it: it.date)):
         date_text = html.escape(str(item.date))
         course_text = html.escape(str(item.title))
 
-        # Instructor column — use the dedicated field directly (no string parsing needed).
+        # Instructor column — use the instructor name or a dash if unknown
         instructor_text = html.escape(item.instructor) if item.instructor else "<span style='color:#94A3B8;'>—</span>"
 
-        # Details column: course id · semester · moed · evaluation.
-        # Extract semester/moed from tooltip line 2 (existing format: "date · SEM · Moed X").
-        # course_id comes from the subtitle; evaluation comes from its dedicated field.
+        # Processing the details (Course ID, Semester, Moed, etc.) for the table cell
         clean_sub = item.subtitle.replace("<br>", "\n")
         clean_sub = re.sub(r"<[^>]+>", "", clean_sub)
         clean_sub = clean_sub.replace("ID: ", "")
@@ -84,16 +87,17 @@ def _build_schedule_html(view) -> str:
 
         details_text = html.escape(course_id_text)
 
-        # Build the Programs column
+        # Building the programs column with tags/info
         prog_parts = [p for p in sub_parts[1:] if p.strip()]
         if prog_parts:
             programs_text = "<br>".join(html.escape(p) for p in prog_parts)
         else:
             programs_text = "<span style='color:#94A3B8;'>—</span>"
 
-        # Alternate the row background so long tables stay easy to read.
+        # Alternate the row background color (zebra-striping) to keep it easy to read
         row_background = "#FFFFFF" if row_index % 2 == 0 else COLOR_BG
 
+        # Combining all pieces into an HTML table row
         rows_html.append(
             f"<tr bgcolor='{row_background}'>"
             f"<td width='{width_date}' style='color:{COLOR_PRIMARY}; font-weight:bold;'>{date_text}</td>"
@@ -107,8 +111,7 @@ def _build_schedule_html(view) -> str:
     solution_line = html.escape(f"Solution {view.current_index + 1} of {view.total}")
     exam_count = len(view.items)
 
-    # Header row uses the gold brand color with dark text to showcase the palette.
-    # Body rows follow with the data assembled above.
+    # Return the full HTML document with a gold header
     return (
         "<html><body>"
         f"<h1 style='color:{COLOR_PRIMARY}; margin:0 0 2pt 0;'>Exam Schedule</h1>"
@@ -127,8 +130,10 @@ def _build_schedule_html(view) -> str:
     )
 
 
+# A helper function that uses Qt's printing system to actually render HTML to a physical file
 def _write_html_to_pdf(document_html: str, path: str) -> None:
     """Render an HTML string to a PDF file using Qt printing support."""
+    # Set up the virtual printer as a PDF generator
     printer = QPrinter(QPrinter.PrinterMode.ScreenResolution)
     printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
     printer.setOutputFileName(path)
@@ -138,12 +143,11 @@ def _write_html_to_pdf(document_html: str, path: str) -> None:
         # A4 is the default page size, so a binding mismatch is harmless.
         pass
 
+    # Create a document object, set the font, and load the HTML content
     document = QTextDocument()
-    # Base font size for the whole document.
-    # Headings grow from this automatically.
     document.setDefaultFont(QFont("Arial", 11))
     document.setHtml(document_html)
 
-    # Method name "print", fallback to "print_" for safety.
+    # Trigger the print command to save the document as a file
     print_method = getattr(document, "print", None) or getattr(document, "print_")
     print_method(printer)
