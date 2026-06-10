@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Callable, List
+import os
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QProgressBar, QVBoxLayout
@@ -39,6 +40,21 @@ class InputScreen(Screen):
         self.action_bar = ActionBarWidget(self)
         self._view_results_btn = self.action_bar.view_results_btn
         root.addWidget(self.action_bar)
+
+        # --- File Upload Status Area ---
+        # A horizontal layout placed just below the action bar to display the names
+        # of successfully loaded files (courses and periods).
+        self.files_info_layout = QHBoxLayout()
+        self.files_info_layout.setContentsMargins(24, 0, 24, 0)
+        self.course_file_label = QLabel("")
+        self.course_file_label.setObjectName("status-ok")
+        self.period_file_label = QLabel("")
+        self.period_file_label.setObjectName("status-ok")
+        self.files_info_layout.addWidget(self.course_file_label)
+        self.files_info_layout.addSpacing(20)
+        self.files_info_layout.addWidget(self.period_file_label)
+        self.files_info_layout.addStretch()
+        root.addLayout(self.files_info_layout)
 
         self._courses_status_badge = QLabel("Not loaded")
         self._courses_status_badge.setVisible(False)
@@ -185,7 +201,14 @@ class InputScreen(Screen):
         return self.program_selector_card.selected_program_ids()
 
     def prompt_for_file(self, title: str, file_filter: str) -> str:
-        return prompt_open_file(self, title, file_filter)
+        """
+        Opens a native file dialog for the user to select a data file.
+        Caches the selected file name to display it in the UI upon successful load.
+        """
+        file_path = prompt_open_file(self, title, file_filter)
+        if file_path:
+            self._last_file_name = os.path.basename(file_path)
+        return file_path
 
     def set_generate_button_state(self, enabled: bool, tooltip: str) -> None:
         self.action_bar.generate_btn.setEnabled(enabled)
@@ -219,9 +242,18 @@ class InputScreen(Screen):
         self._courses_visible_badge.setText(f"{count} courses")
         self._courses_visible_badge.setObjectName("badge-ok")
         self._refresh_widget_style(self._courses_visible_badge)
+        fname = getattr(self, '_last_file_name', '')
+        if fname:
+            self.course_file_label.setText(f"Courses: ✔ {fname}")
+            self._last_file_name = ""
+
 
     def mark_periods_loaded(self, count: int) -> None:
         self._mark_file_loaded(self._periods_row, count, "periods")
+        fname = getattr(self, '_last_file_name', '')
+        if fname:
+            self.period_file_label.setText(f"Periods: ✔ {fname}")
+            self._last_file_name = ""
 
     def render_courses(self, programs_vm) -> None:
         self._course_list_widget.render(programs_vm)
