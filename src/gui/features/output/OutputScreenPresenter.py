@@ -10,6 +10,7 @@ _PAGE_WINDOW = 10_000
 class OutputScreenPresenter:
     """Coordinates schedule paging, period navigation, display, and export guards."""
 
+    # Initialize the presenter, connecting the view and controller to manage data and UI state
     def __init__(self, view, controller, router) -> None:
         self._view = view
         self._controller = controller
@@ -23,12 +24,14 @@ class OutputScreenPresenter:
         self._sqlite_count = 0
         self._periods = PeriodNavigator()
 
+        # Listen for updates from the background controller regarding the total number of solutions found
         self._controller.total_count_updated.connect(self.on_total_count_updated)
 
     @property
     def current_index(self) -> int:
         return self._current_index
 
+    # Update the UI counter labels and button availability based on the current solution index
     def refresh_counter(self) -> None:
         if self._total == 0:
             self._view.set_solution_counter("No solutions")
@@ -42,6 +45,7 @@ class OutputScreenPresenter:
         )
         self.refresh_page_bar()
 
+    # Manage pagination display, showing the current page number and availability of next/prev pages
     def refresh_page_bar(self) -> None:
         if self._total_pages <= 1:
             self._view.set_page_bar_visible(False)
@@ -61,6 +65,7 @@ class OutputScreenPresenter:
             can_last=has_next and next_page_is_ready,
         )
 
+    # Respond to data updates from the controller, adjusting total counts and page information
     def on_total_count_updated(self, _total: int) -> None:
         info = self._controller.get_page_info()
         self._total_found = info["total_count"]
@@ -73,6 +78,7 @@ class OutputScreenPresenter:
         else:
             self.refresh_page_bar()
 
+    # Navigation buttons for switching between database pages
     def on_next_page(self) -> None:
         self._load_page(self._current_page + 1)
 
@@ -88,6 +94,7 @@ class OutputScreenPresenter:
         if target >= 0 and self._current_page != target:
             self._load_page(target)
 
+    # Core rendering logic: retrieves current schedule data and pushes it to the UI
     def show_current(self) -> None:
         if self._total == 0:
             return
@@ -109,6 +116,7 @@ class OutputScreenPresenter:
                 self._periods.can_move_next(),
             )
 
+            # Filter assignments to match the currently viewed exam period
             filtered_items = [
                 item
                 for item in schedule_view.items
@@ -124,9 +132,11 @@ class OutputScreenPresenter:
         finally:
             self._view.set_screen_updates(True)
 
+    # Navigation back to the input screen
     def on_back(self) -> None:
         self._router.back()
 
+    # Initiates the PDF export process for the current schedule
     def on_export_pdf(self) -> None:
         if self._total == 0:
             self._view.show_nothing_to_export("There is no schedule to export yet.")
@@ -144,6 +154,7 @@ class OutputScreenPresenter:
 
         self._view.export_schedule_pdf(schedule_view, self._current_index)
 
+    # Navigation helpers for period blocks and solution indices
     def on_prev_period(self) -> None:
         if self._periods.move_previous():
             self.show_current()
@@ -164,6 +175,7 @@ class OutputScreenPresenter:
             self.show_current()
             self.refresh_counter()
 
+    # Logic for jumping to a specific solution by number
     def on_jump_to_solution(self) -> None:
         """Jump to a specific solution number entered by the user."""
         try:
@@ -172,10 +184,9 @@ class OutputScreenPresenter:
                 return
             
             solution_num = int(input_text)
-            # Convert from 1-based to 0-based indexing
+            # Convert from 1-based (user input) to 0-based (code index)
             target_index = solution_num - 1
             
-            # Validate the target is within valid range
             if target_index < 0 or target_index >= self._total:
                 self._view.show_display_error(
                     f"Invalid solution number. Please enter a number between 1 and {self._total}."
@@ -188,6 +199,7 @@ class OutputScreenPresenter:
         except ValueError:
             self._view.show_display_error("Please enter a valid number")
 
+    # Initial setup steps when navigating to this screen
     def on_enter(self) -> None:
         self._current_index = 0
         self._sync_page_info()
@@ -196,6 +208,7 @@ class OutputScreenPresenter:
         self.refresh_counter()
         self._view.focus_back_button()
 
+    # Load a specific data page from the database
     def _load_page(self, target: int) -> None:
         if target < 0 or target >= self._total_pages:
             return
@@ -206,6 +219,7 @@ class OutputScreenPresenter:
         self.show_current()
         self.refresh_counter()
 
+    # Helper to sync internal state with controller's page tracking
     def _sync_page_info(self) -> None:
         info = self._controller.get_page_info()
         self._current_page = info["current_page"]
@@ -214,6 +228,7 @@ class OutputScreenPresenter:
         self._total_found = info["total_count"]
         self._sqlite_count = info.get("sqlite_count", 0)
 
+    # Retrieve period configurations from the controller
     def _get_available_periods(self):
         periods = self._controller.get_loaded_periods()
         mapper = self._controller.get_mapper()

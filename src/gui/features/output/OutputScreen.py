@@ -31,14 +31,17 @@ class OutputScreen(Screen):
         self._connect_events()
         self._presenter.refresh_counter()
 
+    # Build the header widget
     def _build_header(self, root: QVBoxLayout) -> None:
         root.addWidget(HeaderWidget(parent=self))
 
+    # Build the solution navigation toolbar
     def _build_solution_bar(self, root: QVBoxLayout) -> None:
         self.solution_bar = SolutionBarWidget(self)
         root.addWidget(self.solution_bar)
         root.addWidget(create_divider())
 
+    # Build the calendar grid area
     def _build_calendar_area(self, root: QVBoxLayout) -> None:
         body = QVBoxLayout()
         body.setContentsMargins(28, 20, 28, 20)
@@ -87,6 +90,7 @@ class OutputScreen(Screen):
         body.addWidget(content_card)
         root.addLayout(body)
 
+    # Connect UI signals to the presenter logic
     def _connect_events(self) -> None:
         self.solution_bar.back_btn.clicked.connect(self._presenter.on_back)
         self.solution_bar.export_btn.clicked.connect(self._presenter.on_export_pdf)
@@ -100,26 +104,28 @@ class OutputScreen(Screen):
         self.prev_month_btn.clicked.connect(self._presenter.on_prev_period)
         self.next_month_btn.clicked.connect(self._presenter.on_next_period)
 
+    # Refresh the text inside the solution counter
     def set_solution_counter(self, text: str) -> None:
-        # Extract just the solution number from text like "Solution 3 / 10" 
         if "Solution" in text and "/" in text:
             parts = text.split("/")
             solution_num = parts[0].replace("Solution", "").strip()
-            # Only update if the user hasn't actively edited the field
             if not self.solution_bar.solution_input.hasFocus():
                 self.solution_bar.solution_input.setText(solution_num)
         else:
             if not self.solution_bar.solution_input.hasFocus():
                 self.solution_bar.solution_input.clear()
 
+    # Update enabled/disabled state of solution navigation buttons
     def set_solution_controls(self, can_prev: bool, can_next: bool, can_export: bool) -> None:
         self.solution_bar.prev_btn.setEnabled(can_prev)
         self.solution_bar.next_btn.setEnabled(can_next)
         self.solution_bar.export_btn.setEnabled(can_export)
 
+    # Show or hide the page navigation bar
     def set_page_bar_visible(self, visible: bool) -> None:
         self.solution_bar.pages_group.setVisible(visible)
 
+    # Configure the state of the page navigation bar
     def set_page_bar(
         self,
         visible: bool,
@@ -136,11 +142,13 @@ class OutputScreen(Screen):
         self.solution_bar.next_page_btn.setEnabled(can_next)
         self.solution_bar.last_page_btn.setEnabled(can_last)
 
+    # Configure period navigation labels and button availability
     def set_period_navigation(self, label: str, can_previous: bool, can_next: bool) -> None:
         self.month_label.setText(label)
         self.prev_month_btn.setEnabled(can_previous)
         self.next_month_btn.setEnabled(can_next)
 
+    # Draw the calendar grid with dates, exclusion styles, and exam assignments
     def render_calendar(self, date_list: list[str], excluded_dates: list[str], assignments: list) -> None:
         self.calendar_grid.setup_month_grid(
             date_list,
@@ -151,9 +159,11 @@ class OutputScreen(Screen):
             self.calendar_grid.set_date_excluded_output_style(excluded_date)
         self.calendar_grid.display_assignments(assignments)
 
+    # UI utility to toggle screen updates
     def set_screen_updates(self, enabled: bool) -> None:
         self.setUpdatesEnabled(enabled)
 
+    # Error message dialogs
     def show_display_error(self, message: str) -> None:
         QMessageBox.critical(self, "Display Error", message)
 
@@ -163,20 +173,21 @@ class OutputScreen(Screen):
     def show_export_error(self, message: str) -> None:
         QMessageBox.critical(self, "Export error", message)
 
+    # Export functionality
     def export_schedule_pdf(self, schedule_view, current_index: int) -> None:
         export_schedule_pdf(schedule_view, current_index, parent=self)
 
+    # Helpers for UI focus and input
     def focus_back_button(self) -> None:
         self.solution_bar.back_btn.setFocus()
 
     def get_jump_to_value(self) -> str:
-        """Get the value from the jump-to input field."""
         return self.solution_bar.solution_input.text()
 
     def clear_jump_to_input(self) -> None:
-        """Clear the jump-to input field."""
         self.solution_bar.solution_input.clear()
 
+    # Presenter helper methods
     def _refresh_counter(self) -> None:
         self._presenter.refresh_counter()
 

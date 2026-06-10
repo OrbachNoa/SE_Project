@@ -6,11 +6,15 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence, QIntValidator
 
 # Encapsulates the navigation, export and double-deck database paging toolbar
+# This class builds the top navigation bar for the results screen, 
+# allowing users to move between exam schedules and save them as PDFs.
 class SolutionBarWidget(QFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("nav-bar")
         self.setFixedHeight(78)
+        
+        # Horizontal layout to line up navigation buttons and groups from left to right
         layout = QHBoxLayout(self)
         layout.setContentsMargins(20, 4, 20, 4)
         layout.setSpacing(12)
@@ -33,19 +37,23 @@ class SolutionBarWidget(QFrame):
         self.export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self.export_btn)
 
+        # Adds invisible space to push subsequent groups to the right
         layout.addStretch()
 
         # ── Group 1: SOLUTIONS IN CURRENT VIEW ──
+        # Navigation between individual schedules in the current results page
         self.solutions_group = QGroupBox("SOLUTIONS IN CURRENT VIEW")
         solutions_layout = QHBoxLayout(self.solutions_group)
         solutions_layout.setContentsMargins(10, 10, 10, 6)
         solutions_layout.setSpacing(8)
 
+        # Previous button to flip back one solution
         self.prev_btn = QPushButton("◀ Prev")
         self.prev_btn.setObjectName("btn-secondary")
         self.prev_btn.setToolTip("Previous solution")
         self.prev_btn.setFixedSize(70, 28)
 
+        # Input field to jump directly to a specific solution number
         self.solution_input = QLineEdit()
         self.solution_input.setValidator(QIntValidator(1, 10000))
         self.solution_input.setPlaceholderText("Solution number")
@@ -54,9 +62,11 @@ class SolutionBarWidget(QFrame):
         self.solution_input.setFixedHeight(28)
         self.solution_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # Label showing total available solutions in this view
         self.total_solutions_label = QLabel("/ 10,000")
         self.total_solutions_label.setObjectName("total-solutions-label")
 
+        # Next button to flip forward one solution
         self.next_btn = QPushButton("Next ▶")
         self.next_btn.setObjectName("btn-secondary")
         self.next_btn.setToolTip("Next solution")
@@ -69,6 +79,7 @@ class SolutionBarWidget(QFrame):
         layout.addWidget(self.solutions_group)
 
         # ── Group 2: DATABASE PAGES (10k solutions / pg) ──
+        # Navigation between large batches (pages) of results. Hidden by default.
         self.pages_group = QGroupBox("DATABASE PAGES (10k solutions per page)")
         pages_layout = QHBoxLayout(self.pages_group)
         pages_layout.setContentsMargins(10, 10, 10, 6)

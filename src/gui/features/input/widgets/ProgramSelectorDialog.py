@@ -1,12 +1,4 @@
-"""ProgramSelectorDialog — modal popup for choosing study programs.
-
-Shows every available program at once as a grid of clickable cards (no
-scrolling). Clicking a card selects it; clicking again deselects it. The
-dialog keeps its own selection state and enforces the maximum-selection
-limit, so the parent screen only learns the result via selected_ids() once
-the user presses "Select". Closing or cancelling leaves the previous
-selection untouched.
-"""
+"""ProgramSelectorDialog — modal popup for choosing study programs."""
 from __future__ import annotations
 
 from typing import Dict, List
@@ -23,6 +15,7 @@ from gui.core.styles.DialogStyles import DIALOG_STYLESHEET
 MAX_PROGRAMS = 5
 
 
+# This class creates one single "clickable card" for a specific program in the grid.
 class _ProgramCard(QFrame):
     """A single clickable program card with a selected / unselected state."""
 
@@ -39,14 +32,14 @@ class _ProgramCard(QFrame):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(10)
 
-        # Square check-box indicator on the left, drawn purely with styles.
+        # Creates the little checkbox square on the left of the card
         self._box = QLabel("")
         self._box.setObjectName("prog-card-box")
         self._box.setFixedSize(20, 20)
         self._box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._box)
 
-        # Program id (small, muted) above the program name.
+        # Layout for the program ID and the program name
         text_col = QVBoxLayout()
         text_col.setSpacing(1)
         self._id_lbl = QLabel(program_id)
@@ -60,20 +53,20 @@ class _ProgramCard(QFrame):
 
         self._apply_styles()
 
+    # Updates the colors and adds/removes the checkmark based on whether the card is selected
     def _apply_styles(self) -> None:
-        """Apply dynamic property for styling and force repaint."""
         val_str = "true" if self._selected else "false"
         self.setProperty("selected", val_str)
         self._box.setProperty("selected", val_str)
         self._id_lbl.setProperty("selected", val_str)
         self._name_lbl.setProperty("selected", val_str)
 
-        # For check-box indicator text
         if self._selected:
             self._box.setText("✓")
         else:
             self._box.setText("")
 
+        # Force the UI to refresh its appearance so the style changes appear instantly
         self.style().unpolish(self)
         self.style().polish(self)
         self._box.style().unpolish(self._box)
@@ -83,27 +76,28 @@ class _ProgramCard(QFrame):
         self._name_lbl.style().unpolish(self._name_lbl)
         self._name_lbl.style().polish(self._name_lbl)
 
+    # Simple function to turn selection on or off
     def set_selected(self, value: bool) -> None:
-        """Update the selection state and refresh styles."""
         self._selected = value
         self._apply_styles()
 
+    # Tells the dialog controller that this specific card was clicked
     def mousePressEvent(self, event) -> None:
-        """Delegate the actual toggle decision to the dialog so it can enforce the maximum-selection limit before flipping the card state."""
         self._on_toggle(self.program_id)
 
 
-# Modal popup showing all programs as a clickable grid (no scrolling)
+# This is the main pop-up window that lists all available programs.
 class ProgramSelectorDialog(QDialog):
 
     def __init__(self, programs_vm, preselected_ids: List[str], parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Select Study Programs")
+        # Make sure the user finishes here before going back to the main app
         self.setModal(True)
         self.setMinimumWidth(720)
         self.setStyleSheet(APP_STYLESHEET + DIALOG_STYLESHEET)
 
-        # Selection state owned by the dialog. Start from the caller's choice.
+        # Keep track of which programs are currently selected
         self._selected: List[str] = list(preselected_ids)
         self._cards: Dict[str, _ProgramCard] = {}
 
@@ -116,7 +110,7 @@ class ProgramSelectorDialog(QDialog):
         card_layout.setContentsMargins(24, 22, 24, 22)
         card_layout.setSpacing(16)
 
-        # ── Header: title + hint on the left, live counter on the right ──
+        # Header area with a title and a helper hint
         header_row = QHBoxLayout()
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
@@ -129,12 +123,13 @@ class ProgramSelectorDialog(QDialog):
         header_row.addLayout(title_col)
         header_row.addStretch()
 
+        # The live counter showing how many programs are currently picked (e.g., "3 / 5")
         self._counter = QLabel()
         self._counter.setObjectName("dialog-counter")
         header_row.addWidget(self._counter, alignment=Qt.AlignmentFlag.AlignTop)
         card_layout.addLayout(header_row)
 
-        # ── Program grid: two columns, every program visible at once ──────
+        # Creates a grid layout and fills it with a card for every available program
         grid = QGridLayout()
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(12)
@@ -148,18 +143,20 @@ class ProgramSelectorDialog(QDialog):
             grid.addWidget(prog_card, row, col)
         card_layout.addLayout(grid)
 
-        # ── Button row: Cancel + Select, bottom-right ─────────────────────
+        # Bottom buttons to either cancel the selection or confirm it
         button_row = QHBoxLayout()
         button_row.setSpacing(10)
         button_row.addStretch()
 
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setObjectName("dialog-cancel")
+        # Close without saving
         cancel_btn.clicked.connect(self.reject)
         button_row.addWidget(cancel_btn)
 
         select_btn = QPushButton("Select")
         select_btn.setObjectName("dialog-select")
+        # Save and close
         select_btn.clicked.connect(self.accept)
         button_row.addWidget(select_btn)
 
@@ -168,14 +165,13 @@ class ProgramSelectorDialog(QDialog):
 
         self._refresh_counter()
 
-    # ── Selection logic ─────────────────────────────────────────────────
-
+    # The main logic for handling clicks: adds the program if it fits, removes it if it's already there
     def _toggle(self, program_id: str) -> None:
-        """Select or deselect a program, enforcing the maximum-selection limit."""
         if program_id in self._selected:
             self._selected.remove(program_id)
             self._cards[program_id].set_selected(False)
         else:
+            # Enforce the maximum limit of 5 programs
             if len(self._selected) >= MAX_PROGRAMS:
                 QMessageBox.warning(
                     self,
@@ -188,10 +184,10 @@ class ProgramSelectorDialog(QDialog):
             self._cards[program_id].set_selected(True)
         self._refresh_counter()
 
+    # Updates the header counter whenever the list of selected items changes
     def _refresh_counter(self) -> None:
-        """Update the "N / MAX" counter pill in the header."""
         self._counter.setText(f"{len(self._selected)} / {MAX_PROGRAMS} selected")
 
+    # Used by the main screen to retrieve the final selection after the user clicks "Select"
     def selected_ids(self) -> List[str]:
-        """Return the program IDs currently selected in the dialog."""
         return list(self._selected)
