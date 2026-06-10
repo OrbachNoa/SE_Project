@@ -14,3 +14,7 @@ htmlcov/
 venv/
 .venv/
 .vscode/settings.json
+
+# Local caches
+.cache/
+

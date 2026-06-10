@@ -1,2 +1,6 @@
-pytest==8.0.2
-pytest-cov==4.1.0
+# Phase 1 (unchanged)
+pytest>=7.0
+
+# Phase 2 — GUI
+PyQt6>=6.6.0
+pytest-qt

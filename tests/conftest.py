@@ -4,20 +4,34 @@ conftest.py — Shared tools (fixtures) for the exam scheduling tests.
 This file creates basic objects like Courses and Dates. This makes it easier 
 to write tests because you only change the specific parts you need to check.
 """
+# region Imports
 from datetime import date
+from pathlib import Path
+import sys
+from unittest.mock import MagicMock
 import pytest
 
-# ---------------------------------------------------------------------------
-# Imports for the system
-# ---------------------------------------------------------------------------
-from src.models.enums import EvalType, Semester, Moed, Requirement
-from src.models.domain import (
+# Add 'src' and project root to sys.path so pytest can resolve absolute imports inside the src directory.
+SRC_ROOT = Path(__file__).resolve().parent.parent / "src"
+PROJECT_ROOT = SRC_ROOT.parent
+for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.models.Domain import (
     Course,
     ProgramEntry,
     ExamPeriod,
     ExamAssignment,
     ExamSchedule,
 )
+from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
+from src.infrastructure.cache.DataCache import DataCache
+from src.application.services.ViewModelMapper import ViewModelMapper
+from src.application.state.AppState import AppState
+# endregion
 
 
 # ---------------------------------------------------------------------------
@@ -102,3 +116,140 @@ def make_assignment(make_course):
 def empty_schedule():
     """Returns a new schedule with zero exams, used to start tests."""
     return ExamSchedule()
+
+
+@pytest.fixture
+def collector_observer():
+    """Provides a fresh observer to collect schedules in test cases."""
+    # to be implemented under src by someone else
+    pass
+
+
+@pytest.fixture(scope="session")
+def qapp():
+    """Ensures a single QApplication instance exists for all PyQt tests."""
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QFont
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    app.setFont(QFont("Segoe UI", 10))
+    yield app
+
+
+@pytest.fixture
+def make_assignment_dto(make_assignment):
+    """Provides a factory to build AssignmentDTOs with default values matched to the domain fixtures."""
+    def _make(
+        course_id=None,
+        course_name=None,
+        instructor=None,
+        date=None,
+        semester=None,
+        moed=None
+    ):
+        domain_a = make_assignment()
+        return AssignmentDTO(
+            course_id=course_id or domain_a.course.courseId,
+            course_name=course_name or domain_a.course.name,
+            instructor=instructor or domain_a.course.instructor,
+            date=date or domain_a.date.isoformat(),
+            semester=semester or (domain_a.semester.value if hasattr(domain_a.semester, 'value') else domain_a.semester),
+            moed=moed or (domain_a.moed.value if hasattr(domain_a.moed, 'value') else domain_a.moed)
+        )
+    return _make
+
+
+@pytest.fixture
+def make_schedule_dto(make_assignment_dto):
+    """Provides a factory to build ScheduleDTOs with default values."""
+    def _make(assignments=None, total_assignments=None):
+        if assignments is None:
+            assignments = []
+        if total_assignments is None:
+            total_assignments = len(assignments)
+        return ScheduleDTO(assignments=assignments, total_assignments=total_assignments)
+    return _make
+
+
+@pytest.fixture
+def make_data_cache(make_course, make_period):
+    """Provides a factory to build DataCaches with default values matched to domain fixtures."""
+    def _make(courses=None, periods=None, source_hashes=None):
+        if courses is None:
+            c = make_course()
+            courses = [{
+                "courseId": c.courseId,
+                "name": c.name,
+                "instructor": c.instructor,
+                "evaluation": c.evaluation.value if hasattr(c.evaluation, 'value') else c.evaluation,
+                "programEntries": [{
+                    "programId": pe.programId,
+                    "year": pe.year,
+                    "semester": pe.semester.value if hasattr(pe.semester, 'value') else pe.semester,
+                    "requirement": pe.requirement.value if hasattr(pe.requirement, 'value') else pe.requirement
+                } for pe in c.programEntries]
+            }]
+        if periods is None:
+            p = make_period(
+                start=date(2026, 6, 1),
+                end=date(2026, 6, 3),
+                excluded=[date(2026, 6, 2)]
+            )
+            periods = [{
+                "semester": p.semester.value if hasattr(p.semester, 'value') else p.semester,
+                "moed": p.moed.value if hasattr(p.moed, 'value') else p.moed,
+                "startDate": p.startDate.isoformat(),
+                "endDate": p.endDate.isoformat(),
+                "excludedDates": [d.isoformat() for d in p.excludedDates]
+            }]
+        return DataCache(
+            courses=courses,
+            periods=periods,
+            source_hashes=source_hashes or {}
+        )
+    return _make
+
+@pytest.fixture
+def mock_repository():
+    """Provides a MagicMock spec'd for SQLiteScheduleRepository to isolate tests from disk I/O."""
+    return MagicMock(spec=SQLiteScheduleRepository)
+
+
+@pytest.fixture
+def mock_controller():
+    """Provides a mocked AppController with standard PyQt signals and stubbed methods."""
+    controller = MagicMock()
+    # Mock PyQt signals on controller
+    controller.schedule_found = MagicMock()
+    controller.progress_updated = MagicMock()
+    controller.search_finished = MagicMock()
+    controller.error_occurred = MagicMock()
+    controller.early_results_ready = MagicMock()
+    controller.total_count_updated = MagicMock()
+    controller.get_page_info.return_value = {
+        "current_page": 0,
+        "total_pages": 1,
+        "total_count": 0,
+        "window_size": 0,
+        "sqlite_count": 0,
+    }
+    return controller
+
+
+@pytest.fixture
+def mock_router():
+    """Provides a MagicMock for the screen router."""
+    return MagicMock()
+
+
+@pytest.fixture
+def viewmodel_mapper():
+    """Provides a fresh ViewModelMapper instance."""
+    return ViewModelMapper()
+
+
+@pytest.fixture
+def app_state():
+    """Provides a fresh AppState instance."""
+    return AppState()

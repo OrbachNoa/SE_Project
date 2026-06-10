@@ -1,0 +1,21 @@
+$$$$
+Physics 1
+83102
+Prof. O. Some UPDATED
+83101,1,FALL,Obligatory
+83102,1,FALL,Obligatory
+Exam
+$$$$
+Linear Algebra 1
+83113
+Dr. Matrix Demo
+83101,1,FALL,Obligatory
+83102,1,FALL,Obligatory
+Exam
+$$$$
+Algorithms Intro
+83114
+Dr. Ada Lovelace
+83101,2,SPRI,Obligatory
+83108,2,SPRI,Elective
+Exam

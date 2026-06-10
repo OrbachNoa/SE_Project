@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+from typing import List, Optional, TYPE_CHECKING
+
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+
+from src.application.ImportBoundary import ImportMode, ImportRequest, ImportResult
+from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
+
+if TYPE_CHECKING:
+    from src.application.ApplicationFacade import ApplicationFacade
+    from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
+    from src.application.dto.ScheduleDTO import ScheduleDTO
+
+
+class AppController(QObject):
+    """
+    Thin UI controller acting as a mediator between GUI screens and ApplicationFacade.
+    Ensures GUI components remain entirely decoupled from domain business logic.
+    """
+
+    # --- PyQt Signals to communicate asynchronous events back to GUI views ---
+    schedule_found        = pyqtSignal(object)  
+    schedules_batch_found = pyqtSignal(int)     # Emits lightweight batch scalar size to prevent UI thread choking
+    progress_updated      = pyqtSignal(int)
+    search_finished       = pyqtSignal()
+    error_occurred        = pyqtSignal(str)
+    
+    # --- Navigation signals to coordinate screen switching during active generation ---
+    early_results_ready   = pyqtSignal()
+    total_count_updated   = pyqtSignal(int)
+
+    def __init__(self, facade: "ApplicationFacade") -> None:
+        super().__init__()
+        self._facade = facade
+        # Holds transient worker instances across operational lifecycles
+        self._worker: Optional["SchedulerWorker"] = None
+        # State flag to guarantee early navigation signal triggers exactly once per operational run
+        self._early_nav_fired: bool = False
+        # Polls repository count periodically instead of relying on per-schedule queue messages
+        self._progress_timer: Optional[QTimer] = None
+
+    # ------------------------------------------------------------------
+    # File loading & input state updates
+    # ------------------------------------------------------------------
+
+    def load_file(self, path: str, file_type: str, mode: ImportMode) -> ImportResult:
+        """Loads a specific academic data file into the system configuration via the facade."""
+        return self._facade.import_file(
+            ImportRequest(path=path, file_type=file_type, mode=mode)
+        )
+        
+    def update_exam_periods(self, edited_vms) -> None:
+        """Apply edits made in the calendar editor GUI to the loaded exam periods."""
+        self._facade.update_periods(edited_vms)
+
+    # ------------------------------------------------------------------
+    # Schedule generation
+    # ------------------------------------------------------------------
+
+    def generate_schedules(self, program_ids: List[str]) -> None:
+        """
+        Starts the background engine process and wires up signal listeners safely.
+        Validates input prior to operational launch to trap empty configurations early.
+        """
+        if not program_ids:
+            self.error_occurred.emit(
+                "Please select at least one program before running the scheduler."
+            )
+            return
+
+        # Clear previous worker instances to guarantee isolated signal connectivity profiles
+        self._disconnect_worker()
+        self._early_nav_fired = False
+
+        # Request a new active execution worker handle from the centralized facade component
+        self._worker = self._facade.generate(program_ids)
+
+        # Establish concurrent execution pipeline routing mappings
+        self._worker.schedules_batch_found.connect(self._handle_schedules_batch_found)
+        self._worker.schedule_found.connect(self._handle_schedule_found)
+        self._worker.search_finished.connect(self._handle_search_finished)
+        self._worker.error_occurred.connect(self._handle_error_occurred)
+
+        # Poll the repository count every 500 ms and emit progress_updated.
+        # This replaces the old per-schedule queue messages from the Scheduler,
+        # keeping the IPC channel free for SCHEDULE_BATCH and FINISHED only.
+        self._start_progress_timer()
+
+    def cancel_scheduling(self) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            self._facade.cancel_scheduling()
+            self._stop_progress_timer()
+            self.search_finished.emit()
+
+    def _disconnect_worker(self) -> None:
+        """
+        Safely detaches signal lines from the stored worker target.
+        Prevents duplicate callback responses when aborting tasks mid-run.
+        """
+        if self._worker is None:
+            return
+        try:
+            self._worker.schedules_batch_found.disconnect(self._handle_schedules_batch_found)
+            self._worker.schedule_found.disconnect(self._handle_schedule_found)
+            self._worker.search_finished.disconnect(self._handle_search_finished)
+            self._worker.error_occurred.disconnect(self._handle_error_occurred)
+        except RuntimeError:
+            # Handles edge cases where underlying C++ object nodes were garbage collected prematurely
+            pass  
+
+    # ------------------------------------------------------------------
+    # Results / export 
+    # ------------------------------------------------------------------
+
+    def get_schedule_view(self, index: int) -> ScheduleViewModel:
+        """Returns a structural, display-ready ViewModel at the specified result index position."""
+        return self._facade.get_schedule_vm(index)
+
+    def save_schedule(self, index: int, path: str) -> None:
+        """Exports the targeted processed schedule out onto disk storage locations."""
+        self._facade.export(index, path)
+
+    # ------------------------------------------------------------------
+    # Page navigation 
+    # ------------------------------------------------------------------
+
+    def load_page(self, page: int) -> None:
+        """Requests the storage state controller to swap cache window pages inside SQLite memory segments."""
+        self._facade.load_page(page)
+
+    def get_page_info(self) -> dict:
+        """Extracts metadata snapshots detailing current navigation cursor index bounds information."""
+        return self._facade.get_page_info()
+
+    # ------------------------------------------------------------------
+    # State accessors for GUI components
+    # ------------------------------------------------------------------
+    
+    def get_loaded_courses(self) -> list:
+        """Courses currently loaded (for the course list widget)."""
+        return self._facade.get_loaded_courses()
+
+    def get_loaded_periods(self) -> list:
+        """Exam periods currently loaded (for the calendar editor)."""
+        return self._facade.get_loaded_periods()
+
+    def get_mapper(self):
+        """ViewModelMapper, for building display view models."""
+        return self._facade.get_mapper()
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def on_app_closing(self) -> None:
+        """Acts as a cleanup intercept hook to eliminate zombie or orphan background worker allocations."""
+        self.cancel_scheduling()
+
+    # ------------------------------------------------------------------
+    # Private — SchedulerWorker signal handlers 
+    # ------------------------------------------------------------------
+
+    def _handle_schedule_found(self, dto: "ScheduleDTO") -> None:
+        """Forwards standard system notification structures up towards the interface context."""
+        self.schedule_found.emit(dto)
+
+    def _handle_schedules_batch_found(self, batch_size: int) -> None:
+        """
+        Receives notification updates indicating a background write event to SQLite finalized.
+        Fires navigational updates dynamically while keeping interface response speeds high.
+        """
+        self.schedules_batch_found.emit(batch_size)
+
+        # Pull the accurate tracking register size value across the synchronized repository
+        total = self._facade.get_total_count()
+        self.total_count_updated.emit(total)
+
+        # Trigger navigation once the first frame boundary satisfies page sizing constraints
+        if not self._early_nav_fired and self._facade.is_first_window_ready():
+            self._early_nav_fired = True
+            self.early_results_ready.emit()
+
+    def _start_progress_timer(self) -> None:
+        """Start polling the repository count every 500 ms during an active run."""
+        self._progress_timer = QTimer(self)
+        self._progress_timer.setInterval(500)
+        self._progress_timer.timeout.connect(self._poll_progress)
+        self._progress_timer.start()
+
+    def _stop_progress_timer(self) -> None:
+        """Stop the polling timer when the run ends or is cancelled."""
+        if self._progress_timer is not None and self._progress_timer.isActive():
+            self._progress_timer.stop()
+        self._progress_timer = None
+
+    def _poll_progress(self) -> None:
+        """Emit the current schedule count so the GUI label stays up to date."""
+        self.progress_updated.emit(self._facade.get_total_count())
+
+    def _handle_search_finished(self) -> None:
+        """Handles completion steps cleanly and resets control state logic for subsequent jobs."""
+        self._stop_progress_timer()
+        self._early_nav_fired = False
+        self.search_finished.emit()
+
+    def _handle_error_occurred(self, message: str) -> None:
+        """Routes pipeline validation crashes up into interface message dialog display handlers."""
+        self._stop_progress_timer()
+        self.error_occurred.emit(message)
