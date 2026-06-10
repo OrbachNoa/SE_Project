@@ -37,12 +37,12 @@ class SlotBuilder:
 
         for course in self._filterRelevantCourses(courses):
             semesters = {
-                e.semester for e in course.programEntries
-                if not self._selected_set or e.programId in self._selected_set
+                program_entry.semester for program_entry in course.programEntries
+                if not self._selected_set or program_entry.programId in self._selected_set
             }
             for sem in semesters:
-                periods_for_sem = [(m, self._period_map[(sem, m)])
-                                   for m in Moed if (sem, m) in self._period_map]
+                periods_for_sem = [(one_moed, self._period_map[(sem, one_moed)])
+                                   for one_moed in Moed if (sem, one_moed) in self._period_map]
                 # Reject missing periods, so impossible schedules fail early.
                 if not periods_for_sem:
                     raise ValueError(
@@ -58,19 +58,19 @@ class SlotBuilder:
     def _filterRelevantCourses(self, courses: List[Course]) -> List[Course]:
         """Keeps courses that need exams for the selected programs."""
         return [
-            c for c in courses
-            if c.hasExam() and (
+            course for course in courses
+            if course.hasExam() and (
                 not self._selected_set or
-                any(e.programId in self._selected_set for e in c.programEntries)
+                any(program_entry.programId in self._selected_set for program_entry in course.programEntries)
             )
         ]
 
     def _score(self, slot: Slot) -> int:
         """Scores a slot, so harder slots are scheduled earlier."""
         score = 0
-        for e in slot.course.programEntries:
-            if not self._selected_set or e.programId in self._selected_set:
+        for program_entry in slot.course.programEntries:
+            if not self._selected_set or program_entry.programId in self._selected_set:
                 score += 1
-                if e.requirement == Requirement.OBLIGATORY:
+                if program_entry.requirement == Requirement.OBLIGATORY:
                     score += 2
         return score

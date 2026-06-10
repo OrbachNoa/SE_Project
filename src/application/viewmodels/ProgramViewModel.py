@@ -18,6 +18,7 @@ class CourseRowViewModel:
     requirement: str
     # EXAM / PROJECT / ATTENDANCE
     evaluation: str
+    instructor: str
     # only exam courses get scheduled
     is_exam_relevant: bool
 

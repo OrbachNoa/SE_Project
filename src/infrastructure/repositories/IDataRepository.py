@@ -1,4 +1,4 @@
-"""Defines the interface for saving and loading the DataCache.
+"""Defines the storage interface for the application data cache.
 """
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ class IDataRepository(ABC):
 
     @abstractmethod
     def save(self, cache: DataCache) -> None:
-        """Saves the cache to storage because the app needs to remember data for the next run."""
+        """Saves the current data cache for future application runs."""
         raise NotImplementedError
 
     @abstractmethod
     def load(self) -> DataCache | None:
-        """Loads the cache from storage because the app needs it to start quickly.
-
-        Returns None if there is no data because the app will just create new data from scratch.
+        """Loads the saved data cache. 
+        Returns None when no saved cache exists, so the application can load 
+        the data from the original input files instead.
         """
         raise NotImplementedError

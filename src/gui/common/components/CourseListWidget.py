@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-# Internal helper: a single course row inside an expanded program
+# This class creates the visual layout for a single course (like "Data Structures") inside the list.
 class _CourseRow(QWidget):
     def __init__(self, course_vm, parent=None):
         """
@@ -38,19 +38,26 @@ class _CourseRow(QWidget):
         # Compact fixed height keeps the course list dense and readable
         self.setFixedHeight(36)
 
-        # Course ID — narrow fixed column, subdued slate colour
+        # Shows the course ID (e.g., "10001") on the left side
         id_lbl = QLabel(course_vm.course_id)
         id_lbl.setFixedWidth(44)
         id_lbl.setObjectName("course-id-lbl")
         layout.addWidget(id_lbl)
 
-        # Course name — stretches to fill remaining horizontal space
+        # Shows the full name of the course in the middle
         name_lbl = QLabel(course_vm.course_name)
         name_lbl.setObjectName("course-name-lbl")
         name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(name_lbl, stretch=1)
 
-        # Requirement badge — compact pill: green for Obligatory, amber for Elective.
+        # Instructor name
+        instructor_lbl = QLabel(course_vm.instructor)
+        instructor_lbl.setObjectName("course-instructor-lbl")
+        instructor_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        layout.addWidget(instructor_lbl)
+
+
+        # Creates a small colored tag showing if the course is Obligatory (green) or Elective (amber)
         req_lbl = QLabel(course_vm.requirement)
         req_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if "Obligatory" in course_vm.requirement:
@@ -59,12 +66,13 @@ class _CourseRow(QWidget):
             req_lbl.setObjectName("badge-warning")
         layout.addWidget(req_lbl)
 
+        # Applies different visual styles based on whether this course actually has a final exam
         if course_vm.is_exam_relevant:
             self.setObjectName("course-row-exam")
         else:
             self.setObjectName("course-row-default")
 
-# Internal helper: one expandable program block
+# This class creates a foldable "folder" for a whole study program (e.g., "Software Engineering").
 class _ProgramBlock(QWidget):
 
     def __init__(self, program_vm, parent=None):
@@ -75,8 +83,8 @@ class _ProgramBlock(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Header button — course count removed to keep the label concise
-        header_text = f"►  {program_vm.program_id} — {program_vm.program_name}"
+        # Creates the main button you click to open or close the list of courses
+        header_text = f"▶  {program_vm.program_id} — {program_vm.program_name}"
         self._header_btn = QPushButton(header_text)
         self._header_btn.setObjectName("course-list-header-btn")
         self._header_btn.setFixedHeight(40)
@@ -84,25 +92,25 @@ class _ProgramBlock(QWidget):
         self._header_btn.toggled.connect(self._set_expanded)
         root.addWidget(self._header_btn)
 
-        # Body
+        # This hidden container holds all the actual courses. It shows up when the button is clicked.
         self._body = QWidget()
         body_layout = QVBoxLayout(self._body)
         body_layout.setContentsMargins(4, 4, 4, 4)
         body_layout.setSpacing(2)
 
-        # Group courses by year + semester
+        # Sorts and groups all courses into separate sections like "Year 1 - Semester A"
         groups: Dict[str, List] = {}
         for c in program_vm.courses:
             key = f"Year {c.year} — Semester {c.semester}"
             groups.setdefault(key, []).append(c)
 
-        # Year/semester sub-header
+        # Loops through each group to create headers and add the relevant courses underneath
         for group_key in sorted(groups.keys()):
             group_lbl = QLabel(group_key)
             group_lbl.setObjectName("course-group-lbl")
             body_layout.addWidget(group_lbl)
 
-            # Courses
+            # Adds each individual course row into the current Year/Semester group
             for course_vm in groups[group_key]:
                 row = _CourseRow(course_vm)
                 body_layout.addWidget(row)
@@ -110,6 +118,7 @@ class _ProgramBlock(QWidget):
         self._body.setVisible(False)
         root.addWidget(self._body)
 
+    # Updates the screen to show/hide the courses and changes the arrow icon (▶ to ▼)
     def _set_expanded(self, expanded: bool) -> None:
         """Apply the expanded state emitted by the header button."""
         self._expanded = expanded
@@ -117,27 +126,30 @@ class _ProgramBlock(QWidget):
 
         current = self._header_btn.text()
         if self._expanded:
-            new_text = current.replace("►", "▼", 1)
+            new_text = current.replace("▶", "▼", 1)
         else:
-            new_text = current.replace("▼", "►", 1)
+            new_text = current.replace("▼", "▶", 1)
         self._header_btn.setText(new_text)
 
+    # Programmatically simulates a click to open or close the program folder
     def _toggle(self) -> None:
         """Toggle the program block open or closed."""
         self._header_btn.setChecked(not self._expanded)
 
+    # Forces the program folder to open
     def expand(self) -> None:
         """Expand the program block."""
         if not self._expanded:
             self._header_btn.setChecked(True)
 
+    # Forces the program folder to close
     def collapse(self) -> None:
         """Collapse the program block."""
         if self._expanded:
             self._header_btn.setChecked(False)
 
 
-# Main widget - Displays a scrollable list of expandable program blocks.
+# This is the main widget that holds all the different program folders together in a scrollable list.
 class CourseListWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -146,6 +158,7 @@ class CourseListWidget(QWidget):
         self._active_widgets: List[QWidget] = []
         self._build_ui()
     
+    # Sets up the outer container and adds a scrollbar so users can scroll if the list gets too long
     def _build_ui(self) -> None:
         """Build the UI of the CourseListWidget."""
         root = QVBoxLayout(self)
@@ -166,6 +179,7 @@ class CourseListWidget(QWidget):
         scroll.setWidget(self._container)
         root.addWidget(scroll)
 
+    # Takes fresh data from the main system, clears out the old list, and draws everything from scratch
     def render(self, programs_vm) -> None:
         """
         Populate the widget from a list of ProgramCoursesViewModel objects.
@@ -194,12 +208,14 @@ class CourseListWidget(QWidget):
                 self._container_layout.count() - 1, block
             )
 
+    # A command function to tell a specific program folder to open up
     def expand(self, program_id: str) -> None:
         """Expand the block for the given program ID."""
         block = self._blocks.get(program_id)
         if block:
             block.expand()
 
+    # A command function to tell a specific program folder to close back up
     def collapse(self, program_id: str) -> None:
         """Collapse the block for the given program ID."""
         block = self._blocks.get(program_id)

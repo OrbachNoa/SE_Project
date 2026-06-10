@@ -18,7 +18,7 @@ class Scheduler:
             return
 
         # Stop early if any slot has no dates, so useless recursion is avoided.
-        if any(not s.candidateDates for s in slots):
+        if any(not slot.candidateDates for slot in slots):
             return
 
         schedule = ExamSchedule()
@@ -68,8 +68,8 @@ class Scheduler:
 
             # Check all conflict rules, so only valid assignments are kept.
             conflict = False
-            for ck in self._checkers:
-                if ck.check(assignment, schedule):
+            for checker in self._checkers:
+                if checker.check(assignment, schedule):
                     conflict = True
                     break
 

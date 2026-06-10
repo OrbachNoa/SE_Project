@@ -26,9 +26,12 @@ from src.application.viewmodels.ProgramViewModel import (
 )
 
 # ----- helpers ---------------------------------------------------------
+from data.programs import programs_data
+
 def _program_display_name(program_id: str) -> str:
-    """Derive a human readable label for a program id (no name field in the domain yet)."""
-    return f"Program {program_id}"
+    """Derive a human readable label for a program id."""
+    # Pulls the real name from the dictionary, and if the ID does not exist uses a default text name
+    return programs_data.get(program_id, f"Program {program_id}")
 
 
 class ViewModelMapper:
@@ -181,6 +184,7 @@ class ViewModelMapper:
                     semester=entry.semester.value,
                     requirement=entry.requirement.value,
                     evaluation=c.evaluation.value,
+                    instructor=c.instructor,
                     is_exam_relevant=c.hasExam(),
                 )
                 rows_by_program.setdefault(entry.programId, []).append(row)

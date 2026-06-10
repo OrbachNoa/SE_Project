@@ -47,7 +47,9 @@ QLabel#status-pending {{
 }}
 QLabel#status-warning {{
     color: {COLOR_WARNING};
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: bold;
+    padding-bottom: 10px;
     background: transparent;
 }}
 QLabel#status-error {{

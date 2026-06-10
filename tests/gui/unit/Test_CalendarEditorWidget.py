@@ -148,7 +148,7 @@ def test_calendar_editor_navigation_prev():
     assert widget.next_btn.isEnabled() is True
 
 # ===========================================================================
-# TC-CEW-006: test apply button saves and emits signals.
+# TC-CEW-006: test apply returns updated constraints.
 # ===========================================================================
 def test_calendar_editor_apply():
     # Arrange
@@ -164,16 +164,13 @@ def test_calendar_editor_apply():
     widget = CalendarEditorWidget(vms)
     widget.toggle_date_exclusion("2026-06-02")
     
-    mock_slot = MagicMock()
-    widget.constraints_saved.connect(mock_slot)
+    # Act
+    returned_periods = widget.apply_and_get_constraints()
     
-    # Act & Assert
-    with patch("PyQt6.QtWidgets.QMessageBox.information") as mock_msg:
-        widget.apply_btn.click()
-        
-        assert mock_msg.call_count == 1
-        assert mock_slot.call_count == 1
-        assert vms[0].excluded_dates == ["2026-06-02"]
+    # Assert
+    assert len(returned_periods) == 1
+    assert returned_periods[0].excluded_dates == ["2026-06-02"]
+    assert vms[0].excluded_dates == ["2026-06-02"]
 
 # ===========================================================================
 # TC-CEW-007: test empty periods lists raises ValueError.
