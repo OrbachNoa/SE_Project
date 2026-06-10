@@ -13,25 +13,30 @@ from src.application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
 class CalendarWidget(QWidget):
     """Visual day-matrix rendering engine displaying pre-composed schedule items."""
 
+    # Signal to notify when a specific date box is clicked by the user
     date_clicked = pyqtSignal(str)
 
+    # Initialize the calendar widget and set up the dictionaries to keep track of the days
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._day_layouts: Dict[str, QVBoxLayout] = {}
         self._day_frames: Dict[str, QFrame] = {}
         self._init_ui()
 
+    # Set up the visual skeleton of the calendar, including headers and the scrolling area
     def _init_ui(self) -> None:
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(6)
 
+        # Create a banner at the top to show the current month(s) (e.g., "February 2026 - March 2026")
         self.month_lbl = QLabel("")
         self.month_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.month_lbl.setObjectName("calendar-month-banner")
         self.month_lbl.setVisible(False)
         self.main_layout.addWidget(self.month_lbl)
 
+        # Create the row of days at the top of the calendar (Sun, Mon, Tue...)
         self.headers_frame = QFrame()
         self.headers_layout = QGridLayout(self.headers_frame)
         self.headers_layout.setContentsMargins(0, 0, 0, 0)
@@ -44,6 +49,7 @@ class CalendarWidget(QWidget):
 
         self.main_layout.addWidget(self.headers_frame)
 
+        # Create a scrollable area for the calendar grid in case it gets too long
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
@@ -57,6 +63,7 @@ class CalendarWidget(QWidget):
         self.scroll_area.setWidget(self.grid_frame)
         self.main_layout.addWidget(self.scroll_area)
 
+    # Main function to build the calendar grid based on a list of dates
     def setup_month_grid(
         self,
         date_list: List[str],
@@ -67,17 +74,20 @@ class CalendarWidget(QWidget):
         self._refresh_month_banner(date_list, show_month_banner)
         self._clear_grid()
 
+        # Ensure all 7 columns (days of the week) have equal width
         for column in range(7):
             self.grid_layout.setColumnStretch(column, 1)
 
         if not date_list:
             return
 
+        # Choose the drawing method: with separate month blocks or one continuous flowing grid
         if show_month_header:
             self._build_grid_with_month_headers(date_list)
         else:
             self._build_contiguous_grid(date_list)
 
+    # Figure out which months are in the date list and update the top banner text
     def _refresh_month_banner(self, date_list: List[str], show_month_banner: bool) -> None:
         if not show_month_banner or not date_list:
             self.month_lbl.setVisible(False)
@@ -96,6 +106,7 @@ class CalendarWidget(QWidget):
         else:
             self.month_lbl.setVisible(False)
 
+    # Delete all the old day boxes to make room for a new calendar
     def _clear_grid(self) -> None:
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
@@ -106,6 +117,7 @@ class CalendarWidget(QWidget):
         self._day_layouts.clear()
         self._day_frames.clear()
 
+    # Draw the calendar by grouping the days into separate chunks with a title for each month
     def _build_grid_with_month_headers(self, date_list: List[str]) -> None:
         current_month = None
         month_start_row = 0
@@ -116,6 +128,7 @@ class CalendarWidget(QWidget):
             qdate = QDate.fromString(date_str, Qt.DateFormat.ISODate)
             month_text = qdate.toString("MMMM yyyy")
 
+            # If we hit a new month, add a big header spanning across all 7 columns
             if month_text != current_month:
                 if current_month is not None:
                     month_start_row = month_start_row + max_row_in_month + 1
@@ -131,12 +144,14 @@ class CalendarWidget(QWidget):
                 first_day_of_month = QDate(qdate.year(), qdate.month(), 1)
                 first_col = first_day_of_month.dayOfWeek() % 7
 
+            # Calculate where this specific day should go based on its date and draw it
             total_days_offset = first_col + qdate.day() - 1
             col = total_days_offset % 7
             row_offset = total_days_offset // 7
             max_row_in_month = max(max_row_in_month, row_offset)
             self._create_cell_widget(date_str, qdate, month_start_row + row_offset, col)
 
+    # Draw the calendar as one continuous grid without stopping to write the month name inside
     def _build_contiguous_grid(self, date_list: List[str]) -> None:
         first_qdate = QDate.fromString(date_list[0], Qt.DateFormat.ISODate)
         start_col = first_qdate.dayOfWeek() % 7
@@ -151,10 +166,13 @@ class CalendarWidget(QWidget):
                 total_days_offset % 7,
             )
 
+    # Create the actual physical box (frame) for a single day and place it in the grid
     def _create_cell_widget(self, date_str: str, qdate: QDate, row: int, col: int) -> None:
         cell_frame = QFrame()
         cell_frame.setFrameShape(QFrame.Shape.StyledPanel)
         cell_frame.setObjectName("calendar-cell-frame")
+        
+        # When this box is clicked, tell the rest of the program what date was clicked
         cell_frame.mousePressEvent = lambda event, date=date_str: self.date_clicked.emit(date)
 
         cell_layout = QVBoxLayout(cell_frame)
@@ -167,9 +185,12 @@ class CalendarWidget(QWidget):
         cell_layout.addWidget(day_label)
 
         self.grid_layout.addWidget(cell_frame, row, col)
+        
+        # Save references to this box so we can add exams or change its color later
         self._day_layouts[date_str] = cell_layout
         self._day_frames[date_str] = cell_frame
 
+    # Take a list of scheduled exams and put them into the correct day boxes
     def display_assignments(self, items: List[ScheduleItemViewModel]) -> None:
         """Place exam tiles into the matching day cells on the calendar grid."""
         for item in items:
@@ -177,10 +198,12 @@ class CalendarWidget(QWidget):
             if target_date not in self._day_layouts:
                 continue
 
+            # Clean up the text so it looks nice inside the small calendar box
             clean_subtitle = item.subtitle.replace("<br>", "\n")
             clean_subtitle = re.sub(r"<[^>]+>", "", clean_subtitle)
             clean_subtitle = clean_subtitle.replace("ID: ", "")
 
+            # Create the little sticker/badge for the exam and add it to the day
             exam_label = QLabel(f"{item.title}\n{clean_subtitle}")
             exam_label.setWordWrap(True)
             exam_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -188,10 +211,12 @@ class CalendarWidget(QWidget):
             exam_label.setObjectName("calendar-exam-badge")
             self._day_layouts[target_date].addWidget(exam_label)
 
+    # Change the styling (color/look) of a day box depending on whether it is excluded or included
     def set_date_excluded_style(self, date_str: str, is_excluded: bool) -> None:
         object_name = "calendar-cell-excluded" if is_excluded else "calendar-cell-included"
         self._set_date_object_name(date_str, object_name)
 
+    # A helper function to force PyQt to redraw the box when we change its style name
     def _set_date_object_name(self, date_str: str, object_name: str) -> None:
         if date_str not in self._day_frames:
             return

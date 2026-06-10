@@ -53,6 +53,7 @@ class MockIntegrationController(QObject):
             "sqlite_count": 0,
         })
         self.get_schedule_view = MagicMock()
+        self.update_exam_periods = MagicMock()
 
 # -- Stub worker to simulate background QThread worker signals in tests --
 class StubWorker(QObject):

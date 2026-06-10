@@ -106,13 +106,13 @@ def test_schedule_counter_updates(mock_controller, mock_router):
     screen.on_enter()
     
     # Assert - initial state
-    assert screen._counter_label.text() == "Solution 1 / 2"
+    assert screen.solution_bar.solution_input.text() == "1"
     
     # Act
     screen.on_next()
     
     # Assert - after navigation
-    assert screen._counter_label.text() == "Solution 2 / 2"
+    assert screen.solution_bar.solution_input.text() == "2"
 
 # ===========================================================================
 # TC-OU-UI-005: test calendar shows selected month.
