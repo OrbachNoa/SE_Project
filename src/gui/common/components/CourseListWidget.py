@@ -76,7 +76,7 @@ class _ProgramBlock(QWidget):
         root.setSpacing(0)
 
         # Header button — course count removed to keep the label concise
-        header_text = f"►  {program_vm.program_id} — {program_vm.program_name}"
+        header_text = f"▶  {program_vm.program_id} — {program_vm.program_name}"
         self._header_btn = QPushButton(header_text)
         self._header_btn.setObjectName("course-list-header-btn")
         self._header_btn.setFixedHeight(40)
@@ -117,9 +117,9 @@ class _ProgramBlock(QWidget):
 
         current = self._header_btn.text()
         if self._expanded:
-            new_text = current.replace("►", "▼", 1)
+            new_text = current.replace("▶", "▼", 1)
         else:
-            new_text = current.replace("▼", "►", 1)
+            new_text = current.replace("▼", "▶", 1)
         self._header_btn.setText(new_text)
 
     def _toggle(self) -> None:
