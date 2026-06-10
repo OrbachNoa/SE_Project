@@ -58,7 +58,7 @@ def test_course_list_rendering():
     assert course_row is not None
 
 # ===========================================================================
-# TC-CL-003: test course list expanding a program block.
+# TC-CL-003: test course list expanding a program block
 # ===========================================================================
 def test_course_list_expand():
     # Arrange
