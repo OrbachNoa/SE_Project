@@ -182,6 +182,7 @@ class ViewModelMapper:
                     semester=entry.semester.value,
                     requirement=entry.requirement.value,
                     evaluation=c.evaluation.value,
+                    instructor=c.instructor,
                     is_exam_relevant=c.hasExam(),
                 )
                 rows_by_program.setdefault(entry.programId, []).append(row)

@@ -50,6 +50,13 @@ class _CourseRow(QWidget):
         name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(name_lbl, stretch=1)
 
+        # Instructor name
+        instructor_lbl = QLabel(course_vm.instructor)
+        instructor_lbl.setObjectName("course-instructor-lbl")
+        instructor_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        layout.addWidget(instructor_lbl)
+
+
         # Creates a small colored tag showing if the course is Obligatory (green) or Elective (amber)
         req_lbl = QLabel(course_vm.requirement)
         req_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)

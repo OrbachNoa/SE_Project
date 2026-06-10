@@ -1,0 +1,18 @@
+$$$$
+Databases
+83220
+Dr. Relational Demo
+83101,2,FALL,Obligatory
+Exam
+$$$$
+Digital Logic
+83221
+Dr. Gates Demo
+83102,2,FALL,Obligatory
+Exam
+$$$$
+Capstone Workshop
+83222
+Dr. Project Demo
+83101,3,SPRI,Obligatory
+Project
