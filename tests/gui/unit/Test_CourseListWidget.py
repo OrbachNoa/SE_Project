@@ -11,10 +11,10 @@ pytestmark = pytest.mark.usefixtures("qapp")
 def test_course_list_empty_state():
     # Arrange
     widget = CourseListWidget()
-    
+
     # Act
     widget.render([])
-    
+
     # Assert
     empty_label = widget.findChild(QLabel, "course-empty-lbl")
     assert empty_label is not None
@@ -33,6 +33,7 @@ def test_course_list_rendering():
         semester="FALL",
         requirement="Obligatory",
         evaluation="Exam",
+        instructor="Dr. Test Instructor",
         is_exam_relevant=True
     )
     p = ProgramCoursesViewModel(
@@ -40,10 +41,10 @@ def test_course_list_rendering():
         program_name="Computer Engineering",
         courses=[c1]
     )
-    
+
     # Act
     widget.render([p])
-    
+
     # Assert
     assert "83100" in widget._blocks
     block = widget._blocks["83100"]
@@ -52,7 +53,7 @@ def test_course_list_rendering():
     assert "Computer Engineering" in block._header_btn.text()
     assert block._expanded is False
     assert block._body.isHidden() is True
-    
+
     course_row = block.findChild(object, "course-row-exam")
     assert course_row is not None
 
@@ -69,6 +70,7 @@ def test_course_list_expand():
         semester="FALL",
         requirement="Obligatory",
         evaluation="Exam",
+        instructor="Dr. Test Instructor",
         is_exam_relevant=True
     )
     p = ProgramCoursesViewModel(
@@ -77,10 +79,10 @@ def test_course_list_expand():
         courses=[c1]
     )
     widget.render([p])
-    
+
     # Act
     widget.expand("83100")
-    
+
     # Assert
     block = widget._blocks["83100"]
     assert block._expanded is True
@@ -99,6 +101,7 @@ def test_course_list_collapse():
         semester="FALL",
         requirement="Obligatory",
         evaluation="Exam",
+        instructor="Dr. Test Instructor",
         is_exam_relevant=True
     )
     p = ProgramCoursesViewModel(
@@ -108,10 +111,10 @@ def test_course_list_collapse():
     )
     widget.render([p])
     widget.expand("83100")
-    
+
     # Act
     widget.collapse("83100")
-    
+
     # Assert
     block = widget._blocks["83100"]
     assert block._expanded is False
@@ -130,6 +133,7 @@ def test_course_list_expand_invalid_id_reject():
         semester="FALL",
         requirement="Obligatory",
         evaluation="Exam",
+        instructor="Dr. Test Instructor",
         is_exam_relevant=True
     )
     p = ProgramCoursesViewModel(
@@ -138,10 +142,10 @@ def test_course_list_expand_invalid_id_reject():
         courses=[c1]
     )
     widget.render([p])
-    
+
     # Act
     widget.expand("non-existent-program-id")
-    
+
     # Assert
     block = widget._blocks["83100"]
     assert block._expanded is False
@@ -158,10 +162,10 @@ def test_course_list_program_with_no_courses_reject():
         program_name="Computer Engineering",
         courses=[]
     )
-    
+
     # Act
     widget.render([p])
-    
+
     # Assert
     assert "83100" in widget._blocks
     block = widget._blocks["83100"]
