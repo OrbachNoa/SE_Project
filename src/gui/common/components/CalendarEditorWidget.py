@@ -132,8 +132,8 @@ class CalendarEditorWidget(QWidget):
         date_list = self._model.date_list()
         self.calendar_grid.setup_month_grid(
             date_list,
-            show_month_header=False,
-            show_month_banner=True,
+            show_month_header=True,
+            show_month_banner=False,
         )
 
         for date_str in date_list:
