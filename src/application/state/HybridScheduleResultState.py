@@ -1,9 +1,7 @@
-"""HybridScheduleResultState — windowed, overflow-to-SQLite schedule storage.
-
-Invariants at all times:
-  _schedules      — the *currently visible* window, loaded on demand from SQLite.
-  _current_page   — 0-based page index currently in _schedules.
-  SQLite contains 100% of the generated schedules directly from the worker thread.
+"""Keeps only the currently visible schedule window in memory. 
+All generated schedules are stored in SQLite by the background worker. 
+This state object loads only one page/window of schedules at a time, so the UI 
+can browse many results without keeping all of them in RAM.
 """
 from __future__ import annotations
 
@@ -13,15 +11,15 @@ from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.application.state.ScheduleResultState import ScheduleResultState
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
-# Globally defined rendering frame block limit size
+# Maximum number of schedules loaded into memory at one time.
 WINDOW_SIZE = 10_000
 
 
 class HybridScheduleResultState(ScheduleResultState):
     """
-    Extends ScheduleResultState with SQLite overflow and paged navigation tracking.
-    Operates purely as an SQLite reader cache proxy since the background worker thread 
-    handles downstream write transactions directly.
+    Manages schedule results using SQLite as the main storage. 
+    SQLite contains all generated schedules. 
+    This class keeps only the current window/page in memory for the GUI.
     """
 
     def __init__(
@@ -30,51 +28,54 @@ class HybridScheduleResultState(ScheduleResultState):
         window_size: int = WINDOW_SIZE,
     ) -> None:
         super().__init__()
+        # Repository that stores and loads generated schedules from SQLite.
         self._repository = repository
+        # Number of schedules to load into memory for one page/window.
         self._window_size = window_size
-        # Tracks the zero-based index cursor of the currently active display frame
+        # Zero-based index of the currently loaded page.
         self._current_page_idx: int = 0
 
     # ── Streaming write notification ────────────────────────────────────────
 
     def add_schedules_batch(self, batch_size: int) -> None:
         """
-        Triggered asynchronously whenever the background worker completes a disk write transaction.
-        Reloads the current active window slot dynamically if it hasn't filled to window capacity,
-        allowing the UI layout to refresh discovered configurations live.
+        Updates the current window after a new batch was saved to SQLite. 
+        The worker already saved the schedules to SQLite. 
+        This method only reloads the current window if it is not full yet, so the GUI 
+        can show new results while the search is still running.
         """
         if len(self._schedules) < self._window_size:
-            # Re-fetch the current active block window range to synchronize matching offsets
+            # Load again from the current page offset, because new schedules may now exist in SQLite.
             offset = self._current_page_idx * self._window_size
             self._schedules = self._repository.get_window(offset, self._window_size)
 
     # ── Totals ─────────────────────────────────────────────────────────────
 
     def count(self) -> int:
-        """Returns the global total volume of schedules captured across the database repository at O(1)."""
+        """Returns the total number of schedules stored in SQLite."""
         return self._repository.count()
 
     def sqlite_count(self) -> int:
-        """All computed schedule profiles live in SQLite storage, making this value equivalent to count()."""
+        """Returns the number of schedules stored in SQLite."""
         return self.count()
 
     def is_first_window_ready(self) -> bool:
-        """Checks if the system has persisted at least one entry, validating if display routes can safely open."""
+        """Returns True once at least one schedule was saved and can be displayed."""
         return self.count() > 0
 
     def current_window_size(self) -> int:
-        """Returns the allocation size footprint of the currently buffered frame segment."""
+        """Returns how many schedules are currently loaded in memory."""
         return len(self._schedules)
 
     # ── Paged navigation ───────────────────────────────────────────────────
 
     @property
     def current_page(self) -> int:
-        """Exposes the active navigation page context tracking register."""
+        """Returns the zero-based index of the currently loaded page."""
         return self._current_page_idx
 
     def total_pages(self) -> int:
-        """Computes the total page ceiling bounds dynamically as the background engine adds records."""
+        """Returns how many pages are needed to browse all saved schedules."""
         total = self.count()
         if total == 0:
             return 0
@@ -82,27 +83,32 @@ class HybridScheduleResultState(ScheduleResultState):
 
     def load_page(self, page: int) -> None:
         """
-        Swaps the internal active memory cache block frame over to the requested target page index.
-        Queries the localized SQLite repository using indexed window offset markers.
+        Loads one page of schedules from SQLite into memory. 
+        The page number is converted to a SQLite offset. 
+        For example, page 2 with window size 10,000 starts at offset 20,000.
         """
         total = self.total_pages()
         if page < 0 or (total > 0 and page >= total):
             raise IndexError(f"page {page} out of range (have {total})")
 
-        # Map page numbers directly to database row seek configurations
+        # Convert the page number into the first schedule index for this page.
         sqlite_offset = page * self._window_size
+        # Load only this page/window from SQLite, not all schedules.
         self._schedules = self._repository.get_window(
             sqlite_offset, self._window_size
         )
 
-        # Synchronize tracking registers and reset within-page iterator cursors
+        # Update the current page and reset the index inside the loaded page.
         self._current_page_idx = page
         self._current_index = 0  
 
     # ── Reset for a new run ────────────────────────────────────────────────
 
     def set_schedules(self, schedules: list) -> None:
-        """Clears localized tracking memory properties and flushes active repository records for subsequent runs."""
+        """
+        Resets the state before a new scheduling run. 
+        This clears the in-memory state and removes old generated schedules 
+        from SQLite, so old results will not mix with the new run."""
         super().set_schedules(schedules)
         self._current_page_idx = 0
         self._repository.clear()

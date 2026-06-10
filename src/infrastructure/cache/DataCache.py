@@ -1,8 +1,7 @@
-"""Persistence-only DTO for the on-disk data snapshot.
-
-This module defines the serializable representation of the
-parsed application data as it is stored on disk. It exists only at the I/O
-boundary and carries no runtime behavior.
+"""Serializable snapshot of the parsed input data saved on disk.
+DataCache is used only for persistence. 
+It stores the parsed courses and exam periods in a simple format that can be 
+saved and loaded later, without parsing the original input files again.
 """
 from __future__ import annotations
 
@@ -10,19 +9,21 @@ from dataclasses import dataclass, field
 from typing import Any, TypedDict
 from datetime import datetime, timezone
 
-# Sets the schema version to 1 because it allows tracking data structure changes for future migrations.
+# Version of the cache file format. 
+# If the cache structure changes, older cache files can be rejected instead of being loaded incorrectly.
 CURRENT_SCHEMA_VERSION: int = 1
 
-# Defines the structure of a serialized course because it provides type safety for the IDE and MyPy.
 class CourseDict(TypedDict, total=False):
+    """Serialized form of a Course object inside the cache."""
     courseId: str
     name: str
     instructor: str
     evaluation: str
     programEntries: list[dict[str, Any]]
 
-# Defines the structure of a serialized period because it ensures consistent I/O operations.
+
 class PeriodDict(TypedDict, total=False):
+    """Serialized form of an ExamPeriod object inside the cache."""
     semester: str
     moed: str
     startDate: str
@@ -31,22 +32,23 @@ class PeriodDict(TypedDict, total=False):
 
 @dataclass
 class DataCache:
-    """A plain data container describing the on-disk snapshot.
+    """Plain data container for the saved input-data snapshot.
     """
 
-    # Holds the serialized courses because the InputDataState needs to reconstruct domain objects from them.
+    # Parsed courses saved in a simple dictionary format.
     courses: list[CourseDict] = field(default_factory=list)
     
-    # Holds the serialized periods because the system must remember exam windows across sessions.
+    # Parsed exam periods saved in a simple dictionary format.
     periods: list[PeriodDict] = field(default_factory=list)
 
-    # Maps source file paths to their hashes because the FileChangeDetector needs to validate cache freshness.
+    # Hashes of the original input files.
+    # They are used to check if the files changed since the cache was created.
     source_hashes: dict[str, str] = field(default_factory=dict)
 
-    # Generates an automatic ISO timestamp because it ensures accurate save times without relying on the caller.
+    # Time when this cache snapshot was created.
     saved_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
-
-    # Stores the on-disk format version because it enables smooth migrations for old caches in future versions.
+    
+    # Cache format version, used to detect old cache files in future versions.
     schema_version: int = CURRENT_SCHEMA_VERSION

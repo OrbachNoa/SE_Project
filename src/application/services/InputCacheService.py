@@ -13,39 +13,47 @@ class InputCacheService:
         self._detector = detector
 
     def try_load(self, paths: List[str]) -> Optional[DataCache]:
-        """Returns cached DataCache if source files are unchanged, otherwise None."""
+        """Return the cached snapshot only when it was built from EXACTLY this
+        set of files (same set, all unchanged).
+
+        Requiring set equality — not merely "every path in `paths` is unchanged"
+        — is what prevents a snapshot from a previous session (which may carry
+        extra UPDATE files) from being returned for a partial set of files
+        loaded in the current session. Without this, an UPDATE load could take a
+        cache hit and return merged data the user has not actually loaded yet,
+        silently skipping the merge.
+        """
         cached = self._repository.load()
-        if cached is not None and not self._detector.has_changed(paths, cached.source_hashes):
-            return cached
-        return None
+        if cached is None:
+            return None
+
+        # The cached snapshot must describe the same file set we are loading now.
+        if set(cached.source_hashes.keys()) != {str(p) for p in paths}:
+            return None
+
+        # And every one of those files must be byte-for-byte unchanged.
+        if self._detector.has_changed(paths, cached.source_hashes):
+            return None
+
+        return cached
 
     def persist(self, state: InputDataState, paths: List[str]) -> None:
-        """Serializes state to cache, merging with any previously cached data.
+        """Persist the current session's state as a clean, self-contained snapshot.
 
-        When the user loads files one at a time, the state only contains the data
-        loaded so far. A naive overwrite would erase cached data for files not yet
-        loaded in this session. Instead we:
-          1. Merge source_hashes: existing entries are kept, new ones override.
-          2. Preserve courses/periods from the existing cache when the current
-             state does not yet have them (i.e. that file type has not been loaded
-             this session). Note: file validators reject empty files before persist
-             is ever called, so an empty list in state genuinely means "not loaded".
+        `paths` is cumulative within a session — FileImportService tracks every
+        file loaded so far — so it already covers the full current state. We
+        therefore overwrite the cache outright instead of merging with whatever
+        was on disk before.
+
+        The previous implementation merged `source_hashes` with the existing
+        cache (`{**existing, **new}`) and carried forward old courses/periods.
+        That mixed file sets from different sessions into one snapshot, which let
+        a stale UPDATE hit return data that was never loaded this session. A
+        clean overwrite keeps the snapshot honest: these files <-> this state.
+
+        Note this is also strictly less work than before: we no longer read and
+        unpickle the existing cache from disk on every persist.
         """
-        existing = self._repository.load()
-        new_hashes = self._detector.compute_hashes(paths)
-
         final = state.to_cache()
-
-        if existing is not None:
-            # Keep all previously stored hashes; overwrite only the ones just updated.
-            final.source_hashes = {**existing.source_hashes, **new_hashes}
-
-            # Carry forward cached courses/periods that are absent from the current state.
-            if not final.courses and existing.courses:
-                final.courses = existing.courses
-            if not final.periods and existing.periods:
-                final.periods = existing.periods
-        else:
-            final.source_hashes = new_hashes
-
+        final.source_hashes = self._detector.compute_hashes(paths)
         self._repository.save(final)
