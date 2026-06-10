@@ -21,7 +21,9 @@ def test_solution_bar_initial_state():
     assert widget.next_page_btn is not None
     assert widget.last_page_btn is not None
     
-    assert widget.counter_label.text() == "No solutions"
+    assert widget.solution_input.text() == ""
+    assert widget.solution_input.placeholderText() == "Solution number"
+    assert widget.total_solutions_label.text() == "/ 10,000"
     assert widget.page_label.text() == "Page 1 / 1"
     assert widget.pages_group.isHidden() is True
 
