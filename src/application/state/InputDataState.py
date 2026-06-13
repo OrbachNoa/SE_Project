@@ -9,7 +9,7 @@ the place where the domain<->cache shape conversion happens.
 from __future__ import annotations
 
 from datetime import date
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Optional
 
 # A guard for avoiding circular imports between this class and the vm class used
 # in calendar editor, which needs to call back into this state to apply edits.
@@ -20,6 +20,7 @@ from src.models.Course import Course, ProgramEntry
 from src.models.ExamPeriod import ExamPeriod
 from src.models.Enums import EvalType, Semester, Moed, Requirement
 from src.infrastructure.cache.DataCache import DataCache, CourseDict, PeriodDict
+from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 
 
 class InputDataState:
@@ -32,6 +33,8 @@ class InputDataState:
         self._periods: List[ExamPeriod] = []
         # The program IDs user selected before launching generation.
         self._selected_program_ids: List[str] = []
+        # The Phase-3 threshold constraints chosen by the user in the settings screen.
+        self._constraints_config: Optional[ConstraintsConfig] = None
 
     # --- accessors / mutators (UML) ----------------------------------------
 
@@ -53,6 +56,14 @@ class InputDataState:
         Returns an empty list if set_selected_programs has never been called.
         """
         return list(self._selected_program_ids)
+
+    def set_constraints_config(self, config: ConstraintsConfig) -> None:
+        """Store the threshold constraints the user configured in the settings screen."""
+        self._constraints_config = config
+
+    def get_constraints_config(self) -> Optional[ConstraintsConfig]:
+        """Return the active threshold constraints, or None if none were configured."""
+        return self._constraints_config
 
     def replace_courses(self, courses: List[Course]) -> None:
         """Replace all loaded courses (REPLACE-mode import)."""
@@ -94,7 +105,7 @@ class InputDataState:
                     excluded_dates=[date.fromisoformat(d) for d in vm.excluded_dates],
                 )
             )
-        # Atomically replace the periods list only after all edits succeeded.
+
         self._periods = rebuilt
 
     # --- cache bridge (lead's two extra methods) ---------------------------
@@ -146,7 +157,6 @@ class InputDataState:
         """
         rebuilt_courses: List[Course] = []
         for cd in cache.courses:
-            # Rebuild program entries; default to empty list if key is missing.
             entries = [
                 ProgramEntry(
                     program_id=ed["programId"],
@@ -174,10 +184,9 @@ class InputDataState:
                     moed=Moed(pd["moed"]),
                     start_date=date.fromisoformat(pd["startDate"]),
                     end_date=date.fromisoformat(pd["endDate"]),
-                    # Default to empty list if excludedDates is missing from older cache files.
                     excluded_dates=[date.fromisoformat(d) for d in pd.get("excludedDates", [])],
                 )
             )
-        # Replace state only after both lists are fully rebuilt.
+
         self._courses = rebuilt_courses
         self._periods = rebuilt_periods

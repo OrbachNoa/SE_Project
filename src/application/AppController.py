@@ -7,6 +7,8 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from src.application.ImportBoundary import ImportMode, ImportRequest, ImportResult
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
 
+from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
+
 if TYPE_CHECKING:
     from src.application.ApplicationFacade import ApplicationFacade
     from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
@@ -53,6 +55,10 @@ class AppController(QObject):
     def update_exam_periods(self, edited_vms) -> None:
         """Apply edits made in the calendar editor GUI to the loaded exam periods."""
         self._facade.update_periods(edited_vms)
+
+    def set_constraints_config(self, config: ConstraintsConfig) -> None:
+        """Stores the threshold constraints chosen in the settings screen."""
+        self._facade.set_constraints_config(config)
 
     # ------------------------------------------------------------------
     # Schedule generation

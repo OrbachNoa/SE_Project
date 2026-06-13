@@ -1,7 +1,8 @@
 """ApplicationFacade - the single entry point for the GUI into the application.
 
-Coordinates state, services, and view-model mapping. Holds no business
-logic of its own: every operation delegates to the relevant service.
+Coordinates the services, the runtime state, and the view-model mapper. Holds no
+business logic of its own: every operation delegates to a service and, where
+relevant, updates AppState or maps domain data to view models.
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from src.application.services.ViewModelMapper import ViewModelMapper
 from src.application.ImportBoundary import ImportRequest, ImportResult
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
 from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
+from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 
 
 class ApplicationFacade:
@@ -35,7 +37,7 @@ class ApplicationFacade:
         self._mapper = mapper
 
     def import_file(self, request: ImportRequest) -> ImportResult:
-        """Delegate a file import request to FileImportService."""
+        """Imports a single data asset file using the parsing engine; internal state registers adapt accordingly."""
         return self._importer.load_file(request.path, request.file_type, request.mode)
     
     def update_periods(self, edited_vms) -> None:
@@ -43,30 +45,32 @@ class ApplicationFacade:
         self._state.get_input_state().apply_period_edits(edited_vms)
 
     def generate(self, program_ids: List[str]) -> SchedulerWorker:
-        """Start an async scheduling run for the given programs.
-        
-        Clears previous results, stores the selected programs, launches a
-        background worker, and wires its batch signal to _on_schedules_batch_received.
         """
-        # Clear previous results before starting a new run.
+        Launches the scheduling computation pipeline asynchronously inside a dedicated background process thread.
+        Clears out stale operational states prior to startup execution to prevent data bleeding across multiple runs.
+        """
+        # Clear previous run data to ensure a completely clean execution target context
         self._state.get_schedule_state().set_schedules([])
 
+        # Extract required input parameters cached inside the state layer
         input_state = self._state.get_input_state()
         input_state.set_selected_programs(program_ids)
         # Deploy the background process worker with correct state properties
+        # Read the threshold constraints the user set in the settings screen.
+        config = input_state.get_constraints_config()
         worker = self._scheduler.generate_async(
-            program_ids, input_state.get_courses(), input_state.get_periods()
+            program_ids, input_state.get_courses(), input_state.get_periods(),
+            config=config
         )
         
-        # Wire the worker's batch signal so results are captured as they arrive.
+        # Connect the asynchronous stream notification line to capture batch updates live
         worker.schedules_batch_found.connect(self._on_schedules_batch_received)
         return worker
 
     def _on_schedules_batch_received(self, batch_size: int) -> None:
-        """Slot called when the background worker persists a batch to SQLite.
-        
-        Receives a count rather than a list to avoid passing heavy objects
-        across thread boundaries, keeping the UI responsive.
+        """
+        Internal receiver slot triggered whenever the background process writer persists a data packet frame to SQLite.
+        Accepts a scalar integer primitive size tracker instead of heavy list instances to guarantee high UI rendering speeds.
         """
         self._state.get_schedule_state().add_schedules_batch(batch_size)
         
@@ -87,19 +91,19 @@ class ApplicationFacade:
     # ------------------------------------------------------------------
 
     def is_first_window_ready(self) -> bool:
-        """Return True if at least one schedule is available to display."""
+        """Validates if initial data slices have reached storage, declaring it safe to pop open output view panels."""
         return self._state.get_schedule_state().is_first_window_ready()
 
     def get_total_count(self) -> int:
-        """Return the total number of generated schedules."""
+        """Fetches the aggregated volume size metrics of all valid schedules recorded across the active repository."""
         return self._state.get_schedule_state().count()
 
     def load_page(self, page: int) -> None:
-        """Load the given page of results into the active window."""
+        """Instructs the lower storage layer state targets to rotate active navigation frames over to the specified page index."""
         self._state.get_schedule_state().load_page(page)
 
     def get_page_info(self) -> dict:
-        """Return a dict with current pagination state for the GUI."""
+        """Extracts a structural configuration dictionary detailing current navigation pagination thresholds for UI binding components."""
         state = self._state.get_schedule_state()
         return {
             "current_page":  state.current_page,
@@ -110,17 +114,20 @@ class ApplicationFacade:
         }
 
     def cancel_scheduling(self) -> None:
-        """Signal the active background worker to stop."""
+        """Signals active running asynchronous worker processes to terminate operational procedures immediately."""
         self._scheduler.cancel()
 
+    def set_constraints_config(self, config: ConstraintsConfig) -> None:
+        """Store threshold constraints from the settings screen into input state."""
+        self._state.get_input_state().set_constraints_config(config)
+
     def get_schedule_vm(self, index: int) -> ScheduleViewModel:
-        """Build and return a ScheduleViewModel for the schedule at the given index."""
         schedule_state = self._state.get_schedule_state()
         dto = schedule_state.get_schedule(index)
         selected = self._state.get_input_state().get_selected_programs()
         return self._mapper.to_schedule_vm(dto, current_index=index, total=schedule_state.count(), selected_programs=selected)
 
     def export(self, index: int, path: str) -> None:
-        """Save the schedule at the given index to disk."""
+        """Routes targeted on-memory result profiles directly out towards concrete disk serialization endpoints."""
         dto = self._state.get_schedule_state().get_schedule(index)
         self._exporter.save(dto, path)
