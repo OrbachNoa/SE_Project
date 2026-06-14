@@ -56,7 +56,6 @@ class ApplicationFacade:
         input_state = self._state.get_input_state()
         input_state.set_selected_programs(program_ids)
         # Deploy the background process worker with correct state properties
-        # Read the threshold constraints the user set in the settings screen.
         config = input_state.get_constraints_config()
         worker = self._scheduler.generate_async(
             program_ids, input_state.get_courses(), input_state.get_periods(),
@@ -113,13 +112,15 @@ class ApplicationFacade:
             "sqlite_count":  state.sqlite_count(),
         }
 
+    def set_constraints_config(self, config: ConstraintsConfig) -> None:
+        self._state.get_input_state().set_constraints_config(config)
+
+    def get_constraints_config(self):
+        return self._state.get_input_state().get_constraints_config()
+
     def cancel_scheduling(self) -> None:
         """Signals active running asynchronous worker processes to terminate operational procedures immediately."""
         self._scheduler.cancel()
-
-    def set_constraints_config(self, config: ConstraintsConfig) -> None:
-        """Store threshold constraints from the settings screen into input state."""
-        self._state.get_input_state().set_constraints_config(config)
 
     def get_schedule_vm(self, index: int) -> ScheduleViewModel:
         schedule_state = self._state.get_schedule_state()

@@ -56,13 +56,15 @@ class AppController(QObject):
         """Apply edits made in the calendar editor GUI to the loaded exam periods."""
         self._facade.update_periods(edited_vms)
 
-    def set_constraints_config(self, config: ConstraintsConfig) -> None:
-        """Stores the threshold constraints chosen in the settings screen."""
-        self._facade.set_constraints_config(config)
-
     # ------------------------------------------------------------------
     # Schedule generation
     # ------------------------------------------------------------------
+
+    def set_constraints_config(self, config: ConstraintsConfig) -> None:
+        self._facade.set_constraints_config(config)
+
+    def get_constraints_config(self):
+        return self._facade.get_constraints_config()
 
     def generate_schedules(self, program_ids: List[str]) -> None:
         """

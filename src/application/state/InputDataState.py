@@ -9,7 +9,7 @@ the place where the domain<->cache shape conversion happens.
 from __future__ import annotations
 
 from datetime import date
-from typing import List, TYPE_CHECKING, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 # A guard for avoiding circular imports between this class and the vm class used
 # in calendar editor, which needs to call back into this state to apply edits.
