@@ -11,6 +11,13 @@ class ProgramYearConflictChecker(IConflictChecker):
         # Keep selected programs here, so unrelated programs can be ignored.
         self._selected_programs = None
 
+
+    def prepare(self, courses: list, selected_programs: list = None, slots: list = None) -> None:
+        """Uniform setup entry point used by the factory; delegates to the
+        existing precompute step. Slots are not needed by this checker."""
+        self.precompute_conflicts(courses, selected_programs)
+
+
     def precompute_conflicts(self, courses: list, selected_programs: list = None) -> None:
         """Builds the conflict graph before scheduling starts."""
         # Store selected programs as a set, so program lookups are O(1).

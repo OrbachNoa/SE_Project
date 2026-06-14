@@ -69,6 +69,12 @@ class ActionBarWidget(QFrame):
         layout.addWidget(self.mode_update)
         layout.addStretch()
 
+        # ----- Settings button -----
+        self.settings_btn = QPushButton("⚙  Settings")
+        self.settings_btn.setObjectName("btn-secondary")
+        self.settings_btn.setFixedHeight(36)
+        layout.addWidget(self.settings_btn)
+
         # Create the main "Generate Schedule" button. It starts disabled (grayed out) until the user actually loads some files.
         self.generate_btn = QPushButton("▶  Generate Schedule")
         self.generate_btn.setObjectName("btn-primary")

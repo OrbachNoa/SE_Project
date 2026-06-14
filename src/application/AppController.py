@@ -7,6 +7,8 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from src.application.ImportBoundary import ImportMode, ImportRequest, ImportResult
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
 
+from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
+
 if TYPE_CHECKING:
     from src.application.ApplicationFacade import ApplicationFacade
     from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
@@ -57,6 +59,12 @@ class AppController(QObject):
     # ------------------------------------------------------------------
     # Schedule generation
     # ------------------------------------------------------------------
+
+    def set_constraints_config(self, config: ConstraintsConfig) -> None:
+        self._facade.set_constraints_config(config)
+
+    def get_constraints_config(self):
+        return self._facade.get_constraints_config()
 
     def generate_schedules(self, program_ids: List[str]) -> None:
         """

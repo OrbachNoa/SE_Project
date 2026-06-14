@@ -11,3 +11,12 @@ class IConflictChecker(ABC):
         This function checks if we can add a new exam to the schedule.
         """
         pass
+
+    def prepare(self, courses: list, selected_programs: list = None, slots: list = None) -> None:
+        """
+        Optional one-time setup before scheduling starts. The default is a
+        no-op; checkers that need precomputation override this. The factory
+        calls it once per process on every checker, so all checkers share the
+        same setup entry point.
+        """
+        pass

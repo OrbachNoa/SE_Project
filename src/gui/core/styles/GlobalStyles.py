@@ -52,6 +52,25 @@ QPushButton#btn-secondary:disabled {{
     color: #D5CFC9;
     border-color: {COLOR_BORDER};
 }}
+QPushButton#btn-settings {{
+    background-color: #FFFFFF;
+    color: {COLOR_TEXT};
+    border: 1px solid #D5CFC9;
+    border-radius: 8px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 600;
+}}
+QPushButton#btn-settings:hover {{
+    background-color: #F8FAFC;
+    border-color: {COLOR_PRIMARY};
+    color: {COLOR_PRIMARY_HOVER};
+}}
+QPushButton#btn-settings:disabled {{
+    color: #D5CFC9;
+    border-color: {COLOR_BORDER};
+    background-color: #F8F5F1;
+}}
 QPushButton#btn-danger {{
     background-color: #FFFFFF;
     color: {COLOR_DANGER};

@@ -4,6 +4,8 @@ from __future__ import annotations
 from typing import List
 
 from src.application.ImportBoundary import ImportMode
+# Imports the new constraints settings dialog component
+from gui.features.input.widgets.ConstraintsSettingsDialog import ConstraintsSettingsDialog
 
 
 # This class is the "brain" for the Input screen. It handles all the logic,
@@ -100,6 +102,7 @@ class InputScreenPresenter:
 
         period_vms = mapper.to_period_edit_vms(periods)
         if period_vms:
+            # Pass the constraints saved callback to sync changes when the period editor updates
             self._view.show_period_editor(period_vms)
 
     # Starts the scheduling process in the background controller
@@ -120,6 +123,24 @@ class InputScreenPresenter:
     # Navigate to the results screen
     def on_view_results_clicked(self) -> None:
         self._router.show(self._output_screen_name)
+
+    # Triggered when the user clicks the settings button to adjust constraints configurations
+    def on_settings_clicked(self) -> None:
+        current = self._controller.get_constraints_config()
+        dialog = ConstraintsSettingsDialog(
+            on_apply=self._apply_constraints_config,
+            current_config=current,
+            parent=self._view,
+        )
+        dialog.exec()
+
+    def _apply_constraints_config(self, config) -> None:
+        self._controller.set_constraints_config(config)
+        mark_dirty = getattr(self._view, "mark_inputs_dirty", None)
+        if callable(mark_dirty):
+            mark_dirty()
+        else:
+            self.refresh_generate_button()
 
     # Updates the exam period constraints in the controller
     def on_constraints_saved(self, updated_vms: list) -> None:

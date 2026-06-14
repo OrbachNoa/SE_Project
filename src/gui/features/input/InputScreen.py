@@ -3,9 +3,8 @@ from __future__ import annotations
 
 from typing import Callable, List
 import os
-
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QProgressBar, QVBoxLayout
+from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QProgressBar, QPushButton, QVBoxLayout
 
 from gui.common.components.CalendarEditorWidget import CalendarEditorWidget
 from gui.common.components.CourseListWidget import CourseListWidget
@@ -43,6 +42,7 @@ class InputScreen(Screen):
         # Add the action bar (load buttons, generate button) at the top
         self.action_bar = ActionBarWidget(self)
         self._view_results_btn = self.action_bar.view_results_btn
+        self.action_bar.settings_btn.setVisible(False)
         root.addWidget(self.action_bar)
 
         # File upload area: displays feedback once courses or periods files are loaded
@@ -129,6 +129,17 @@ class InputScreen(Screen):
         self._progress_label.setContentsMargins(24, 0, 24, 8)
         root.addWidget(self._progress_label)
 
+        settings_footer = QHBoxLayout()
+        settings_footer.setContentsMargins(20, 0, 20, 16)
+        self.settings_btn = QPushButton("Settings")
+        self.settings_btn.setObjectName("btn-settings")
+        self.settings_btn.setFixedHeight(38)
+        self.settings_btn.setMinimumWidth(112)
+        self.settings_btn.setToolTip("Scheduling constraints")
+        settings_footer.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        settings_footer.addStretch()
+        root.addLayout(settings_footer)
+
         # Link the UI to the Presenter (the logic layer) and connect button events
         self._presenter = InputScreenPresenter(self, controller, router, SCREEN_OUTPUT)
         self._connect_events()
@@ -146,6 +157,7 @@ class InputScreen(Screen):
         self.action_bar.generate_btn.clicked.connect(self._on_generate_clicked)
         self.action_bar.cancel_btn.clicked.connect(self._presenter.on_cancel_clicked)
         self.action_bar.view_results_btn.clicked.connect(self._presenter.on_view_results_clicked)
+        self.settings_btn.clicked.connect(self._presenter.on_settings_clicked)
 
     # UI helper: create the card that lists the available courses
     def _build_courses_card(self) -> QFrame:
@@ -256,6 +268,7 @@ class InputScreen(Screen):
         self._progress_label.setVisible(running)
         self._courses_row["load_btn"].setEnabled(not running)
         self._periods_row["load_btn"].setEnabled(not running)
+        self.settings_btn.setEnabled(not running)
         if progress_text:
             self._progress_label.setText(progress_text)
 
