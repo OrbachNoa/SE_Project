@@ -12,8 +12,8 @@ from typing import Callable, Optional, Tuple
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel,
-    QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QAbstractSpinBox, QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel,
+    QPushButton, QSpinBox, QToolButton, QVBoxLayout, QWidget,
 )
 
 from gui.core.styles.Theme import APP_STYLESHEET
@@ -78,7 +78,7 @@ class ConstraintsSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Scheduling Constraints")
         self.setModal(True)
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(680)
         self.setStyleSheet(APP_STYLESHEET + DIALOG_STYLESHEET + SETTINGS_DIALOG_STYLESHEET)
 
         self._on_apply = on_apply
@@ -91,10 +91,14 @@ class ConstraintsSettingsDialog(QDialog):
         card = QFrame()
         card.setObjectName("dialog-card")
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(24, 22, 24, 22)
-        card_layout.setSpacing(20)
+        card_layout.setContentsMargins(26, 24, 26, 22)
+        card_layout.setSpacing(14)
 
         # ── Header ────────────────────────────────────────────────────────
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
+        title_col = QVBoxLayout()
+        title_col.setSpacing(4)
         title = QLabel("Scheduling Constraints")
         title.setObjectName("dialog-title")
         hint = QLabel(
@@ -103,8 +107,13 @@ class ConstraintsSettingsDialog(QDialog):
         )
         hint.setObjectName("dialog-hint")
         hint.setWordWrap(True)
-        card_layout.addWidget(title)
-        card_layout.addWidget(hint)
+        title_col.addWidget(title)
+        title_col.addWidget(hint)
+        header_row.addLayout(title_col, stretch=1)
+        rules_badge = QLabel("5 rules")
+        rules_badge.setObjectName("dialog-counter")
+        header_row.addWidget(rules_badge, alignment=Qt.AlignmentFlag.AlignTop)
+        card_layout.addLayout(header_row)
 
         # ── Constraint rows ───────────────────────────────────────────────
         for i, meta in enumerate(_CONSTRAINTS):
@@ -143,9 +152,10 @@ class ConstraintsSettingsDialog(QDialog):
 
         row = QFrame()
         row.setObjectName("settings-row")
+        row.setMinimumHeight(78)
         row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(14, 12, 14, 12)
-        row_layout.setSpacing(12)
+        row_layout.setContentsMargins(16, 12, 16, 12)
+        row_layout.setSpacing(14)
 
         # Checkbox that toggles the whole constraint on/off.
         checkbox = QCheckBox()
@@ -165,22 +175,57 @@ class ConstraintsSettingsDialog(QDialog):
         row_layout.addLayout(text_col, stretch=1)
 
         # Spinbox + unit label on the right.
-        spin_col = QVBoxLayout()
-        spin_col.setAlignment(Qt.AlignmentFlag.AlignTop)
+        spin_col = QHBoxLayout()
+        spin_col.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        spin_col.setSpacing(8)
         spinbox = QSpinBox()
         spinbox.setRange(meta.min_k, meta.max_k)
         spinbox.setValue(current_k if current_k is not None else meta.default_k)
-        spinbox.setSuffix(f"  {meta.unit}")
-        spinbox.setFixedWidth(140)
+        spinbox.setFixedWidth(62)
+        spinbox.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         spinbox.setEnabled(is_on)
+        spinbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        spinbox.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        spinbox.lineEdit().setReadOnly(True)
+        step_col = QVBoxLayout()
+        step_col.setSpacing(2)
+        up_btn = QToolButton()
+        up_btn.setObjectName("settings-step")
+        up_btn.setArrowType(Qt.ArrowType.UpArrow)
+        up_btn.setFixedSize(24, 15)
+        up_btn.setEnabled(is_on)
+        down_btn = QToolButton()
+        down_btn.setObjectName("settings-step")
+        down_btn.setArrowType(Qt.ArrowType.DownArrow)
+        down_btn.setFixedSize(24, 15)
+        down_btn.setEnabled(is_on)
+        up_btn.clicked.connect(spinbox.stepUp)
+        down_btn.clicked.connect(spinbox.stepDown)
+        step_col.addWidget(up_btn)
+        step_col.addWidget(down_btn)
+        unit_lbl = QLabel(meta.unit)
+        unit_lbl.setObjectName("settings-unit")
+        unit_lbl.setEnabled(is_on)
         spin_col.addWidget(spinbox)
+        spin_col.addLayout(step_col)
+        spin_col.addWidget(unit_lbl)
         row_layout.addLayout(spin_col)
 
         # Wire checkbox → enable/disable spinbox.
         checkbox.toggled.connect(spinbox.setEnabled)
+        checkbox.toggled.connect(up_btn.setEnabled)
+        checkbox.toggled.connect(down_btn.setEnabled)
+        checkbox.toggled.connect(unit_lbl.setEnabled)
+        checkbox.toggled.connect(lambda checked, current_row=row: self._set_row_active(current_row, checked))
+        self._set_row_active(row, is_on)
 
         self._rows.append((checkbox, spinbox))
         return row
+
+    def _set_row_active(self, row: QFrame, active: bool) -> None:
+        row.setProperty("active", "true" if active else "false")
+        row.style().unpolish(row)
+        row.style().polish(row)
 
     @staticmethod
     def _current_k(
