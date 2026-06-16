@@ -17,13 +17,16 @@ class QueueScheduleObserver(IScheduleObserver):
     This observer converts schedules to DTOs and sends them through a Queue.
     """
 
-    def __init__(self, queue: Queue, cancel_event: Event, batch_size: int) -> None:
+    def __init__(self, queue: Queue, cancel_event: Event, batch_size: int, scorer=None) -> None:
         # Queue used to send messages from the scheduler process to the main process.
         self._queue = queue
         # Shared flag used to stop the scheduler when the user clicks cancel.
         self._cancel_event = cancel_event
         # Number of schedules to collect before sending them through the queue.
         self._batch_size = batch_size
+        # Optional ScheduleScorer: when present, each schedule is scored on the
+        # live domain object and the scores ride on the DTO.
+        self._scorer = scorer
         # Temporary buffer for schedules waiting to be sent as one batch.
         self._buffer: list[ScheduleDTO] = []
         # Remembers the last progress value that was sent. 
@@ -36,8 +39,15 @@ class QueueScheduleObserver(IScheduleObserver):
         The buffer is sent only when it reaches the configured batch size.
         """
         dto = self._to_schedule_dto(schedule)
+        # Score on the live domain schedule (year/requirement/real dates present)
+        # before it is discarded; store scalars on the DTO for the runtime sort.
+        if self._scorer is not None:
+            dto.scores = self._scorer.score(schedule)
+            
+        # Add the DTO to the buffer.
         self._buffer.append(dto)
         
+        # If the buffer reached the batch size, flush it to the queue.
         if len(self._buffer) >= self._batch_size:
             self._flush_buffer()
 
