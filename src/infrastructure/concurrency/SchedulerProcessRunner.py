@@ -24,7 +24,8 @@ class SchedulerProcessRunner:
         queue: Queue, 
         cancel_event: Event, 
         max_results: int,
-        batch_size: int
+        batch_size: int,
+        scorer=None
     ) -> None:
         # Slots are the exams that the scheduler needs to assign to dates.
         self._slots = slots
@@ -38,6 +39,8 @@ class SchedulerProcessRunner:
         self._max_results = max_results
         # Number of schedules to send together in one queue message.
         self._batch_size = batch_size
+        # Optional ScheduleScorer forwarded to the observer for sort scoring.
+        self._scorer = scorer
 
     def run(self) -> None:
         """Runs the scheduler and reports success or failure to the main process."""
@@ -62,7 +65,7 @@ class SchedulerProcessRunner:
 
     def _create_observer(self) -> QueueScheduleObserver:
         """Creates the observer that sends scheduler updates through the queue."""
-        return QueueScheduleObserver(self._queue, self._cancel_event, self._batch_size)
+        return QueueScheduleObserver(self._queue, self._cancel_event, self._batch_size, self._scorer)
 
     def _create_scheduler(self) -> Scheduler:
         """Creates the scheduler with the conflict rules it should use."""

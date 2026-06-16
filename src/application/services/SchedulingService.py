@@ -12,6 +12,7 @@ from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
 from src.logic.SlotBuilder import SlotBuilder, Slot
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 from src.logic.checkers.config.CheckerFactory import build_checkers
+from src.logic.comparators.ScheduleScorer import ScheduleScorer
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 DEFAULT_MAX_RESULTS = 1000000
@@ -26,7 +27,8 @@ def _run_scheduler_process(slots, courses, selected_programs, config, queue, can
     """
     try:
         checkers = build_checkers(config, courses, selected_programs, slots)
-        runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results, batch_size)
+        scorer = ScheduleScorer(courses, selected_programs)
+        runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results, batch_size, scorer)
         runner.run()
     except Exception as e:
         queue.put(("ERROR", f"Fatal scheduling error: {type(e).__name__}: {str(e)}"))
