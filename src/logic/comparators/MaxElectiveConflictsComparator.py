@@ -22,13 +22,11 @@ class MaxElectiveConflictsComparator:
     label = "Fewer elective-exam conflicts"
 
     def __init__(self, courses: list, selected_programs: Optional[list] = None):
-        # The course list, used to tell which courses are electives in which cohort.
-        self._courses = courses
-        # Optional filter: only these programs count. None means all programs.
-        self._selected = selected_programs
+        # The cohorts where each course is elective, built once via build_elective_index.
+        self._elective_index = Metrics.build_elective_index(courses, selected_programs)
 
     def key(self, schedule) -> float:
         # Fewer conflicts should rank higher, so we negate the raw count.
         return -float(
-            Metrics.peak_elective_conflict(schedule, self._courses, self._selected)
+            Metrics.peak_elective_conflict(schedule, self._elective_index)
         )

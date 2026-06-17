@@ -49,6 +49,7 @@ class ScheduleScorer:
         )
         self._span_idx = Metrics.build_span_index(courses, selected_programs)
         self._program_idx = Metrics.build_program_index(courses, selected_programs)
+        self._elective_idx = Metrics.build_elective_index(courses, selected_programs)
 
     def score(self, schedule) -> Dict[str, float]:
         """Return one score per criterion, higher is better for every entry."""
@@ -62,7 +63,7 @@ class ScheduleScorer:
             # Fewer conflicts is better, so negate.
             ELECTIVE_CONFLICTS: -float(
                 Metrics.peak_elective_conflict(
-                    schedule, self._courses, self._selected
+                    schedule, self._elective_idx
                 )
             ),
             MANDATORY_SPAN: float(

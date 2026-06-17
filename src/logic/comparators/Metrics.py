@@ -84,6 +84,31 @@ def build_program_index(
     return course_programs
 
 
+def build_elective_index(
+    courses: list,
+    selected_programs: Optional[list] = None,
+) -> Dict[str, Set[Cohort]]:
+    """Index for the elective-conflict metric (3): the cohorts where each course
+    is elective.
+
+    Built once per run so the metric does not have to re-scan the course list on
+    every schedule.
+    """
+    # Only these programs count; None means all of them.
+    selected = set(selected_programs) if selected_programs else None
+    course_cohorts: Dict[str, Set[Cohort]] = {}
+    for course in courses:
+        for entry in course.programEntries:
+            if selected and entry.programId not in selected:
+                continue
+            if entry.requirement is not Requirement.ELECTIVE:
+                continue
+            course_cohorts.setdefault(course.courseId, set()).add(
+                (entry.programId, entry.year)
+            )
+    return course_cohorts
+
+
 def _dates_by_cohort(
     schedule,
     cohort_index: Dict[str, Set[Cohort]],
@@ -146,8 +171,7 @@ def avg_all_courses_gap(schedule, any_cohorts: Dict[str, Set[Cohort]]) -> float:
 
 def peak_elective_conflict(
     schedule,
-    courses: list,
-    selected_programs: Optional[list] = None,
+    elective_cohorts: Dict[str, Set[Cohort]],
 ) -> int:
     """Metric 3: the worst single-day elective crowding, counted as the number
     of electives beyond the first.
@@ -157,25 +181,13 @@ def peak_elective_conflict(
     So one day with 4 electives (score 3) is rated worse than two days of 2
     (score 1) — the worst pile-up matters, not the total. Fewer is better, so
     callers negate it. Returns 0 when no day has more than one elective.
-    """
-    # Only these programs count; None means all of them.
-    selected = set(selected_programs) if selected_programs else None
-    # The cohorts where each course is elective, using the checker's rule.
-    course_cohorts: Dict[str, Set[Cohort]] = {}
-    for course in courses:
-        for entry in course.programEntries:
-            if selected and entry.programId not in selected:
-                continue
-            if entry.requirement is not Requirement.ELECTIVE:
-                continue
-            course_cohorts.setdefault(course.courseId, set()).add(
-                (entry.programId, entry.year)
-            )
 
+    Pass the index from build_elective_index (built once per run).
+    """
     # How many of a cohort's electives fall on each day.
     crowding: Dict[Tuple[Cohort, date], int] = {}
     for a in schedule.assignments:
-        cohorts = course_cohorts.get(a.course.courseId)
+        cohorts = elective_cohorts.get(a.course.courseId)
         if not cohorts:
             continue
         for cohort in cohorts:

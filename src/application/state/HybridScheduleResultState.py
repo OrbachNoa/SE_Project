@@ -48,6 +48,9 @@ class HybridScheduleResultState(ScheduleResultState):
             # Load again from the current page offset, because new schedules may now exist in SQLite.
             offset = self._current_page_idx * self._window_size
             self._schedules = self._repository.get_window(offset, self._window_size)
+            # Keep the user's chosen order on the freshly loaded window (Option A:
+            # window-scoped sort). No-op when no sort is active.
+            self._apply_sort()
 
     # ── Totals ─────────────────────────────────────────────────────────────
 
@@ -100,7 +103,9 @@ class HybridScheduleResultState(ScheduleResultState):
 
         # Update the current page and reset the index inside the loaded page.
         self._current_page_idx = page
-        self._current_index = 0  
+        self._current_index = 0
+        # Re-apply the active sort to this page (Option A: window-scoped).
+        self._apply_sort()
 
     # ── Reset for a new run ────────────────────────────────────────────────
 
