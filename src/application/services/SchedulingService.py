@@ -10,6 +10,8 @@ from src.models.ExamPeriod import ExamPeriod
 from src.infrastructure.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
 from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
 from src.logic.SlotBuilder import SlotBuilder, Slot
+from src.logic.ScheduleFeasibilityValidator import ScheduleFeasibilityValidator
+from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 from src.logic.checkers.config.CheckerFactory import build_checkers
 from src.logic.comparators.ScheduleScorer import ScheduleScorer
@@ -67,6 +69,11 @@ class SchedulingService:
         When None, only the two base checkers run, so behaviour is unchanged.
         """
         slots = self.build_slots(program_ids, courses, periods)
+        errors = ScheduleFeasibilityValidator().validate(
+            courses, program_ids, slots, config
+        )
+        if errors:
+            raise InfeasibleScheduleError(errors)
 
         if num_processes is None:
             num_processes = max(1, (os.cpu_count() or 2) - 1)

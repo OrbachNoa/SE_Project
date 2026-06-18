@@ -109,11 +109,14 @@ class OutputScreen(Screen):
         if "Solution" in text and "/" in text:
             parts = text.split("/")
             solution_num = parts[0].replace("Solution", "").strip()
+            total = parts[1].strip()
             if not self.solution_bar.solution_input.hasFocus():
                 self.solution_bar.solution_input.setText(solution_num)
+            self.solution_bar.total_solutions_label.setText(f"/ {total}")
         else:
             if not self.solution_bar.solution_input.hasFocus():
                 self.solution_bar.solution_input.clear()
+            self.solution_bar.total_solutions_label.setText("/ 0")
 
     # Update enabled/disabled state of solution navigation buttons
     def set_solution_controls(self, can_prev: bool, can_next: bool, can_export: bool) -> None:

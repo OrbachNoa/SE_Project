@@ -47,8 +47,8 @@ _CONSTRAINTS: list[_ConstraintMeta] = [
     ),
     _ConstraintMeta(
         label="Elective clash cap",
-        description="Maximum elective exams from the same program-year allowed on one day.",
-        unit="exams / day",
+        description="Maximum same-day pair-conflicts between elective exams in the same program.",
+        unit="conflicts",
         min_k=0, max_k=10, default_k=2,
     ),
     _ConstraintMeta(
@@ -59,7 +59,7 @@ _CONSTRAINTS: list[_ConstraintMeta] = [
     ),
     _ConstraintMeta(
         label="Max exams per day",
-        description="Maximum exams from the same program allowed on one day.",
+        description="Maximum total exams allowed on any single day.",
         unit="exams / day",
         min_k=1, max_k=10, default_k=3,
     ),
