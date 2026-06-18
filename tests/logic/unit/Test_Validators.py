@@ -130,7 +130,7 @@ def test_validator_failure_prevents_schedule_generation(make_program_entry):
 
     # We import the orchestration entry point lazily so this test can
     # still load even if the module is renamed during development.
-    from src.entrypoints.main import run_pipeline 
+    from main import run_pipeline 
     selected = ["83101"]
     # Act — run the pipeline with the failing validator injected.
     try:

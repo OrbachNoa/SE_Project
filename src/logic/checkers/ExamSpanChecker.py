@@ -1,7 +1,9 @@
 from __future__ import annotations
-from typing import Dict, Set, Tuple
+from collections import defaultdict
+from typing import Dict, List, Set, Tuple
 
 from src.logic.checkers.IConflictChecker import IConflictChecker
+from src.logic.feasibility.helpers import all_dates, enum_name
 from src.models.Enums import Requirement
 
 
@@ -47,6 +49,8 @@ class ExamSpanChecker(IConflictChecker):
             if not members:
                 continue
             expected = len(members)
+            if expected < 2:
+                continue
 
             # The exam being placed is not in the schedule yet, so seed with it.
             dates = [assignment.date]
@@ -65,3 +69,32 @@ class ExamSpanChecker(IConflictChecker):
             if span_days < self._k:
                 return True
         return False
+
+    def feasibility_bound(self, context) -> List[str]:
+        """Preflight: can the span between first/last obligatory exam reach k
+        days at all, given each course's candidate dates?
+        """
+        selected = context.selected_set
+        groups: Dict[Tuple[str, int, object], Set] = defaultdict(set)
+        for slot in context.slots:
+            for entry in slot.course.programEntries:
+                if selected and entry.programId not in selected:
+                    continue
+                if entry.requirement is Requirement.OBLIGATORY:
+                    groups[(entry.programId, entry.year, slot.moed)].add(slot)
+
+        errors = []
+        for (program_id, year, moed), group_slots in groups.items():
+            if len(group_slots) < 2:
+                continue
+            dates = all_dates(group_slots)
+            if not dates:
+                continue
+            max_span = (max(dates) - min(dates)).days
+            if max_span < self._k:
+                errors.append(
+                    f"Exam span requires {self._k} days, but program {program_id} "
+                    f"year {year} moed {enum_name(moed)} can span at most "
+                    f"{max_span} days."
+                )
+        return errors

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import List
 
 class IConflictChecker(ABC):
     """
@@ -20,3 +21,12 @@ class IConflictChecker(ABC):
         same setup entry point.
         """
         pass
+
+    def feasibility_bound(self, context) -> List[str]:
+        """
+        Optional preflight check: can this checker's rule possibly be satisfied
+        at all, before backtracking starts? The default is a no-op; checkers
+        with a closed-form capacity bound override this. context is a
+        FeasibilityContext (slots/config/selected programs).
+        """
+        return []

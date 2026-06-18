@@ -1,9 +1,11 @@
 from __future__ import annotations
+from collections import defaultdict
 from datetime import timedelta
 from enum import Enum
-from typing import Dict, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 from src.logic.checkers.IConflictChecker import IConflictChecker
+from src.logic.feasibility.helpers import all_dates, max_spaced_count
 from src.models.Enums import Requirement
 
 
@@ -62,3 +64,36 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
                 if other_cohorts and not new_cohorts.isdisjoint(other_cohorts):
                     return True
         return False
+
+    def feasibility_bound(self, context) -> List[str]:
+        """Preflight: can enough spaced dates fit for every (program, year)
+        cohort that needs this gap, given the candidate dates of its exams?
+        """
+        if self._k is None:
+            return []
+
+        selected = context.selected_set
+        groups: Dict[Tuple[str, int], Set] = defaultdict(set)
+        for slot in context.slots:
+            for entry in slot.course.programEntries:
+                if selected and entry.programId not in selected:
+                    continue
+                if (self._scope is GapScope.OBLIGATORY_ONLY
+                        and entry.requirement is not Requirement.OBLIGATORY):
+                    continue
+                groups[(entry.programId, entry.year)].add(slot)
+
+        label = "mandatory exams" if self._scope is GapScope.OBLIGATORY_ONLY else "all exams"
+        errors = []
+        for (program_id, year), group_slots in groups.items():
+            required = len(group_slots)
+            if required < 2:
+                continue
+            capacity = max_spaced_count(all_dates(group_slots), self._k)
+            if required > capacity:
+                errors.append(
+                    f"Minimum gap for {label} requires {required} exams in "
+                    f"program {program_id} year {year}, but only {capacity} "
+                    f"dates can fit with a {self._k}-day gap."
+                )
+        return errors

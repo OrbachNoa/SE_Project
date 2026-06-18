@@ -8,8 +8,10 @@ from src.file_io.validators.FileValidator import validate_all_files
 from src.file_io.parsers.ParserFactory import ParserFactory
 from src.logic.SlotBuilder import SlotBuilder
 from src.logic.Scheduler import Scheduler
-from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
-from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
+from src.logic.ScheduleFeasibilityValidator import ScheduleFeasibilityValidator
+from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
+from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
+from src.logic.checkers.config.CheckerFactory import build_checkers
 from src.logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
 from src.logic.observers.StreamingScheduleObserver import StreamingScheduleObserver
 from src.file_io.validators.MaxProgramsValidator import MaxProgramsValidator
@@ -19,14 +21,14 @@ from src.infrastructure.cache.DiskCacheRepository import DiskCacheRepository
 from src.infrastructure.cache.FileChangeDetector import FileChangeDetector
 from src.infrastructure.cache.CachedInputLoader import CachedInputLoader
 from src.file_io.validators.ValidatorPipeline import ValidatorPipeline
-from src.file_io.validators.ValidationResult import ValidationResult
 
 
 
 def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
                  output_file=None, courses=None, periods=None, programs=None,
                  validators=None, slot_builder=None, scheduler=None,
-                 output_writer=None, output_path=None, schedule_observer=None):
+                 output_writer=None, output_path=None, schedule_observer=None,
+                 config=None):
     """Executes the complete flow of parsing, validation, scheduling, and output generation."""
 
     # Parse input files if paths are provided
@@ -52,21 +54,23 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
     # Execute early validation on selected programs
     pipeline = ValidatorPipeline(validators)
     result = pipeline.validate(programs)
-    # If validation fails, raise an error with the collected messages
     if not result.is_valid:
-        return result
+        raise ValueError("\n".join(result.errors))
 
     # Build scheduling slots
     if slot_builder is None:
         slot_builder = SlotBuilder(periods, selected_programs=programs)
     slots = slot_builder.build(courses)
+    feasibility_errors = ScheduleFeasibilityValidator().validate(
+        courses, programs, slots, config
+    )
+    if feasibility_errors:
+        raise InfeasibleScheduleError(feasibility_errors)
 
     # Configure conflict checkers and initialize the scheduler
     if scheduler is None:
-        py_checker = ProgramYearConflictChecker()
         courses_in_slots = list({s.course for s in slots})
-        py_checker.precompute_conflicts(courses_in_slots, programs)
-        checkers = [py_checker, MoedOrderChecker()]
+        checkers = build_checkers(config, courses_in_slots, programs, slots)
         scheduler = Scheduler(checkers)
 
     # Execute scheduling using a custom observer if provided (e.g., for streaming)
@@ -100,7 +104,27 @@ def _parse_args():
     parser.add_argument("periods")
     parser.add_argument("programs")
     parser.add_argument("--output", default=None)
+    parser.add_argument("--min-gap-obligatory", type=int, default=None)
+    parser.add_argument("--min-gap-any", type=int, default=None)
+    parser.add_argument("--elective-conflict-cap", type=int, default=None)
+    parser.add_argument("--exam-span", type=int, default=None)
+    parser.add_argument("--max-exams-per-day", type=int, default=None)
     return parser.parse_args()
+
+
+def _validate_constraints_config(config: ConstraintsConfig) -> None:
+    positive_fields = {
+        "min-gap-obligatory": config.min_gap_obligatory,
+        "min-gap-any": config.min_gap_any,
+        "exam-span": config.exam_span,
+        "max-exams-per-day": config.max_exams_per_day,
+    }
+    for name, value in positive_fields.items():
+        if value is not None and value <= 0:
+            raise ValueError(f"--{name} must be a positive integer")
+
+    if config.elective_conflict_cap is not None and config.elective_conflict_cap < 0:
+        raise ValueError("--elective-conflict-cap must be a non-negative integer")
 
 
 def main():
@@ -130,18 +154,24 @@ def main():
         # Initialize a streaming observer to write results directly to disk
         streaming_observer = StreamingScheduleObserver(output_path)
 
+        # Build the Phase-3 threshold constraints from CLI flags (None = disabled)
+        config = ConstraintsConfig(
+            min_gap_obligatory=args.min_gap_obligatory,
+            min_gap_any=args.min_gap_any,
+            elective_conflict_cap=args.elective_conflict_cap,
+            exam_span=args.exam_span,
+            max_exams_per_day=args.max_exams_per_day,
+        )
+        _validate_constraints_config(config)
+
         # Run the scheduling pipeline
-        result = run_pipeline(
+        run_pipeline(
             courses=courses,
             periods=periods,
             programs_file=args.programs,
             schedule_observer=streaming_observer,
+            config=config,
         )
-        
-         # Check if validation flagged bad input and report errors without proceeding to scheduling
-        if isinstance(result, ValidationResult) and not result.is_valid:
-            print("Validation failed:\n" + "\n".join(result.errors), file=sys.stderr)
-            sys.exit(1)
 
         end_time = time.perf_counter()
         total_time = end_time - start_time
