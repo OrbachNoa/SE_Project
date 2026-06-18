@@ -47,6 +47,8 @@ class ExamSpanChecker(IConflictChecker):
             if not members:
                 continue
             expected = len(members)
+            if expected < 2:
+                continue
 
             # The exam being placed is not in the schedule yet, so seed with it.
             dates = [assignment.date]

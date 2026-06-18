@@ -105,6 +105,21 @@ def _parse_args():
     return parser.parse_args()
 
 
+def _validate_constraints_config(config: ConstraintsConfig) -> None:
+    positive_fields = {
+        "min-gap-obligatory": config.min_gap_obligatory,
+        "min-gap-any": config.min_gap_any,
+        "exam-span": config.exam_span,
+        "max-exams-per-day": config.max_exams_per_day,
+    }
+    for name, value in positive_fields.items():
+        if value is not None and value <= 0:
+            raise ValueError(f"--{name} must be a positive integer")
+
+    if config.elective_conflict_cap is not None and config.elective_conflict_cap < 0:
+        raise ValueError("--elective-conflict-cap must be a non-negative integer")
+
+
 def main():
     """Main entry point for the CLI application."""
     args = _parse_args()
@@ -140,6 +155,7 @@ def main():
             exam_span=args.exam_span,
             max_exams_per_day=args.max_exams_per_day,
         )
+        _validate_constraints_config(config)
 
         # Run the scheduling pipeline
         run_pipeline(

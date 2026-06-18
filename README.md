@@ -190,3 +190,8 @@ pytest tests/<test_folder>
 ```
 
 Continuous Integration is set up via GitHub Actions, which automatically runs the test suite on every push and Pull Request to ensure maximum stability.
+
+
+
+# how to run the new CLI command with the K thing
+python -m src.main data/courses22.txt data/periods22.txt data/programs.txt --min-gap-obligatory 3 --min-gap-any 2 --elective-conflict-cap 2 --exam-span 7 --max-exams-per-day 3

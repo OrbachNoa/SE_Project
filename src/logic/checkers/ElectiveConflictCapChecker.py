@@ -6,10 +6,11 @@ from src.models.Enums import Requirement
 
 
 class ElectiveConflictCapChecker(IConflictChecker):
-    """Limits, per program (across all years), the number of elective exams
-    on the same date to at most k. A student in that program should not face
-    more than k elective exams on one day; if they do, the assignment is
-    rejected.
+    """Limits elective exam pair-conflicts per program to at most k.
+
+    Years are intentionally ignored for this rule: every elective course in the
+    same program participates in the same conflict count. A same-day group of n
+    elective exams creates n * (n - 1) / 2 pair-conflicts.
     """
 
     def __init__(self, k: int):
@@ -50,6 +51,7 @@ class ElectiveConflictCapChecker(IConflictChecker):
             for other_id in ids_on_date:
                 if other_id in electives_in_program:
                     count += 1
-                    if count > self._k:
+                    pair_conflicts = count * (count - 1) // 2
+                    if pair_conflicts > self._k:
                         return True
         return False
