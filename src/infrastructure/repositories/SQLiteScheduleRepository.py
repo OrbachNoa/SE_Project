@@ -14,9 +14,14 @@ import threading
 from typing import List
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
+from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
 
 # Store the temporary SQLite database in the operating system temp folder.
 _DEFAULT_DB = os.path.join(tempfile.gettempdir(), "exam_scheduler_overflow.sqlite")
+
+# Maps each criterion id to a safe SQL column name (s_0 .. s_4), following the
+# stable order of ALL_CRITERIA.
+_SCORE_COLS = {cid: f"s_{i}" for i, cid in enumerate(ALL_CRITERIA)}
 
 
 class SQLiteScheduleRepository:
@@ -63,6 +68,19 @@ class SQLiteScheduleRepository:
                 "CREATE INDEX IF NOT EXISTS idx_offset "
                 "ON schedule_batches(first_offset)"
             )
+            # Narrow score table (Option B): one row per schedule keyed by its
+            # global index, one column per sort criterion. Kept deliberately
+            # thin (only floats) so it stays small enough for SQLite to ORDER BY
+            # almost entirely in memory — this is what makes the global sort fast.
+            score_cols = ", ".join(f"{c} REAL" for c in _SCORE_COLS.values())
+            self._conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS schedule_scores (
+                    gidx INTEGER PRIMARY KEY,
+                    {score_cols}
+                )
+                """
+            )
             self._conn.commit()
 
     # ── Write ──────────────────────────────────────────────────────────────
@@ -75,11 +93,17 @@ class SQLiteScheduleRepository:
         data = zlib.compress(pickle.dumps(batch, protocol=4), level=1)
         self.insert_compressed_batch(data, len(batch))
 
-    def insert_compressed_batch(self, data: bytes, batch_count: int) -> None:
+    def insert_compressed_batch(self, data: bytes, batch_count: int,
+                                batch_scores: "List[dict] | None" = None) -> None:
         """
         Stores a schedule batch that was already compressed by a scheduler process. 
         This keeps this repository fast, because it only writes 
         the blob to SQLite instead of doing the expensive pickle and compression work here.
+
+        batch_scores (optional, Option B): score dicts for the schedules in this
+        batch, in order. When given, they are written to the narrow
+        schedule_scores table so the database can sort globally. When omitted,
+        behaviour is unchanged (back-compatible).
         """
         with self._lock:
             # first_offset marks where this batch starts in the full result list. 
@@ -90,6 +114,19 @@ class SQLiteScheduleRepository:
                 "VALUES (?, ?, ?)",
                 (first_offset, batch_count, data),
             )
+            # Option B: write the per-schedule scores into the narrow table so
+            # the global ORDER BY can use them.
+            if batch_scores:
+                placeholders = ", ".join(["?"] * (1 + len(ALL_CRITERIA)))
+                rows = [
+                    (first_offset + i,
+                     *[scores.get(cid, 0.0) for cid in ALL_CRITERIA])
+                    for i, scores in enumerate(batch_scores)
+                ]
+                self._conn.executemany(
+                    f"INSERT OR REPLACE INTO schedule_scores VALUES ({placeholders})",
+                    rows,
+                )
             self._conn.commit()
             # Update the in-memory total after the batch was saved.
             self._total_count += batch_count
@@ -102,6 +139,7 @@ class SQLiteScheduleRepository:
         with self._lock:
             self._total_count = 0
             self._conn.execute("DELETE FROM schedule_batches")
+            self._conn.execute("DELETE FROM schedule_scores")
             self._conn.commit()
 
     # ── Read ───────────────────────────────────────────────────────────────
@@ -138,6 +176,72 @@ class SQLiteScheduleRepository:
                 break
 
         return result[:limit]
+
+    # ── Option B: global sort + lazy fetch ─────────────────────────────────
+
+    def get_sorted_ids(self, priority: List[str]) -> List[int]:
+        """
+        Pass 1 of the global sort: returns the global indexes of ALL schedules,
+        ordered by the priority list of criterion ids (each descending, since
+        every score is higher-is-better). This reads only the narrow score
+        table, so it is fast and returns lightweight integers — the caller holds
+        this ordered id list in memory instead of the full schedules.
+
+        Empty priority returns ids in natural (generation) order.
+        """
+        with self._lock:
+            if not priority:
+                rows = self._conn.execute(
+                    "SELECT gidx FROM schedule_scores ORDER BY gidx"
+                ).fetchall()
+            else:
+                order = ", ".join(f"{_SCORE_COLS[c]} DESC" for c in priority)
+                rows = self._conn.execute(
+                    f"SELECT gidx FROM schedule_scores ORDER BY {order}"
+                ).fetchall()
+        return [r[0] for r in rows]
+
+    def get_schedules_by_ids(self, gidxs: List[int]) -> List[ScheduleDTO]:
+        """
+        Pass 2 of the global sort: fetches the given schedules by global index,
+        in the same order as gidxs. Looks up only the specific batches that
+        contain the requested ids (via the offset index) and decompresses each
+        such batch once — so fetching a screen's worth of schedules touches only
+        the few batches they live in, not the whole table.
+        """
+        if not gidxs:
+            return []
+
+        found: dict = {}
+        # Cache decompressed batches so several wanted ids in the same batch
+        # only cost one decompress.
+        batch_cache: dict = {}
+        for g in gidxs:
+            if g in found:
+                continue
+            # Find the one batch whose range covers this global index. The
+            # offset index makes this a fast lookup, not a full scan.
+            with self._lock:
+                row = self._conn.execute(
+                    """
+                    SELECT id, first_offset, batch_count, data
+                    FROM   schedule_batches
+                    WHERE  first_offset <= :g
+                      AND  first_offset + batch_count > :g
+                    LIMIT 1
+                    """,
+                    {"g": g},
+                ).fetchone()
+            if row is None:
+                continue
+            batch_id, first_off, batch_count, raw = row
+            if batch_id not in batch_cache:
+                batch_cache[batch_id] = pickle.loads(zlib.decompress(raw))
+            batch = batch_cache[batch_id]
+            found[g] = batch[g - first_off]
+
+        # Preserve the requested (sorted) order.
+        return [found[g] for g in gidxs if g in found]
 
     def count(self) -> int:
         """Returns how many schedules were saved in the current run.."""

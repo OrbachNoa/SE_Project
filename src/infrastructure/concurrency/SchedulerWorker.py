@@ -160,9 +160,12 @@ class SchedulerWorker(QThread):
 
     def _handle_schedule_batch(self, payload) -> bool:
         """Saves one compressed schedule batch and notifies the GUI how many schedules were added."""
-        data, count = payload
+        # Payload is (data, count) or (data, count, batch_scores); the third
+        # element carries per-schedule scores for the narrow score table.
+        data, count = payload[0], payload[1]
+        batch_scores = payload[2] if len(payload) > 2 else None
         if count:
-            self._repository.insert_compressed_batch(data, count)
+            self._repository.insert_compressed_batch(data, count, batch_scores)
             self.schedules_batch_found.emit(count)
         return True
 

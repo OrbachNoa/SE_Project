@@ -18,6 +18,27 @@ class ScheduleResultState:
         # Allocates a local collection array buffer for caching operational display elements
         self._schedules: List[ScheduleDTO] = []
         self._current_index: int = 0
+        # Active sort order: a list of criterion ids in priority order. Empty
+        # means no sort (schedules shown in generation order). Kept so paging
+        # and incoming batches can preserve the user's chosen order.
+        self._sort_priority: List[str] = []
+
+    def set_sort_priority(self, priority: List[str]) -> None:
+        """Set the sort order (criterion ids, highest priority first) and apply
+        it to the schedules currently in memory. Empty list clears the sort.
+
+        Scope: this re-ranks the in-memory window only. For the disk-backed
+        Hybrid state that is the current page; see HybridScheduleResultState.
+        """
+        self._sort_priority = list(priority)
+        self._apply_sort()
+
+    def _apply_sort(self) -> None:
+        """Re-order the in-memory schedules by the active sort priority."""
+        from src.application.state.ScheduleReranker import rerank
+        self._schedules = rerank(self._schedules, self._sort_priority)
+        # The reorder invalidates the viewing position; go back to the top.
+        self._current_index = 0
 
     def set_schedules(self, schedules: List[ScheduleDTO]) -> None:
         """Replace all stored schedules and reset navigation to the first item."""

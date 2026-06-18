@@ -57,10 +57,14 @@ class QueueScheduleObserver(IScheduleObserver):
             # Convert the DTO list to bytes and compress it before sending.
             # This reduces the amount of data passed between processes.
             data = zlib.compress(pickle.dumps(self._buffer, protocol=4), level=1)
+            # Collect per-schedule scores so the main process can write them to
+            # the narrow score table (Option B) without re-opening the blob.
+            # Empty when scoring is off, which keeps the receiver simple.
+            batch_scores = [dto.scores for dto in self._buffer] if self._scorer is not None else []
             # Send a typed message through the queue.
             # "SCHEDULE_BATCH" tells the receiver that this message contains a batch of schedules, 
             # because the same queue is also used for progress, finish, and error messages.
-            self._queue.put(("SCHEDULE_BATCH", (data, len(self._buffer))))
+            self._queue.put(("SCHEDULE_BATCH", (data, len(self._buffer), batch_scores)))
             # Clear the buffer after the batch was sent.
             self._buffer = []
 
