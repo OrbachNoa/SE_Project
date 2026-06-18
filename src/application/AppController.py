@@ -8,6 +8,7 @@ from src.application.ImportBoundary import ImportMode, ImportRequest, ImportResu
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
 
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
+from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
 
 if TYPE_CHECKING:
     from src.application.ApplicationFacade import ApplicationFacade
@@ -79,10 +80,15 @@ class AppController(QObject):
 
         # Clear previous worker instances to guarantee isolated signal connectivity profiles
         self._disconnect_worker()
+        self._worker = None
         self._early_nav_fired = False
 
         # Request a new active execution worker handle from the centralized facade component
-        self._worker = self._facade.generate(program_ids)
+        try:
+            self._worker = self._facade.generate(program_ids)
+        except InfeasibleScheduleError as exc:
+            self.error_occurred.emit(str(exc))
+            return
 
         # Establish concurrent execution pipeline routing mappings
         self._worker.schedules_batch_found.connect(self._handle_schedules_batch_found)

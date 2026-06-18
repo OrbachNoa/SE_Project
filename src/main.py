@@ -8,6 +8,8 @@ from src.file_io.validators.FileValidator import validate_all_files
 from src.file_io.parsers.ParserFactory import ParserFactory
 from src.logic.SlotBuilder import SlotBuilder
 from src.logic.Scheduler import Scheduler
+from src.logic.ScheduleFeasibilityValidator import ScheduleFeasibilityValidator
+from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 from src.logic.checkers.config.CheckerFactory import build_checkers
 from src.logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
@@ -59,6 +61,11 @@ def run_pipeline(courses_file=None, periods_file=None, programs_file=None,
     if slot_builder is None:
         slot_builder = SlotBuilder(periods, selected_programs=programs)
     slots = slot_builder.build(courses)
+    feasibility_errors = ScheduleFeasibilityValidator().validate(
+        courses, programs, slots, config
+    )
+    if feasibility_errors:
+        raise InfeasibleScheduleError(feasibility_errors)
 
     # Configure conflict checkers and initialize the scheduler
     if scheduler is None:

@@ -1,7 +1,9 @@
 from __future__ import annotations
+from collections import defaultdict
 from typing import Dict, List, Set
 
 from src.logic.checkers.IConflictChecker import IConflictChecker
+from src.logic.feasibility.helpers import all_dates, max_electives_per_day, slots_by_domain
 from src.models.Enums import Requirement
 
 
@@ -55,3 +57,39 @@ class ElectiveConflictCapChecker(IConflictChecker):
                     if pair_conflicts > self._k:
                         return True
         return False
+
+    def feasibility_bound(self, context) -> List[str]:
+        """Preflight: can each program's elective exams fit into their
+        candidate dates without exceeding the same-day conflict cap?
+        """
+        selected = context.selected_set
+        max_per_day = max_electives_per_day(self._k)
+        by_program: Dict[str, Set] = defaultdict(set)
+        for slot in context.slots:
+            for entry in slot.course.programEntries:
+                if selected and entry.programId not in selected:
+                    continue
+                if entry.requirement is Requirement.ELECTIVE:
+                    by_program[entry.programId].add(slot)
+
+        errors = []
+        for program_id, program_slots in by_program.items():
+            dates = all_dates(program_slots)
+            if dates and len(program_slots) > max_per_day * len(dates):
+                errors.append(
+                    f"Elective conflict cap {self._k} allows at most {max_per_day} "
+                    f"same-day elective exams for program {program_id}, but "
+                    f"{len(program_slots)} elective exams must fit into "
+                    f"{len(dates)} possible dates."
+                )
+                continue
+
+            for domain, same_domain_slots in slots_by_domain(program_slots).items():
+                if len(same_domain_slots) > max_per_day * len(domain):
+                    errors.append(
+                        f"Elective conflict cap {self._k} allows at most {max_per_day} "
+                        f"same-day elective exams for program {program_id}, but "
+                        f"{len(same_domain_slots)} elective exams share the same "
+                        f"{len(domain)} possible dates."
+                    )
+        return errors
