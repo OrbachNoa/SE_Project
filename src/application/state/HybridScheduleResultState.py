@@ -1,140 +1,136 @@
-"""
-SQLite-backed schedule result state.
-All schedules live in SQLite; only the current page is held in RAM.
-Sorted view loads sorted gidxs (integers) on page entry, then fetches
-one schedule per navigation step via the repository's batch cache.
+"""Keeps only the currently visible schedule window in memory.
+All generated schedules are stored in SQLite by the background worker.
+This state object loads only one page/window of schedules at a time, so the UI
+can browse many results without keeping all of them in RAM.
 """
 from __future__ import annotations
 
-from typing import List
-from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
+from typing import Any, Dict, List
+
 from src.application.dto.ScheduleDTO import ScheduleDTO
+from src.application.dto.PackedScheduleCodec import row_to_dto
 from src.application.state.ScheduleResultState import ScheduleResultState
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
-# Maximum number of schedules loaded into memory at one time.
 WINDOW_SIZE = 10_000
 
 
 class HybridScheduleResultState(ScheduleResultState):
-    """Pages through SQLite-stored schedules; sorted pages stream DTOs on demand."""
-
-    def __init__(
-        self,
-        repository: SQLiteScheduleRepository,
-        window_size: int = WINDOW_SIZE,
-    ) -> None:
+    def __init__(self, repository: SQLiteScheduleRepository, window_size: int = WINDOW_SIZE) -> None:
         super().__init__()
-        # Repository that stores and loads generated schedules from SQLite.
         self._repository = repository
-        # Number of schedules per page.
         self._window_size = window_size
-        # Zero-based index of the currently loaded page.
         self._current_page_idx: int = 0
-        # Sorted gidxs for the current page; empty in unsorted mode.
-        self._sorted_ids_chunk: List[int] = []
-
-    # ── Sort control ────────────────────────────────────────────────────────
+        self._sorted_ids: List[int] = []
+        self._raw_map: Dict[int, Any] = {}
+        self._score_map: Dict[int, dict] = {}
+        self._slots_ref: list = []
+        self._dto_cache: Dict[int, ScheduleDTO] = {}
 
     def set_sort_priority(self, priority: list) -> None:
-        """Sets the sort order; empty priority clears it and restores positional paging."""
-        self._sort_priority = [cid for cid in priority if cid in ALL_CRITERIA]
-        self._sorted_ids_chunk = []
+        self._sort_priority = list(priority)
+        if self._sort_priority:
+            self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
+        else:
+            self._sorted_ids = []
         self._current_page_idx = 0
         self._current_index = 0
         self._load_current_page()
 
-    # ── Page loader ─────────────────────────────────────────────────────────
-
     def _load_current_page(self) -> None:
-        """
-        Loads data for the current page index.
-        Sorted: loads sorted gidxs for this page. 
-        Unsorted: loads full DTOs.
-        """
-        offset = self._current_page_idx * self._window_size
-        if self._sort_priority:
-            # Pass 1: sorted integer IDs for this page 
-            self._sorted_ids_chunk = self._repository.get_sorted_ids_page(
-                self._sort_priority, offset, self._window_size
-            )
-            # Pass 2: actual DTOs will be fetched one at a time by get_schedule().
-            self._schedules = []
+        self._dto_cache.clear()
+        self._schedules = []
+        if self._sorted_ids:
+            start = self._current_page_idx * self._window_size
+            page_ids = self._sorted_ids[start:start + self._window_size]
+            raw_map, score_map, slots_ref = self._repository.get_raw_by_ids(page_ids)
         else:
-            self._sorted_ids_chunk = []
-            self._schedules = self._repository.get_window(offset, self._window_size)
-
-    # ── On-demand sorted schedule fetch ─────────────────────────────────────
+            offset = self._current_page_idx * self._window_size
+            raw_map, score_map, slots_ref = self._repository.get_window_raw(offset, self._window_size)
+        self._raw_map = raw_map
+        self._score_map = score_map
+        self._slots_ref = slots_ref or []
 
     def get_schedule(self, index: int) -> ScheduleDTO:
-        """
-        Return the schedule at the given within-page index.
-        Sorted: looks up gidx from chunk and fetches via batch cache. 
-        Unsorted: base class.
-        """
-        if self._sort_priority:
-            if index < 0 or index >= len(self._sorted_ids_chunk):
+        if not self._raw_map:
+            return super().get_schedule(index)
+
+        if self._sorted_ids:
+            start = self._current_page_idx * self._window_size
+            page_ids = self._sorted_ids[start:start + self._window_size]
+            if index < 0 or index >= len(page_ids):
                 raise IndexError(
                     f"schedule index {index} out of range "
-                    f"(page has {len(self._sorted_ids_chunk)} entries)"
+                    f"(sorted page has {len(page_ids)} items)"
                 )
-            gidx = self._sorted_ids_chunk[index]
-            results = self._repository.get_schedules_by_ids([gidx])
-            if results:
-                return results[0]
-            raise IndexError(
-                f"could not resolve sorted schedule at index {index} (gidx={gidx})"
-            )
-        return super().get_schedule(index)
+            global_idx = page_ids[index]
+        else:
+            if index < 0 or index >= len(self._raw_map):
+                raise IndexError(
+                    f"schedule index {index} out of range "
+                    f"(window has {len(self._raw_map)} items)"
+                )
+            global_idx = self._current_page_idx * self._window_size + index
 
-    # ── Streaming write notification ────────────────────────────────────────
+        if index in self._dto_cache:
+            return self._dto_cache[index]
+
+        raw = self._raw_map.get(global_idx)
+        if raw is None:
+            # _raw_map is stale (sort applied mid-run; new results arrived).
+            # Reload transparently so the caller gets a valid DTO instead of crash.
+            self._load_current_page()
+            raw = self._raw_map.get(global_idx)
+        if raw is None:
+            raise IndexError(f"global index {global_idx} not in raw_map")
+
+        if isinstance(raw, ScheduleDTO):
+            dto = raw
+        else:
+            score = self._score_map.get(global_idx)
+            dto = row_to_dto(raw, self._slots_ref, score)
+
+        _CACHE_MAX = 32
+        if len(self._dto_cache) >= _CACHE_MAX:
+            self._dto_cache.pop(next(iter(self._dto_cache)))
+        self._dto_cache[index] = dto
+        return dto
 
     def add_schedules_batch(self, batch_size: int) -> None:
-        """Reloads the page if it isn't full yet; skipped in sorted mode."""
-        # In sorted mode skip per-batch re-sorting to avoid GUI hang.
-        # In unsorted mode only reload while the current page isn't full yet.
-        if not self._sort_priority and len(self._schedules) < self._window_size:
+        if self._sort_priority:
+            # Only refresh sorted id list (fast: ORDER BY on narrow score table).
+            # Do NOT call _load_current_page() — get_raw_by_ids() decompresses
+            # every batch whose range overlaps the scattered sorted ids = O(n²)
+            # work that freezes the GUI and causes page-count jumps and crashes.
+            self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
+        elif self.current_window_size() < self._window_size:
             self._load_current_page()
 
-    # ── Totals ─────────────────────────────────────────────────────────────
-
     def count(self) -> int:
-        """Returns the total number of schedules stored in SQLite."""
         return self._repository.count()
 
     def sqlite_count(self) -> int:
-        """Returns the number of schedules stored in SQLite."""
         return self.count()
 
     def is_first_window_ready(self) -> bool:
-        """Returns True once at least one schedule was saved and can be displayed."""
         return self.count() > 0
 
     def current_window_size(self) -> int:
-        """
-        Returns the number of schedules available on the current page.
-        
-        """
-        if self._sort_priority:
-            return len(self._sorted_ids_chunk)
+        if self._raw_map:
+            return len(self._raw_map)
         return len(self._schedules)
-
-    # ── Paged navigation ───────────────────────────────────────────────────
 
     @property
     def current_page(self) -> int:
-        """Returns the zero-based index of the currently loaded page."""
         return self._current_page_idx
 
     def total_pages(self) -> int:
-        """Returns how many pages are needed to browse all saved schedules."""
-        total = self.count()
+        total = len(self._sorted_ids) if self._sorted_ids else self.count()
         if total == 0:
             return 0
         return (total + self._window_size - 1) // self._window_size
 
     def load_page(self, page: int) -> None:
-        """Loads the given page; raises IndexError if out of range."""
         total = self.total_pages()
         if page < 0 or (total > 0 and page >= total):
             raise IndexError(f"page {page} out of range (have {total})")
@@ -142,11 +138,13 @@ class HybridScheduleResultState(ScheduleResultState):
         self._current_index = 0
         self._load_current_page()
 
-    # ── Reset for a new run ────────────────────────────────────────────────
-
     def set_schedules(self, schedules: list) -> None:
-        """Resets for a new run: clears in-memory state and wipes SQLite."""
         super().set_schedules(schedules)
         self._current_page_idx = 0
-        self._sorted_ids_chunk = []
+        self._sorted_ids = []
+        self._sort_priority = []
+        self._raw_map = {}
+        self._score_map = {}
+        self._slots_ref = []
+        self._dto_cache = {}
         self._repository.clear()

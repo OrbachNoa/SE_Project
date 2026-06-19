@@ -10,6 +10,7 @@ import time
 import zlib
 from src.logic.observers.IScheduleObserver import IScheduleObserver
 from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
+from src.application.dto.PackedScheduleCodec import encode_schedule, pack_rows
 
 
 class QueueScheduleObserver(IScheduleObserver):
@@ -27,6 +28,7 @@ class QueueScheduleObserver(IScheduleObserver):
         scorer=None,
         result_counter=None,
         result_limit: "int | None" = None,
+        slots: list | None = None,
     ) -> None:
         # Queue used to send messages from the scheduler process to the main process.
         self._queue = queue
@@ -46,8 +48,27 @@ class QueueScheduleObserver(IScheduleObserver):
         # result_limit, no matter how many units/processes are in flight.
         self._result_counter = result_counter
         self._result_limit = result_limit
-        # Temporary buffer for schedules waiting to be sent as one batch.
+        # Temporary buffer for schedules waiting to be sent as one batch. When
+        # slots are provided, schedules are stored as compact date-index rows;
+        # otherwise the legacy DTO buffer is used.
         self._buffer: list[ScheduleDTO] = []
+        self._packed_rows: list[bytes] = []
+        self._batch_scores: list[dict] = []
+        self._slots = list(slots) if slots is not None else None
+        if self._slots is not None:
+            self._slot_count = len(self._slots)
+            self._assignment_to_slot = {
+                (slot.course, slot.semester, slot.moed): i
+                for i, slot in enumerate(self._slots)
+            }
+            self._date_index_by_slot = [
+                {d: i for i, d in enumerate(slot.candidateDates)}
+                for slot in self._slots
+            ]
+        else:
+            self._slot_count = 0
+            self._assignment_to_slot = {}
+            self._date_index_by_slot = []
         # Remembers the last progress value that was sent.
         # # For example,  if 50% was already reported, another 50% update will not be sent again.
         self._last_progress_sent: int = -1
@@ -88,21 +109,39 @@ class QueueScheduleObserver(IScheduleObserver):
             self._queue.put(message)
 
     def on_schedule_found(self, schedule: Any) -> None:
+        scores = self._scorer.score(schedule) if self._scorer is not None else None
+        self._record_schedule(schedule, scores)
+
+    def on_scored_schedule_found(self, schedule: Any, scores: dict) -> None:
+        self._record_schedule(schedule, scores)
+
+    def _record_schedule(self, schedule: Any, scores: "dict | None") -> None:
         """
-        Converts a found schedule to a DTO and stores it in the local batch buffer.
-        The buffer is sent only when it reaches the configured batch size.
+        Stores a found schedule in the local batch buffer. In the current GUI
+        path this is a compact binary row; DTO materialization is deferred to
+        SQLiteScheduleRepository reads.
         """
         if not self._reserve_result_slot():
             return
         self.diag_total_found += 1
 
+        if self._slots is not None:
+            self._packed_rows.append(
+                encode_schedule(
+                    schedule,
+                    self._assignment_to_slot,
+                    self._date_index_by_slot,
+                    self._slot_count,
+                )
+            )
+            self._batch_scores.append(scores or {})
+            if len(self._packed_rows) >= self._batch_size:
+                self._flush_buffer()
+            return
+
         dto = self._to_schedule_dto(schedule)
-        # Score on the live domain schedule (year/requirement/real dates present)
-        # before it is discarded; store scalars on the DTO for the runtime sort.
-        if self._scorer is not None:
-            dto.scores = self._scorer.score(schedule)
-            
-        # Add the DTO to the buffer.
+        if scores is not None:
+            dto.scores = scores
         self._buffer.append(dto)
         
         # If the buffer reached the batch size, flush it to the queue.
@@ -111,6 +150,14 @@ class QueueScheduleObserver(IScheduleObserver):
 
     def _flush_buffer(self) -> None:
         """Sends the current schedule batch through the queue."""
+        if self._packed_rows:
+            packed = pack_rows(self._packed_rows, self._slot_count, len(self._packed_rows))
+            data = zlib.compress(packed, level=1)
+            self._put_to_queue(("SCHEDULE_BATCH", (data, len(self._packed_rows), self._batch_scores)))
+            self._packed_rows = []
+            self._batch_scores = []
+            return
+
         if self._buffer:
             # Convert the DTO list to bytes and compress it before sending.
             # This reduces the amount of data passed between processes.

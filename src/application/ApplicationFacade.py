@@ -35,6 +35,9 @@ class ApplicationFacade:
         self._scheduler = scheduler
         self._exporter = exporter
         self._mapper = mapper
+        # Keeps track of the current worker so the previous one can be cleanly
+        # cancelled and disconnected when a new generation run starts.
+        self._worker = None
 
     def import_file(self, request: ImportRequest) -> ImportResult:
         """Imports a single data asset file using the parsing engine; internal state registers adapt accordingly."""
@@ -49,6 +52,18 @@ class ApplicationFacade:
         Launches the scheduling computation pipeline asynchronously inside a dedicated background process thread.
         Clears out stale operational states prior to startup execution to prevent data bleeding across multiple runs.
         """
+        # Cancel the previous worker and disconnect its signal before starting a new run.
+        # Without this, old worker processes keep writing to the (now-cleared) SQLite
+        # repository and keep emitting signals that corrupt the new run's state — which
+        # caused crashes when sort was active (old blobs decoded with new slots).
+        if self._worker is not None:
+            try:
+                self._worker.schedules_batch_found.disconnect(self._on_schedules_batch_received)
+            except RuntimeError:
+                pass  # Already disconnected or worker was garbage-collected
+            self._worker.cancel()
+            self._worker = None
+
         # Clear previous run data to ensure a completely clean execution target context
         self._state.get_schedule_state().set_schedules([])
 
@@ -61,9 +76,10 @@ class ApplicationFacade:
             program_ids, input_state.get_courses(), input_state.get_periods(),
             config=config
         )
-        
+
         # Connect the asynchronous stream notification line to capture batch updates live
         worker.schedules_batch_found.connect(self._on_schedules_batch_received)
+        self._worker = worker
         return worker
 
     def _on_schedules_batch_received(self, batch_size: int) -> None:
@@ -136,5 +152,18 @@ class ApplicationFacade:
         self._exporter.save(dto, path)
 
     def apply_sort(self, priority_list: List[str]) -> None:
-        """Applies sort priority to the generated schedule results state."""
+        """Applies sort order synchronously (GUI thread)."""
         self._state.get_schedule_state().set_sort_priority(priority_list)
+
+    def compute_sort_data(self, priority_list: List[str]) -> dict:
+        """Reads the data needed to apply a new sort order. Touches only the
+        SQLite repository (thread-safe) and does not mutate the live schedule
+        state, so it is safe to call from a background thread.
+        """
+        return self._state.get_schedule_state().compute_sort_data(priority_list)
+
+    def apply_sort_data(self, data: dict) -> None:
+        """Applies sort data previously computed by compute_sort_data().
+        Mutates the live schedule state, so must be called on the GUI thread.
+        """
+        self._state.get_schedule_state().apply_sort_data(data)

@@ -1,6 +1,9 @@
+from datetime import date
 from typing import List
 from .Course import Course
 from .Enums import Moed, Semester
+
+_EMPTY_COURSE_IDS = frozenset()
 
 class ExamAssignment:
     """Represents one exam placement for a course."""
@@ -13,11 +16,12 @@ class ExamAssignment:
 
 # Holds all exam assignments that make one complete schedule.
 class ExamSchedule:
-    def __init__(self):
+    def __init__(self, use_ordinal_index: bool = False):
         # Store assignments in the order they were added.
         self.assignments: List[ExamAssignment] = []
         # Index courses by date, so conflict checks can avoid scanning every assignment.
         self._date_to_course_ids: dict = {}
+        self._ordinal_to_course_ids: dict | None = {} if use_ordinal_index else None
         self._course_to_assignments: dict = {}
 
     # Add an assignment and update the date index.
@@ -27,6 +31,11 @@ class ExamSchedule:
         if a.date not in self._date_to_course_ids:
             self._date_to_course_ids[a.date] = set()
         self._date_to_course_ids[a.date].add(a.course.courseId)
+        if self._ordinal_to_course_ids is not None:
+            ordinal = a.date.toordinal()
+            if ordinal not in self._ordinal_to_course_ids:
+                self._ordinal_to_course_ids[ordinal] = set()
+            self._ordinal_to_course_ids[ordinal].add(a.course.courseId)
         self._course_to_assignments.setdefault(a.course.courseId, []).append(a)
 
     # Return assignments on the requested date.
@@ -41,6 +50,10 @@ class ExamSchedule:
         date_set = self._date_to_course_ids.get(removed.date)
         if date_set:
             date_set.discard(removed.course.courseId)
+        if self._ordinal_to_course_ids is not None:
+            ordinal_set = self._ordinal_to_course_ids.get(removed.date.toordinal())
+            if ordinal_set:
+                ordinal_set.discard(removed.course.courseId)
         course_assignments = self._course_to_assignments.get(removed.course.courseId)
         if course_assignments:
             course_assignments.pop()
@@ -49,7 +62,15 @@ class ExamSchedule:
         """Return the set of course IDs scheduled on the given date.
         Do not mutate the returned set.
         """
-        return self._date_to_course_ids.get(date, set())
+        return self._date_to_course_ids.get(date, _EMPTY_COURSE_IDS)
+
+    def course_ids_on_ordinal(self, ordinal: int):
+        """Return the set of course IDs scheduled on the given date ordinal.
+        Do not mutate the returned set.
+        """
+        if self._ordinal_to_course_ids is None:
+            return self._date_to_course_ids.get(date.fromordinal(ordinal), _EMPTY_COURSE_IDS)
+        return self._ordinal_to_course_ids.get(ordinal, _EMPTY_COURSE_IDS)
 
     def assignments_for_course(self, course_id: str) -> list:
         """Return the list of assignments for the given course.

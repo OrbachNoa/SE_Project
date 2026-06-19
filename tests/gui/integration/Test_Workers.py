@@ -41,7 +41,7 @@ def test_worker_dispatches_messages():
     worker.run()
     
     # Assert
-    mock_repository.insert_compressed_batch.assert_called_once_with(b"compressed_data", 2, None)
+    mock_repository.insert_compressed_batch.assert_called_once_with(b"compressed_data", 2)
     assert batch_counts == [2]
     assert progress_vals == [50]
     assert getattr(sys.modules[__name__], "finished_called") is True

@@ -142,6 +142,7 @@ class SchedulingService:
         When None, only the two base checkers run, so behaviour is unchanged.
         """
         slots = self.build_slots(program_ids, courses, periods)
+        self._repository.configure_slots(slots)
         errors = ScheduleFeasibilityValidator().validate(
             courses, program_ids, slots, config
         )

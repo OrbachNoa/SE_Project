@@ -1,6 +1,5 @@
 from __future__ import annotations
 from collections import defaultdict
-from datetime import timedelta
 from enum import Enum
 from typing import Dict, List, Set, Tuple
 
@@ -22,15 +21,17 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
     are included. Day counting is a plain calendar difference, so weekends and
     holidays count.
     """
+    uses_ordinal_date_index = True
 
     def __init__(self, scope: GapScope, k: int):
         self._scope = scope
         self._k = k
-        self._eligible_cohorts: Dict[str, Set[Tuple[str, int]]] = {}
+        self._eligible_masks: Dict[str, int] = {}
 
     def prepare(self, courses: list, selected_programs: list = None, slots: list = None) -> None:
         selected = set(selected_programs) if selected_programs else None
         eligible: Dict[str, Set[Tuple[str, int]]] = {}
+        cohort_ids: Dict[Tuple[str, int], int] = {}
         for course in courses:
             cohorts: Set[Tuple[str, int]] = set()
             for entry in course.programEntries:
@@ -42,26 +43,33 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
                 cohorts.add((entry.programId, entry.year))
             if cohorts:
                 eligible[course.courseId] = cohorts
-        self._eligible_cohorts = eligible
+                for cohort in cohorts:
+                    if cohort not in cohort_ids:
+                        cohort_ids[cohort] = len(cohort_ids)
+
+        self._eligible_masks = {
+            course_id: sum(1 << cohort_ids[cohort] for cohort in cohorts)
+            for course_id, cohorts in eligible.items()
+        }
 
     def check(self, assignment, schedule) -> bool:
         if self._k <= 0:
             return False
-        new_cohorts = self._eligible_cohorts.get(assignment.course.courseId)
-        if not new_cohorts:
+        new_mask = self._eligible_masks.get(assignment.course.courseId, 0)
+        if not new_mask:
             return False
 
-        new_date = assignment.date
+        new_ordinal = assignment.date.toordinal()
+        eligible_masks = self._eligible_masks
         # A gap < k is a violation, so any eligible exam within (k-1) days on
-        # either side breaks the rule. Scanning the date window reuses the O(1)
-        # date index instead of touching the whole cohort.
-        for offset in range(-(self._k - 1), self._k):
-            other_ids = schedule.course_ids_on_date(new_date + timedelta(days=offset))
+        # either side breaks the rule. Scanning integer ordinals avoids creating
+        # timedelta/date objects in this hot loop.
+        for ordinal in range(new_ordinal - self._k + 1, new_ordinal + self._k):
+            other_ids = schedule.course_ids_on_ordinal(ordinal)
             if not other_ids:
                 continue
             for other_id in other_ids:
-                other_cohorts = self._eligible_cohorts.get(other_id)
-                if other_cohorts and not new_cohorts.isdisjoint(other_cohorts):
+                if new_mask & eligible_masks.get(other_id, 0):
                     return True
         return False
 
