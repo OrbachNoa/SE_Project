@@ -58,13 +58,11 @@ class SQLiteScheduleRepository:
         return conn
 
     def _init_db(self) -> None:
-        """Creates the schedule batch table after ensuring old schemas are removed."""
+        """Creates the schedule batch and score tables if they do not already exist."""
         with self._lock:
-            self._conn.execute("DROP TABLE IF EXISTS schedule_batches")
-            self._conn.execute("DROP TABLE IF EXISTS schedule_scores")
             self._conn.execute(
                 """
-                CREATE TABLE schedule_batches (
+                CREATE TABLE IF NOT EXISTS schedule_batches (
                     id            INTEGER PRIMARY KEY AUTOINCREMENT,
                     first_offset  INTEGER NOT NULL,
                     batch_count   INTEGER NOT NULL,
@@ -74,7 +72,7 @@ class SQLiteScheduleRepository:
             )
             # Index used by get_window to find the relevant batches quickly.
             self._conn.execute(
-                "CREATE INDEX idx_offset ON schedule_batches(first_offset)"
+                "CREATE INDEX IF NOT EXISTS idx_offset ON schedule_batches(first_offset)"
             )
             # Narrow score table: one row per schedule keyed by its
             # global index, one column per sort criterion. Kept deliberately
@@ -83,19 +81,17 @@ class SQLiteScheduleRepository:
             score_cols = ", ".join(f"{c} REAL" for c in _SCORE_COLS.values())
             self._conn.execute(
                 f"""
-                CREATE TABLE schedule_scores (
+                CREATE TABLE IF NOT EXISTS schedule_scores (
                     gidx INTEGER PRIMARY KEY,
                     {score_cols}
                 )
                 """
             )
-            # Composite index on all score columns (all DESC) so that the
-            # ORDER BY used by the streaming sorted-view chunk loader runs in
-            # sub-linear time even for very large result sets.
-            score_order = ", ".join(f"{c} DESC" for c in _SCORE_COLS.values())
-            self._conn.execute(
-                f"CREATE INDEX idx_scores ON schedule_scores({score_order})"
-            )
+            # No composite score index: a single multi-column index only
+            # accelerates the one ORDER BY whose columns match it left-to-right,
+            # while taxing every insert. Since the user can pick any of the 120
+            # possible criterion orders, the narrow in-RAM table + LIMIT is fast
+            # enough on its own, so the index is not worth the write cost.
             self._conn.commit()
 
     # ── Write ──────────────────────────────────────────────────────────────
@@ -105,7 +101,7 @@ class SQLiteScheduleRepository:
         This method is useful when the caller still has normal ScheduleDTO objects. 
         In the GUI flow, batches are usually already compressed by child processes. 
         """
-        data = zlib.compress(pickle.dumps(batch, protocol=4), level=1)
+        data = zlib.compress(pickle.dumps(batch, protocol=5), level=1)
         self.insert_compressed_batch(data, len(batch))
 
     def insert_compressed_batch(self, data: bytes, batch_count: int,

@@ -56,7 +56,7 @@ class QueueScheduleObserver(IScheduleObserver):
         if self._buffer:
             # Convert the DTO list to bytes and compress it before sending.
             # This reduces the amount of data passed between processes.
-            data = zlib.compress(pickle.dumps(self._buffer, protocol=4), level=1)
+            data = zlib.compress(pickle.dumps(self._buffer, protocol=5), level=1)
             # Collect per-schedule scores so the main process can write them to
             # the narrow score table (Option B) without re-opening the blob.
             # Empty when scoring is off, which keeps the receiver simple.
