@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import os
-from multiprocessing import Process, Queue, Event
+import threading
+import time
+from multiprocessing import Process, Queue, Event, Value
 from typing import List, Optional
 
 from src.models.Course import Course
@@ -15,13 +17,80 @@ from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleErro
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 from src.logic.checkers.config.CheckerFactory import build_checkers
 from src.logic.comparators.ScheduleScorer import ScheduleScorer
+from src.logic.parallel.SearchSpacePartitioner import SearchSpacePartitioner
+from src.infrastructure.concurrency.QueueWorkSource import QueueWorkSource
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 DEFAULT_MAX_RESULTS = 1000000
 DEFAULT_BATCH_SIZE = 1000
 
 
-def _run_scheduler_process(slots, courses, selected_programs, config, queue, cancel_event, max_results, batch_size):
+def _default_num_processes() -> int:
+    """Picks a worker count for dynamic work-stealing.
+
+    Backtracking is CPU-bound (no I/O waits to fill), so it gets little benefit
+    from SMT/hyperthreading: two such processes sharing one physical core mostly
+    contend for the same cache and execution ports instead of running faster.
+    Measured ~21% higher throughput from physical-core count workers than from
+    logical-core count workers on a 16-logical/10-physical hybrid CPU.
+
+    psutil.cpu_count(logical=False) gives the true physical core count across
+    platforms. Without psutil, os.cpu_count() (logical) is halved as an
+    approximation - imperfect on a true N-physical/N-logical machine (it would
+    underuse it), but safe: it never oversubscribes.
+    """
+    if psutil is not None:
+        physical = psutil.cpu_count(logical=False)
+        if physical:
+            return max(1, physical)
+    return max(1, (os.cpu_count() or 2) // 2)
+
+
+def _feed_work_queue(config, courses, selected_programs, slots, num_processes, work_queue, cancel_event, result_queue):
+    """Runs on a background thread, concurrently with process spawn/startup
+    (see generate_async). Computes the work units - still one blocking call,
+    SearchSpacePartitioner is not a streaming generator - and feeds them into
+    work_queue one at a time, checking cancel_event before each put so an
+    early cap-hit (max_results already reached) stops feeding immediately
+    instead of enqueueing units nobody will ever read.
+
+    Always finishes by sending one sentinel per worker, even on error, so
+    QueueWorkSource.get_next() never blocks forever waiting for a sentinel
+    that was never sent. Partitioning errors are reported on the regular
+    result queue (the same ERROR message type workers already use) since
+    there is no other channel back to SchedulerWorker from this thread.
+    """
+    try:
+        _t0 = time.perf_counter()
+        partition_checkers = build_checkers(config, courses, selected_programs, slots)
+        work_units = SearchSpacePartitioner(partition_checkers).partition(slots, num_processes)
+        # Diagnostics only: how long partitioning itself took, now overlapped
+        # with process startup instead of preceding it. Unrecognized message
+        # types are silently ignored by SchedulerWorker's dispatch table, so
+        # this is harmless for normal (non-benchmark) callers.
+        result_queue.put(("PARTITION_DONE", time.perf_counter() - _t0))
+        for unit in work_units:
+            if cancel_event.is_set():
+                break
+            work_queue.put(unit)
+    except Exception as e:
+        result_queue.put(("ERROR", f"Fatal partitioning error: {type(e).__name__}: {str(e)}"))
+    finally:
+        for _ in range(num_processes):
+            work_queue.put(None)
+        # No producer touches this queue after the sentinels above. Tell its
+        # feeder thread not to block flushing on process exit - otherwise a
+        # worker terminated mid-poll can leave it joining forever and hang
+        # the main process on shutdown (a Windows multiprocessing quirk).
+        work_queue.cancel_join_thread()
+
+
+def _run_scheduler_process(slots, courses, selected_programs, config, queue, cancel_event, max_results, batch_size, work_source=None, result_counter=None, collect_checker_stats=False):
     """
     Isolated process entry point running inside an independent OS child process.
     Builds the conflict checkers locally (from the constraints config) to avoid
@@ -30,7 +99,10 @@ def _run_scheduler_process(slots, courses, selected_programs, config, queue, can
     try:
         checkers = build_checkers(config, courses, selected_programs, slots)
         scorer = ScheduleScorer(courses, selected_programs)
-        runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results, batch_size, scorer)
+        runner = SchedulerProcessRunner(
+            slots, checkers, queue, cancel_event, max_results, batch_size, scorer, work_source, result_counter,
+            collect_checker_stats=collect_checker_stats,
+        )
         runner.run()
     except Exception as e:
         queue.put(("ERROR", f"Fatal scheduling error: {type(e).__name__}: {str(e)}"))
@@ -76,25 +148,45 @@ class SchedulingService:
             raise InfeasibleScheduleError(errors)
 
         if num_processes is None:
-            num_processes = max(1, (os.cpu_count() or 2) - 1)
-        if slots:
-            num_processes = max(1, min(num_processes, len(slots[0].candidateDates), max_results))
-        else:
-            num_processes = 1
+            num_processes = _default_num_processes()
 
-        queue: Queue = Queue(maxsize=50)
         cancel_event = Event()
+        # Shared cross-process counter: under work-stealing, every work unit's
+        # search gets the full max_results as its own independent local cap
+        # (it has no notion of "remaining" budget across units/processes), so a
+        # process-local count cannot enforce the real global limit. Every
+        # accepted schedule reserves one slot here atomically (see
+        # QueueScheduleObserver._reserve_result_slot), making the cap exact
+        # instead of an approximate after-the-fact check in the consumer.
+        result_counter = Value("q", 0)
 
-        partitions = self._partition_slots(slots, num_processes)
-        base_budget = max_results // num_processes
-        remainder   = max_results % num_processes
+        # Two separate queues: results (schedules/progress/finish/error) and work.
+        # work_queue starts EMPTY - cube generation (build_checkers +
+        # SearchSpacePartitioner.partition, ~1-1.3s measured) no longer blocks
+        # here before any process exists. It used to run synchronously on this
+        # thread, serializing partitioning and OS process startup even though
+        # neither depends on the other's result. QueueWorkSource.get_next()
+        # already retries on a momentarily-empty queue, so a process started
+        # before any work exists just waits - it doesn't error or exit early.
+        queue: Queue = Queue(maxsize=50)
+        work_queue: Queue = Queue()
+        work_source = QueueWorkSource(work_queue, cancel_event=cancel_event)
 
+        # A fixed pool of persistent processes. Each gets the FULL slots list (not a
+        # partition) and the SAME shared work source, then steals units until drained.
+        # work_source/result_counter ride as keyword args so the positional args keep
+        # their existing layout (..., max_results, batch_size), preserving backward
+        # compatibility. num_processes is used as-is now (not capped to
+        # len(work_units)) since that count isn't known yet; if fewer units exist
+        # than processes, the extra processes just get their sentinel immediately
+        # and exit cleanly.
         processes: List[Process] = []
-        for i, partition_slots in enumerate(partitions):
-            budget = base_budget + (remainder if i == 0 else 0)
+        for _ in range(num_processes):
             process = Process(
                 target=_run_scheduler_process,
-                args=(partition_slots, courses, program_ids, config, queue, cancel_event, budget, DEFAULT_BATCH_SIZE),
+                args=(slots, courses, program_ids, config, queue, cancel_event,
+                      max_results, DEFAULT_BATCH_SIZE),
+                kwargs={"work_source": work_source, "result_counter": result_counter},
                 daemon=True,
             )
             processes.append(process)
@@ -104,8 +196,19 @@ class SchedulingService:
             cancel_event=cancel_event,
             processes=processes,
             repository=self._repository,
+            max_results=max_results,
         )
         self._worker.start()
+
+        # Now compute the cubes, on a separate thread, concurrently with the
+        # process spawn/startup that .start() just triggered asynchronously.
+        feeder = threading.Thread(
+            target=_feed_work_queue,
+            args=(config, courses, program_ids, slots, num_processes, work_queue, cancel_event, queue),
+            daemon=True,
+        )
+        feeder.start()
+
         return self._worker
 
     @staticmethod

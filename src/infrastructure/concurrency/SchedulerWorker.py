@@ -1,11 +1,13 @@
 """Bridge between the background scheduler processes and the PyQt GUI."""
 from __future__ import annotations
 import queue  # Required to catch the specific queue.Empty exception
+import time
 from multiprocessing import Queue, Process
 from multiprocessing.synchronize import Event
 from typing import List
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from src.infrastructure.concurrency.DiagnosticsReport import format_summary
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
 
@@ -27,7 +29,7 @@ class SchedulerWorker(QThread):
     search_finished       = pyqtSignal()
     error_occurred        = pyqtSignal(str)
 
-    def __init__(self, queue: Queue, cancel_event: Event, processes: List[Process], repository: SQLiteScheduleRepository) -> None:
+    def __init__(self, queue: Queue, cancel_event: Event, processes: List[Process], repository: SQLiteScheduleRepository, max_results: int = None, print_diagnostics: bool = False) -> None:
         super().__init__()
 
         # Shared queue used by all scheduler processes to send messages to this worker.
@@ -38,11 +40,28 @@ class SchedulerWorker(QThread):
         self._processes = processes
         # Repository used to save compressed schedule batches to SQLite.
         self._repository = repository
+        # Global result cap. With dynamic work-stealing there are no per-process
+        # budgets, so the cap is enforced here across all processes. None disables it.
+        self._max_results = max_results
+        # Running total of schedules saved so far, used to trip the global cap.
+        self._saved_count = 0
 
-        # Each process sends one FINISHED message when it completes. 
+        # Each process sends one FINISHED message when it completes.
         # The whole search is done only after all processes have finished.
         self._expected_finishes = len(processes)
         self._finished_count = 0
+
+        # Diagnostics: SQLite write timing (this happens in this very process,
+        # the only consumer, so no Lock is needed) and the dict-shaped FINISHED
+        # payload from every worker process, printed as one summary once the
+        # whole search completes.
+        self._diag_sqlite_write_ms_total = 0.0
+        self._diag_sqlite_write_count = 0
+        self._diag_worker_stats: List[dict] = []
+        self._diag_t_start = None
+        # Off by default: real GUI searches should stay silent. Diagnostics/
+        # benchmark callers opt in explicitly to get the printed summary table.
+        self._print_diagnostics = print_diagnostics
 
         # Maps each queue message type to the method that handles it.
         self._dispatch = {
@@ -54,6 +73,7 @@ class SchedulerWorker(QThread):
 
     def run(self) -> None:
         """Starts the scheduler processes and keeps reading messages from the queue."""
+        self._diag_t_start = time.perf_counter()
         # Start all background processes that perform the heavy scheduling work.
         for process in self._processes:
             process.start()
@@ -165,8 +185,19 @@ class SchedulerWorker(QThread):
         data, count = payload[0], payload[1]
         batch_scores = payload[2] if len(payload) > 2 else None
         if count:
+            _t0 = time.perf_counter()
             self._repository.insert_compressed_batch(data, count, batch_scores)
+            self._diag_sqlite_write_ms_total += (time.perf_counter() - _t0) * 1000
+            self._diag_sqlite_write_count += 1
             self.schedules_batch_found.emit(count)
+            # Enforce the global result cap across all processes: once enough
+            # schedules are saved, ask every process to stop via the shared cancel
+            # flag (already polled inside the search loop). The boundary batch may
+            # overshoot by up to ~N*batch_size, which is accepted for now.
+            self._saved_count += count
+            if self._max_results is not None and self._saved_count >= self._max_results:
+                if self._cancel_event is not None:
+                    self._cancel_event.set()
         return True
 
     def _handle_progress(self, payload) -> bool:
@@ -180,12 +211,24 @@ class SchedulerWorker(QThread):
         return False
 
     def _handle_finished(self, payload) -> bool:
-        """ Handles a FINISHED message from one scheduler process. 
-            The worker keeps listening until every process has sent FINISHED. 
-            Only then the whole scheduling search is complete. 
+        """ Handles a FINISHED message from one scheduler process.
+            The worker keeps listening until every process has sent FINISHED.
+            Only then the whole scheduling search is complete.
         """
+        # payload is a diagnostics dict (see QueueScheduleObserver.on_finished).
+        if isinstance(payload, dict):
+            self._diag_worker_stats.append(payload)
+
         self._finished_count += 1
         if self._finished_count >= self._expected_finishes:
+            if self._print_diagnostics:
+                elapsed = time.perf_counter() - self._diag_t_start if self._diag_t_start else 0.0
+                print(format_summary(
+                    self._diag_worker_stats,
+                    elapsed,
+                    sqlite_write_ms_total=self._diag_sqlite_write_ms_total,
+                    sqlite_write_count=self._diag_sqlite_write_count,
+                ))
             self.search_finished.emit()
             return False  # All processes finished, so stop the loop.
         return True       # Other processes may still send more results.
