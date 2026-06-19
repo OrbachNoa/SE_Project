@@ -4,3 +4,6 @@ pytest>=7.0
 # Phase 2 — GUI
 PyQt6>=6.6.0
 pytest-qt
+
+# Phase 3 — scheduling engine
+psutil>=5.9.0

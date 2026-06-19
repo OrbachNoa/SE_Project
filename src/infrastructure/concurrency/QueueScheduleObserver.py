@@ -5,6 +5,8 @@ from multiprocessing import Queue
 from multiprocessing.synchronize import Event
 from typing import Any
 import pickle
+import queue as _queue_mod
+import time
 import zlib
 from src.logic.observers.IScheduleObserver import IScheduleObserver
 from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
@@ -17,7 +19,15 @@ class QueueScheduleObserver(IScheduleObserver):
     This observer converts schedules to DTOs and sends them through a Queue.
     """
 
-    def __init__(self, queue: Queue, cancel_event: Event, batch_size: int, scorer=None) -> None:
+    def __init__(
+        self,
+        queue: Queue,
+        cancel_event: Event,
+        batch_size: int,
+        scorer=None,
+        result_counter=None,
+        result_limit: "int | None" = None,
+    ) -> None:
         # Queue used to send messages from the scheduler process to the main process.
         self._queue = queue
         # Shared flag used to stop the scheduler when the user clicks cancel.
@@ -27,17 +37,65 @@ class QueueScheduleObserver(IScheduleObserver):
         # Optional ScheduleScorer: when present, each schedule is scored on the
         # live domain object and the scores ride on the DTO.
         self._scorer = scorer
+        # Shared cross-process counter (multiprocessing.Value). With dynamic
+        # work-stealing, every work unit's search gets the full max_results as
+        # its own local cap, so a process-local count cannot enforce the real
+        # global limit - only a counter shared by every process can. Each
+        # schedule reserves one slot here, atomically, before it is buffered,
+        # so the total ever buffered across all processes cannot exceed
+        # result_limit, no matter how many units/processes are in flight.
+        self._result_counter = result_counter
+        self._result_limit = result_limit
         # Temporary buffer for schedules waiting to be sent as one batch.
         self._buffer: list[ScheduleDTO] = []
-        # Remembers the last progress value that was sent. 
+        # Remembers the last progress value that was sent.
         # # For example,  if 50% was already reported, another 50% update will not be sent again.
         self._last_progress_sent: int = -1
+        # Diagnostics: per-process counters reported once via on_finished's
+        # payload. No Lock/Value needed - this instance lives in exactly one
+        # process (built fresh per process by SchedulerProcessRunner), so
+        # nothing else ever touches these fields concurrently. The main
+        # process aggregates by summing each process's own reported total.
+        self.diag_blocked_puts = 0
+        self.diag_lock_wait_ms_total = 0.0
+        self.diag_total_found = 0
+
+    def _reserve_result_slot(self) -> bool:
+        """Atomically reserves one global result slot. Returns False (and sets
+        cancel_event once) when the shared limit is already reached, so the
+        caller skips buffering this schedule instead of exceeding the cap.
+        """
+        if self._result_limit is None or self._result_counter is None:
+            return True
+        _t0 = time.perf_counter()
+        with self._result_counter.get_lock():
+            self.diag_lock_wait_ms_total += (time.perf_counter() - _t0) * 1000
+            if self._result_counter.value >= self._result_limit:
+                return False
+            self._result_counter.value += 1
+            if self._result_counter.value >= self._result_limit and self._cancel_event is not None:
+                self._cancel_event.set()
+        return True
+
+    def _put_to_queue(self, message) -> None:
+        """Routes every queue message through here so blocking puts (the
+        results queue is full) can be counted without changing what gets sent.
+        """
+        try:
+            self._queue.put_nowait(message)
+        except _queue_mod.Full:
+            self.diag_blocked_puts += 1
+            self._queue.put(message)
 
     def on_schedule_found(self, schedule: Any) -> None:
         """
         Converts a found schedule to a DTO and stores it in the local batch buffer.
         The buffer is sent only when it reaches the configured batch size.
         """
+        if not self._reserve_result_slot():
+            return
+        self.diag_total_found += 1
+
         dto = self._to_schedule_dto(schedule)
         # Score on the live domain schedule (year/requirement/real dates present)
         # before it is discarded; store scalars on the DTO for the runtime sort.
@@ -64,7 +122,7 @@ class QueueScheduleObserver(IScheduleObserver):
             # Send a typed message through the queue.
             # "SCHEDULE_BATCH" tells the receiver that this message contains a batch of schedules, 
             # because the same queue is also used for progress, finish, and error messages.
-            self._queue.put(("SCHEDULE_BATCH", (data, len(self._buffer), batch_scores)))
+            self._put_to_queue(("SCHEDULE_BATCH", (data, len(self._buffer), batch_scores)))
             # Clear the buffer after the batch was sent.
             self._buffer = []
 
@@ -75,20 +133,32 @@ class QueueScheduleObserver(IScheduleObserver):
         """
         if value != self._last_progress_sent:
             self._last_progress_sent = value
-            self._queue.put(("PROGRESS", value))
+            self._put_to_queue(("PROGRESS", value))
 
     def should_cancel(self) -> bool:
         """Returns True if the user requested to cancel the scheduling process."""
         return self._cancel_event is not None and self._cancel_event.is_set()
 
-    def on_finished(self) -> None:
-        """Sends all remaining schedules and then reports that the search is finished."""
+    def on_finished(self, extra_stats: "dict | None" = None) -> None:
+        """Sends all remaining schedules, then reports that the search is
+        finished. The FINISHED payload is a diagnostics dict (not None):
+        this observer's own queue/lock counters, merged with whatever the
+        caller (SchedulerProcessRunner) knows about its own run - e.g. how
+        many cubes it processed, per-checker rejection stats.
+        """
         self._flush_buffer()
-        self._queue.put(("FINISHED", None))
+        payload = {
+            "blocked_puts": self.diag_blocked_puts,
+            "lock_wait_ms_total": self.diag_lock_wait_ms_total,
+            "schedules_found": self.diag_total_found,
+        }
+        if extra_stats:
+            payload.update(extra_stats)
+        self._queue.put(("FINISHED", payload))
 
     def on_error(self, message: str) -> None:
         """Sends an error message to the main process."""
-        self._queue.put(("ERROR", message))
+        self._put_to_queue(("ERROR", message))
 
     def _to_schedule_dto(self, schedule: Any) -> ScheduleDTO:
         """
