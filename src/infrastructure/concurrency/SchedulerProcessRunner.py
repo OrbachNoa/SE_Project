@@ -74,7 +74,7 @@ class SchedulerProcessRunner:
             scheduler = self._create_scheduler()
 
             # Starts the actual backtracking algorithm.
-            scheduler.generateSchedules(self._slots, observer, self._max_results)
+            scheduler.generateSchedules(self._slots, observer, self._max_results, scorer=self._scorer)
 
             # Notifies the main process that we finished successfully.
             observer.on_finished(extra_stats={
@@ -120,7 +120,7 @@ class SchedulerProcessRunner:
                 ]
                 # Full search of this cube: resume from the seed, no target_depth.
                 scheduler.generateSchedules(
-                    self._slots, observer, self._max_results, seed_assignments=seeds
+                    self._slots, observer, self._max_results, seed_assignments=seeds, scorer=self._scorer
                 )
 
             # One FINISHED for the whole process, after all its units are done.
@@ -148,6 +148,7 @@ class SchedulerProcessRunner:
             self._scorer,
             result_counter=self._result_counter,
             result_limit=self._max_results,
+            slots=self._slots,
         )
 
     def _create_scheduler(self) -> Scheduler:

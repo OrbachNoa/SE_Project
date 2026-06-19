@@ -60,6 +60,7 @@ class Scheduler:
         target_depth: Optional[int] = None,
         seed_assignments: Optional[List[ExamAssignment]] = None,
         use_mrv: bool = True,
+        scorer=None,
     ) -> None:
         """Runs the search and streams valid schedules via observer.
 
@@ -91,13 +92,21 @@ class Scheduler:
         if target_depth is None:
             target_depth = len(slots)
 
-        schedule = ExamSchedule()
+        schedule = ExamSchedule(
+            use_ordinal_index=any(
+                getattr(checker, "uses_ordinal_date_index", False)
+                for checker in self._checkers
+            )
+        )
+        score_state = scorer.create_state() if scorer is not None and hasattr(scorer, "create_state") else None
 
         # Pre-load the seed (already validated by the partitioner) without
         # re-running checkers; the search then resumes from the slots after it.
         if seed_assignments:
             for assignment in seed_assignments:
                 schedule.addAssignment(assignment)
+                if score_state is not None:
+                    score_state.add_assignment(assignment)
             remaining_slots = slots[len(seed_assignments):]
         else:
             remaining_slots = slots
@@ -112,7 +121,7 @@ class Scheduler:
 
         # Uses a list for the counter to pass it by reference during recursion.
         found_count = [0]
-        self._backtrack(domains, schedule, observer, found_count, max_results, target_depth, use_mrv)
+        self._backtrack(domains, schedule, observer, found_count, max_results, target_depth, use_mrv, score_state)
 
     def _forward_check(self, domains: List[_Domain], schedule: ExamSchedule) -> Optional[List[_Domain]]:
         """Returns the domains keeping only dates still consistent with the
@@ -190,6 +199,7 @@ class Scheduler:
         max_results: int,
         target_depth: int,
         use_mrv: bool,
+        score_state=None,
     ) -> None:
 
         # Checks cancellation on every iteration to stop recursion immediately if the user clicked cancel.
@@ -206,7 +216,10 @@ class Scheduler:
         if len(schedule.assignments) == target_depth:
             # This schedule will keep changing during backtracking.
             # The observer must copy or convert it now if it wants to keep this result.
-            observer.on_schedule_found(schedule)
+            if score_state is not None and hasattr(observer, "on_scored_schedule_found"):
+                observer.on_scored_schedule_found(schedule, score_state.score())
+            else:
+                observer.on_schedule_found(schedule)
             found_count[0] += 1
             return
 
@@ -229,12 +242,16 @@ class Scheduler:
                 course=slot.course, date=exam_date, moed=slot.moed, semester=slot.semester
             )
             schedule.addAssignment(assignment)
+            if score_state is not None:
+                score_state.add_assignment(assignment)
 
             # Propagate this choice into the remaining slots' domains. If it
             # empties any of them, this branch is a dead end and we skip it.
             narrowed_rest = self._forward_check(rest, schedule)
             if narrowed_rest is not None:
-                self._backtrack(narrowed_rest, schedule, observer, found_count, max_results, target_depth, use_mrv)
+                self._backtrack(narrowed_rest, schedule, observer, found_count, max_results, target_depth, use_mrv, score_state)
 
             # Remove the assignment before trying the next possible date.
+            if score_state is not None:
+                score_state.pop_assignment()
             schedule.pop_last_assignment()
