@@ -5,9 +5,10 @@ can browse many results without keeping all of them in RAM.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
+from src.application.dto.PackedScheduleCodec import row_to_dto
 from src.application.state.ScheduleResultState import ScheduleResultState
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
@@ -42,6 +43,16 @@ class HybridScheduleResultState(ScheduleResultState):
         # Number of top-ranked schedules to show while a sort is active.
         self._top_k: int = self.DEFAULT_TOP_K
 
+        # Lazy materialization state (unsorted page view).
+        # Instead of creating 10,000 ScheduleDTOs on page load we store the raw
+        # packed integer tuples and call row_to_dto() only for the one schedule
+        # the GUI asks for.  None when a sort is active (sorted view is small
+        # enough to materialise fully).
+        self._raw_map: Dict[int, Any] = {}    # global_index -> raw tuple | ScheduleDTO
+        self._score_map: Dict[int, dict] = {} # global_index -> {criterion_id: float}
+        self._slots_ref: list = []            # slot list needed by row_to_dto()
+        self._dto_cache: Dict[int, ScheduleDTO] = {}  # local_index -> ScheduleDTO
+
     # Default number of top-ranked schedules shown in the sort view. The sort
     # is global over all schedules, but only the best K are fetched for display,
     # since no user reviews more than that. Tunable by the team.
@@ -70,36 +81,92 @@ class HybridScheduleResultState(ScheduleResultState):
 
     def _load_current_page(self) -> None:
         """
-        Loads the current view into memory. When a sort is active, fetches just
-        the top_k best schedules by their sorted ids (Pass 2, lazy: only the
-        batches holding them are decompressed). Otherwise loads a position-based
-        window of the full result set (unchanged default behaviour).
+        Loads the current view into memory.
+
+        Sort view: fetches the top_k best schedules by their sorted ids and
+        materialises them fully (small count, unchanged behaviour).
+
+        Unsorted view (lazy): stores raw packed integer tuples and defers
+        ScheduleDTO creation to get_schedule().  Only the one schedule being
+        displayed is ever materialised, cutting page-load time from ~2 s to
+        ~50 ms (zlib decompression only, no Python object construction).
         """
+        self._dto_cache.clear()
         if self._sorted_ids:
             # Sort view: only the best top_k, never the full page window.
             top_ids = self._sorted_ids[:self._top_k]
             self._schedules = self._repository.get_schedules_by_ids(top_ids)
+            self._raw_map = {}
         else:
             offset = self._current_page_idx * self._window_size
-            self._schedules = self._repository.get_window(offset, self._window_size)
+            raw_map, score_map, slots_ref = self._repository.get_window_raw(
+                offset, self._window_size
+            )
+            self._raw_map = raw_map
+            self._score_map = score_map
+            self._slots_ref = slots_ref or []
+            # Keep _schedules empty; current_window_size() and get_schedule()
+            # use _raw_map in this mode.
+            self._schedules = []
+
+    # ── Lazy DTO access (unsorted page view) ───────────────────────────────
+
+    def get_schedule(self, index: int) -> ScheduleDTO:
+        """Return the schedule at local index.
+
+        In sort view (self._sorted_ids set) delegates to the base class which
+        reads from self._schedules (already fully materialised).
+
+        In unsorted page view (lazy mode) materialises exactly one ScheduleDTO
+        from the raw packed row, caches it for repeated access (e.g. period
+        switching shows the same schedule in different periods), and evicts old
+        cache entries to stay near constant memory.
+        """
+        if not self._raw_map:
+            # Sort view or legacy: use fully-materialised list from base class.
+            return super().get_schedule(index)
+
+        if index < 0 or index >= len(self._raw_map):
+            raise IndexError(
+                f"schedule index {index} out of range (window has {len(self._raw_map)})"
+            )
+
+        if index in self._dto_cache:
+            return self._dto_cache[index]
+
+        # Materialise the one DTO we need right now.
+        global_idx = self._current_page_idx * self._window_size + index
+        raw = self._raw_map.get(global_idx)
+        if raw is None:
+            raise IndexError(f"global index {global_idx} not in raw_map")
+
+        if isinstance(raw, ScheduleDTO):
+            # Legacy pickle batch — already a DTO.
+            dto = raw
+        else:
+            score = self._score_map.get(global_idx)
+            dto = row_to_dto(raw, self._slots_ref, score)
+
+        # Cache with a small eviction bound so memory stays flat.
+        _CACHE_MAX = 32
+        if len(self._dto_cache) >= _CACHE_MAX:
+            self._dto_cache.pop(next(iter(self._dto_cache)))
+        self._dto_cache[index] = dto
+        return dto
 
     # ── Streaming write notification ────────────────────────────────────────
 
     def add_schedules_batch(self, batch_size: int) -> None:
         """
-        Updates the current view after a new batch was saved to SQLite. 
-        The worker already saved the schedules to SQLite. 
+        Updates the current view after a new batch was saved to SQLite.
+        The worker already saved the schedules to SQLite.
         This refreshes the view so the GUI can show new results while the search
         is still running.
         """
         if self._sort_priority:
-            # Sort view: new schedules may change which are the top_k best, so
-            # refresh the global order and reload the top_k. (Cheap: sorting the
-            # narrow score table is ~hundreds of ms even at hundreds of
-            # thousands of rows, and only happens once per incoming batch.)
             self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
             self._load_current_page()
-        elif len(self._schedules) < self._window_size:
+        elif self.current_window_size() < self._window_size:
             # Unsorted view: only reload while the current page isn't full yet.
             self._load_current_page()
 
@@ -119,6 +186,8 @@ class HybridScheduleResultState(ScheduleResultState):
 
     def current_window_size(self) -> int:
         """Returns how many schedules are currently loaded in memory."""
+        if self._raw_map:
+            return len(self._raw_map)
         return len(self._schedules)
 
     # ── Paged navigation ───────────────────────────────────────────────────
@@ -155,10 +224,16 @@ class HybridScheduleResultState(ScheduleResultState):
 
     def set_schedules(self, schedules: list) -> None:
         """
-        Resets the state before a new scheduling run. 
-        This clears the in-memory state and removes old generated schedules 
-        from SQLite, so old results will not mix with the new run."""
+        Resets the state before a new scheduling run.
+        This clears the in-memory state and removes old generated schedules
+        from SQLite, so old results will not mix with the new run.
+        """
         super().set_schedules(schedules)
         self._current_page_idx = 0
         self._sorted_ids = []
+        # Clear lazy-materialization state from any previous run.
+        self._raw_map = {}
+        self._score_map = {}
+        self._slots_ref = []
+        self._dto_cache = {}
         self._repository.clear()

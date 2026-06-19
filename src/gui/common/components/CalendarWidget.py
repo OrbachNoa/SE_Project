@@ -21,6 +21,11 @@ class CalendarWidget(QWidget):
         super().__init__(parent)
         self._day_layouts: Dict[str, QVBoxLayout] = {}
         self._day_frames: Dict[str, QFrame] = {}
+        # Cache: tracks which date list the current grid was built for.
+        # When the same date list is requested again only exam badges are
+        # cleared and re-added — the ~60 QFrame cells are NOT destroyed and
+        # rebuilt, which was the main cause of the 1.5 s solution-switch lag.
+        self._current_date_list: List[str] = []
         self._init_ui()
 
     # Set up the visual skeleton of the calendar, including headers and the scrolling area
@@ -70,9 +75,27 @@ class CalendarWidget(QWidget):
         show_month_header: bool = True,
         show_month_banner: bool = True,
     ) -> None:
-        """Clear the calendar grid and create one cell for each ISO date."""
+        """Clear the calendar grid and create one cell for each ISO date.
+
+        Grid caching: when called with the same date_list as before (i.e. the
+        user is navigating between solutions within the same exam period) the
+        ~60 QFrame day-cells are kept alive and only the exam badge labels are
+        removed.  This avoids the expensive destroy+create cycle that caused
+        the ~1.5 s lag on every prev/next solution click.
+
+        A full rebuild happens only when the date range actually changes (e.g.
+        switching to a different exam period or first render).
+        """
         self._refresh_month_banner(date_list, show_month_banner)
+
+        # Fast path: same date range — only clear exam badges, keep the grid.
+        if date_list == self._current_date_list:
+            self._clear_assignment_badges()
+            return
+
+        # Slow path: different date range — full rebuild.
         self._clear_grid()
+        self._current_date_list = list(date_list)
 
         # Ensure all 7 columns (days of the week) have equal width
         for column in range(7):
@@ -116,6 +139,21 @@ class CalendarWidget(QWidget):
 
         self._day_layouts.clear()
         self._day_frames.clear()
+        self._current_date_list = []
+
+    def _clear_assignment_badges(self) -> None:
+        """Remove exam badge labels while keeping the day-number label (index 0)
+        and the day-cell QFrame itself.  Called on the fast path when the date
+        list hasn't changed between renders (e.g. switching solutions within the
+        same period).  Much cheaper than tearing down and rebuilding 60+ QFrames.
+        """
+        for layout in self._day_layouts.values():
+            # Index 0 is the day-number QLabel — keep it; remove everything else.
+            while layout.count() > 1:
+                item = layout.takeAt(1)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
 
     # Draw the calendar by grouping the days into separate chunks with a title for each month
     def _build_grid_with_month_headers(self, date_list: List[str]) -> None:

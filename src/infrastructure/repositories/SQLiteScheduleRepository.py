@@ -237,6 +237,58 @@ class SQLiteScheduleRepository:
 
         return [result_by_id[g] for g in range(offset, offset + limit) if g in result_by_id]
 
+    def get_window_raw(self, offset: int, limit: int) -> tuple:
+        """Fast alternative to get_window() that avoids creating 10,000 ScheduleDTOs
+        on the GUI thread (which caused ~2 s page-switch lag).
+
+        Returns (raw_map, score_map, slots) where:
+          raw_map   : Dict[int, tuple | ScheduleDTO]
+                      global_index -> raw row tuple (packed format) or ScheduleDTO
+                      (legacy pickle batches are already fully materialised).
+          score_map : Dict[int, dict]
+                      global_index -> {criterion_id: float}
+          slots     : the slot list required by row_to_dto() to reconstruct one DTO
+
+        The caller stores raw_map and calls row_to_dto() lazily — only for the
+        single schedule it needs to display at any moment.
+        """
+        with self._lock:
+            db_rows = self._conn.execute(
+                """
+                SELECT first_offset, batch_count, data
+                FROM   schedule_batches
+                WHERE  first_offset + batch_count > :start
+                  AND  first_offset              < :end
+                ORDER BY first_offset
+                """,
+                {"start": offset, "end": offset + limit},
+            ).fetchall()
+
+        wanted = set(range(offset, offset + limit))
+        raw_map: dict = {}
+
+        for first_off, batch_count, raw_blob in db_rows:
+            data = zlib.decompress(raw_blob)
+            if is_packed_blob(data):
+                # Fast path: unpack raw integer rows — no ScheduleDTO created.
+                _, rows = unpack_rows(data)
+                for gidx in wanted:
+                    if first_off <= gidx < first_off + batch_count:
+                        raw_map[gidx] = rows[gidx - first_off]
+            else:
+                # Legacy pickle: must materialise fully (old format has no raw rows).
+                batch: List[ScheduleDTO] = pickle.loads(data)
+                for i, dto in enumerate(batch):
+                    gidx = first_off + i
+                    if gidx in wanted:
+                        raw_map[gidx] = dto
+            if len(raw_map) >= limit:
+                break
+
+        # Fetch scores in one batch query — just floats, negligible cost.
+        score_map = self._scores_for_ids(list(raw_map.keys()))
+        return raw_map, score_map, self._slots
+
     # ── Option B: global sort + lazy fetch ─────────────────────────────────
 
     def get_sorted_ids(self, priority: List[str]) -> List[int]:
