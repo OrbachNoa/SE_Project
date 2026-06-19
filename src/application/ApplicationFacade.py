@@ -35,6 +35,9 @@ class ApplicationFacade:
         self._scheduler = scheduler
         self._exporter = exporter
         self._mapper = mapper
+        # Keeps track of the current worker so the previous one can be cleanly
+        # cancelled and disconnected when a new generation run starts.
+        self._worker = None
 
     def import_file(self, request: ImportRequest) -> ImportResult:
         """Imports a single data asset file using the parsing engine; internal state registers adapt accordingly."""
@@ -49,6 +52,18 @@ class ApplicationFacade:
         Launches the scheduling computation pipeline asynchronously inside a dedicated background process thread.
         Clears out stale operational states prior to startup execution to prevent data bleeding across multiple runs.
         """
+        # Cancel the previous worker and disconnect its signal before starting a new run.
+        # Without this, old worker processes keep writing to the (now-cleared) SQLite
+        # repository and keep emitting signals that corrupt the new run's state — which
+        # caused crashes when sort was active (old blobs decoded with new slots).
+        if self._worker is not None:
+            try:
+                self._worker.schedules_batch_found.disconnect(self._on_schedules_batch_received)
+            except RuntimeError:
+                pass  # Already disconnected or worker was garbage-collected
+            self._worker.cancel()
+            self._worker = None
+
         # Clear previous run data to ensure a completely clean execution target context
         self._state.get_schedule_state().set_schedules([])
 
@@ -61,9 +76,10 @@ class ApplicationFacade:
             program_ids, input_state.get_courses(), input_state.get_periods(),
             config=config
         )
-        
+
         # Connect the asynchronous stream notification line to capture batch updates live
         worker.schedules_batch_found.connect(self._on_schedules_batch_received)
+        self._worker = worker
         return worker
 
     def _on_schedules_batch_received(self, batch_size: int) -> None:
