@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional, TYPE_CHECKING
 
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QSettings
 
 from src.application.ImportBoundary import ImportMode, ImportRequest, ImportResult
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
@@ -146,6 +146,30 @@ class AppController(QObject):
     def get_page_info(self) -> dict:
         """Extracts metadata snapshots detailing current navigation cursor index bounds information."""
         return self._facade.get_page_info()
+
+    # ------------------------------------------------------------------
+    # Sort configuration
+    # ------------------------------------------------------------------
+
+    def apply_sort_config(self, priority_list: List[str]) -> None:
+        """Applies sort configuration to the facade."""
+        self._facade.apply_sort(priority_list)
+
+    def load_sort_config(self) -> List[str]:
+        """Loads sort configuration from persistent settings."""
+        settings = QSettings("SE_Project", "Scheduler")
+        val = settings.value("output/sort_priority", [])
+        if isinstance(val, str):
+            return [val] if val else []
+        elif val is None:
+            return []
+        else:
+            return [str(x) for x in val]
+
+    def save_sort_config(self, priority_list: List[str]) -> None:
+        """Saves sort configuration to persistent settings."""
+        settings = QSettings("SE_Project", "Scheduler")
+        settings.setValue("output/sort_priority", priority_list)
 
     # ------------------------------------------------------------------
     # State accessors for GUI components

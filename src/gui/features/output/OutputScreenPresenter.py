@@ -1,11 +1,9 @@
 """Presentation logic for the output screen."""
 from __future__ import annotations
 
+from typing import List
+
 from gui.features.output.PeriodNavigator import PeriodNavigator
-
-
-_PAGE_WINDOW = 10_000
-
 
 class OutputScreenPresenter:
     """Coordinates schedule paging, period navigation, display, and export guards."""
@@ -22,10 +20,13 @@ class OutputScreenPresenter:
         self._total_pages = 0
         self._total_found = 0
         self._sqlite_count = 0
+        self._window_capacity = 10000
         self._periods = PeriodNavigator()
 
         # Listen for updates from the background controller regarding the total number of solutions found
         self._controller.total_count_updated.connect(self.on_total_count_updated)
+        if hasattr(self._controller, "search_finished"):
+            self._controller.search_finished.connect(self.on_search_finished)
 
     @property
     def current_index(self) -> int:
@@ -52,7 +53,7 @@ class OutputScreenPresenter:
             return
 
         next_page_index = self._current_page + 1
-        rows_needed_on_disk = next_page_index * _PAGE_WINDOW
+        rows_needed_on_disk = next_page_index * self._window_capacity
         next_page_is_ready = self._sqlite_count >= rows_needed_on_disk
         has_next = self._current_page < self._total_pages - 1
 
@@ -208,6 +209,23 @@ class OutputScreenPresenter:
         self.refresh_counter()
         self._view.focus_back_button()
 
+    def on_sort_config_changed(self, priority_list: List[str]) -> None:
+        """Called when sorting priority is updated and applied from the SortConfigPanel."""
+        if hasattr(self._controller, "apply_sort_config"):
+            self._controller.apply_sort_config(priority_list)
+        if hasattr(self._controller, "save_sort_config"):
+            self._controller.save_sort_config(priority_list)
+        self._sync_page_info()
+        self._current_index = 0
+        self.show_current()
+        self.refresh_counter()
+
+    def on_search_finished(self) -> None:
+        """Refresh the UI when schedule generation is finished."""
+        self._sync_page_info()
+        self.show_current()
+        self.refresh_counter()
+
     # Load a specific data page from the database
     def _load_page(self, target: int) -> None:
         if target < 0 or target >= self._total_pages:
@@ -227,6 +245,7 @@ class OutputScreenPresenter:
         self._total = info["window_size"]
         self._total_found = info["total_count"]
         self._sqlite_count = info.get("sqlite_count", 0)
+        self._window_capacity = info.get("window_capacity", 10000)
 
     # Retrieve period configurations from the controller
     def _get_available_periods(self):

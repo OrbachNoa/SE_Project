@@ -104,12 +104,14 @@ class ApplicationFacade:
     def get_page_info(self) -> dict:
         """Extracts a structural configuration dictionary detailing current navigation pagination thresholds for UI binding components."""
         state = self._state.get_schedule_state()
+        window_size = getattr(state, "_window_size", 10000)
         return {
             "current_page":  state.current_page,
             "total_pages":   state.total_pages(),
             "total_count":   state.count(),
             "window_size":   state.current_window_size(),
             "sqlite_count":  state.sqlite_count(),
+            "window_capacity": window_size,
         }
 
     def set_constraints_config(self, config: ConstraintsConfig) -> None:
@@ -132,3 +134,7 @@ class ApplicationFacade:
         """Routes targeted on-memory result profiles directly out towards concrete disk serialization endpoints."""
         dto = self._state.get_schedule_state().get_schedule(index)
         self._exporter.save(dto, path)
+
+    def apply_sort(self, priority_list: List[str]) -> None:
+        """Applies sort priority to the generated schedule results state."""
+        self._state.get_schedule_state().set_sort_priority(priority_list)

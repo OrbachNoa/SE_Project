@@ -21,7 +21,7 @@ DEFAULT_MAX_RESULTS = 1000000
 DEFAULT_BATCH_SIZE = 1000
 
 
-def _run_scheduler_process(slots, courses, selected_programs, config, queue, cancel_event, max_results, batch_size):
+def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results, batch_size, config=None):
     """
     Isolated process entry point running inside an independent OS child process.
     Builds the conflict checkers locally (from the constraints config) to avoid
@@ -33,7 +33,8 @@ def _run_scheduler_process(slots, courses, selected_programs, config, queue, can
         runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results, batch_size, scorer)
         runner.run()
     except Exception as e:
-        queue.put(("ERROR", f"Fatal scheduling error: {type(e).__name__}: {str(e)}"))
+        if queue is not None:
+            queue.put(("ERROR", f"Fatal scheduling error: {type(e).__name__}: {str(e)}"))
 
 
 class SchedulingService:
@@ -94,7 +95,8 @@ class SchedulingService:
             budget = base_budget + (remainder if i == 0 else 0)
             process = Process(
                 target=_run_scheduler_process,
-                args=(partition_slots, courses, program_ids, config, queue, cancel_event, budget, DEFAULT_BATCH_SIZE),
+                args=(partition_slots, courses, program_ids, queue, cancel_event, budget, DEFAULT_BATCH_SIZE),
+                kwargs={"config": config},
                 daemon=True,
             )
             processes.append(process)
