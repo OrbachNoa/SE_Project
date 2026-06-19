@@ -152,5 +152,18 @@ class ApplicationFacade:
         self._exporter.save(dto, path)
 
     def apply_sort(self, priority_list: List[str]) -> None:
-        """Applies sort priority to the generated schedule results state."""
+        """Applies sort order synchronously (GUI thread)."""
         self._state.get_schedule_state().set_sort_priority(priority_list)
+
+    def compute_sort_data(self, priority_list: List[str]) -> dict:
+        """Reads the data needed to apply a new sort order. Touches only the
+        SQLite repository (thread-safe) and does not mutate the live schedule
+        state, so it is safe to call from a background thread.
+        """
+        return self._state.get_schedule_state().compute_sort_data(priority_list)
+
+    def apply_sort_data(self, data: dict) -> None:
+        """Applies sort data previously computed by compute_sort_data().
+        Mutates the live schedule state, so must be called on the GUI thread.
+        """
+        self._state.get_schedule_state().apply_sort_data(data)

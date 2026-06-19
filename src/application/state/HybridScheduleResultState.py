@@ -12,28 +12,11 @@ from src.application.dto.PackedScheduleCodec import row_to_dto
 from src.application.state.ScheduleResultState import ScheduleResultState
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 
-# Maximum number of schedules loaded into memory at one time.
 WINDOW_SIZE = 10_000
 
 
 class HybridScheduleResultState(ScheduleResultState):
-    """
-    Manages schedule results using SQLite as the main storage.
-    SQLite contains all generated schedules.
-    This class keeps only the current window/page in memory for the GUI.
-
-    Both the unsorted and sorted views use lazy DTO materialization: on page
-    load only raw packed integer tuples are held in _raw_map; a full ScheduleDTO
-    is created on demand in get_schedule() only for the one result being shown.
-    This means a sorted page of 10,000 results takes no longer to load than an
-    unsorted one -- the expensive zlib+struct work happens once per navigation.
-    """
-
-    def __init__(
-        self,
-        repository: SQLiteScheduleRepository,
-        window_size: int = WINDOW_SIZE,
-    ) -> None:
+    def __init__(self, repository: SQLiteScheduleRepository, window_size: int = WINDOW_SIZE) -> None:
         super().__init__()
         self._repository = repository
         self._window_size = window_size
@@ -45,10 +28,6 @@ class HybridScheduleResultState(ScheduleResultState):
         self._dto_cache: Dict[int, ScheduleDTO] = {}
 
     def set_sort_priority(self, priority: list) -> None:
-        """Sets the global sort order and reloads the first page.
-
-        Empty priority clears the sort and returns to position-based paging.
-        """
         self._sort_priority = list(priority)
         if self._sort_priority:
             self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
@@ -59,26 +38,20 @@ class HybridScheduleResultState(ScheduleResultState):
         self._load_current_page()
 
     def _load_current_page(self) -> None:
-        """Loads the current view into _raw_map using lazy materialization."""
         self._dto_cache.clear()
         self._schedules = []
-
         if self._sorted_ids:
             start = self._current_page_idx * self._window_size
             page_ids = self._sorted_ids[start:start + self._window_size]
             raw_map, score_map, slots_ref = self._repository.get_raw_by_ids(page_ids)
         else:
             offset = self._current_page_idx * self._window_size
-            raw_map, score_map, slots_ref = self._repository.get_window_raw(
-                offset, self._window_size
-            )
-
+            raw_map, score_map, slots_ref = self._repository.get_window_raw(offset, self._window_size)
         self._raw_map = raw_map
         self._score_map = score_map
         self._slots_ref = slots_ref or []
 
     def get_schedule(self, index: int) -> ScheduleDTO:
-        """Return the ScheduleDTO at local page index (lazy -- one DTO at a time)."""
         if not self._raw_map:
             return super().get_schedule(index)
 
@@ -104,6 +77,11 @@ class HybridScheduleResultState(ScheduleResultState):
 
         raw = self._raw_map.get(global_idx)
         if raw is None:
+            # _raw_map is stale (sort applied mid-run; new results arrived).
+            # Reload transparently so the caller gets a valid DTO instead of crash.
+            self._load_current_page()
+            raw = self._raw_map.get(global_idx)
+        if raw is None:
             raise IndexError(f"global index {global_idx} not in raw_map")
 
         if isinstance(raw, ScheduleDTO):
@@ -119,16 +97,16 @@ class HybridScheduleResultState(ScheduleResultState):
         return dto
 
     def add_schedules_batch(self, batch_size: int) -> None:
-        """Updates the current view after a new batch was saved to SQLite."""
         if self._sort_priority:
+            # Only refresh sorted id list (fast: ORDER BY on narrow score table).
+            # Do NOT call _load_current_page() — get_raw_by_ids() decompresses
+            # every batch whose range overlaps the scattered sorted ids = O(n²)
+            # work that freezes the GUI and causes page-count jumps and crashes.
             self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
-            if self.current_window_size() < self._window_size:
-                self._load_current_page()
         elif self.current_window_size() < self._window_size:
             self._load_current_page()
 
     def count(self) -> int:
-        """Returns the total number of schedules stored in SQLite."""
         return self._repository.count()
 
     def sqlite_count(self) -> int:
@@ -161,7 +139,6 @@ class HybridScheduleResultState(ScheduleResultState):
         self._load_current_page()
 
     def set_schedules(self, schedules: list) -> None:
-        """Resets the state before a new scheduling run."""
         super().set_schedules(schedules)
         self._current_page_idx = 0
         self._sorted_ids = []
