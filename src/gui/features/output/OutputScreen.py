@@ -94,6 +94,7 @@ class OutputScreen(Screen):
     def _connect_events(self) -> None:
         self.solution_bar.back_btn.clicked.connect(self._presenter.on_back)
         self.solution_bar.export_btn.clicked.connect(self._presenter.on_export_pdf)
+        self.solution_bar.sort_btn.clicked.connect(self._on_open_sort_panel)
         self.solution_bar.prev_btn.clicked.connect(self._presenter.on_prev_solution)
         self.solution_bar.next_btn.clicked.connect(self._presenter.on_next_solution)
         self.solution_bar.solution_input.returnPressed.connect(self._presenter.on_jump_to_solution)
@@ -220,6 +221,13 @@ class OutputScreen(Screen):
 
     def _on_export_pdf(self) -> None:
         self._presenter.on_export_pdf()
+
+    def _on_open_sort_panel(self) -> None:
+        from gui.features.output.widgets.SortConfigPanel import SortConfigPanel
+        current_priority = self._presenter._controller.load_sort_config()
+        dialog = SortConfigPanel(current_priority, self)
+        dialog.config_changed.connect(self._presenter.on_sort_config_changed)
+        dialog.exec()
 
     def _on_prev_month(self) -> None:
         self._presenter.on_prev_period()

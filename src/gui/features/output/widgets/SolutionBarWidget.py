@@ -30,12 +30,20 @@ class SolutionBarWidget(QFrame):
         layout.addWidget(self.back_btn)
 
         # Export saves the schedule on screen to a PDF.
-        self.export_btn = QPushButton("⬇  Export PDF")
+        self.export_btn = QPushButton("Export PDF")
         self.export_btn.setObjectName("btn-export")
         self.export_btn.setToolTip("Save the current schedule as a PDF file")
         self.export_btn.setFixedHeight(36)
         self.export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self.export_btn)
+
+        # Sort configuration panel button
+        self.sort_btn = QPushButton("Sort")
+        self.sort_btn.setObjectName("btn-sort")
+        self.sort_btn.setToolTip("Configure sort priority for schedules")
+        self.sort_btn.setFixedHeight(36)
+        self.sort_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout.addWidget(self.sort_btn)
 
         # Adds invisible space to push subsequent groups to the right
         layout.addStretch()
@@ -55,7 +63,7 @@ class SolutionBarWidget(QFrame):
 
         # Input field to jump directly to a specific solution number
         self.solution_input = QLineEdit()
-        self.solution_input.setValidator(QIntValidator(1, 10000))
+        self.solution_input.setValidator(QIntValidator(1, 10_000))
         self.solution_input.setPlaceholderText("Solution number")
         self.solution_input.setToolTip("Current solution number - Enter a number (1-10000) and press Enter to jump")
         self.solution_input.setFixedWidth(80)
