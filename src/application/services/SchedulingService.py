@@ -90,7 +90,7 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
         work_queue.cancel_join_thread()
 
 
-def _run_scheduler_process(slots, courses, selected_programs, config, queue, cancel_event, max_results, batch_size, work_source=None, result_counter=None, collect_checker_stats=False):
+def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results, batch_size, config=None, work_source=None, result_counter=None, collect_checker_stats=False):
     """
     Isolated process entry point running inside an independent OS child process.
     Builds the conflict checkers locally (from the constraints config) to avoid
@@ -105,7 +105,8 @@ def _run_scheduler_process(slots, courses, selected_programs, config, queue, can
         )
         runner.run()
     except Exception as e:
-        queue.put(("ERROR", f"Fatal scheduling error: {type(e).__name__}: {str(e)}"))
+        if queue is not None:
+            queue.put(("ERROR", f"Fatal scheduling error: {type(e).__name__}: {str(e)}"))
 
 
 class SchedulingService:
@@ -184,9 +185,9 @@ class SchedulingService:
         for _ in range(num_processes):
             process = Process(
                 target=_run_scheduler_process,
-                args=(slots, courses, program_ids, config, queue, cancel_event,
+                args=(slots, courses, program_ids, queue, cancel_event,
                       max_results, DEFAULT_BATCH_SIZE),
-                kwargs={"work_source": work_source, "result_counter": result_counter},
+                kwargs={"work_source": work_source, "result_counter": result_counter, "config": config},
                 daemon=True,
             )
             processes.append(process)

@@ -1,12 +1,13 @@
-"""Keeps only the currently visible schedule window in memory. 
-All generated schedules are stored in SQLite by the background worker. 
-This state object loads only one page/window of schedules at a time, so the UI 
-can browse many results without keeping all of them in RAM.
+"""
+SQLite-backed schedule result state.
+All schedules live in SQLite; only the current page is held in RAM.
+Sorted view loads sorted gidxs (integers) on page entry, then fetches
+one schedule per navigation step via the repository's batch cache.
 """
 from __future__ import annotations
 
 from typing import List
-
+from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.application.state.ScheduleResultState import ScheduleResultState
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
@@ -16,11 +17,7 @@ WINDOW_SIZE = 10_000
 
 
 class HybridScheduleResultState(ScheduleResultState):
-    """
-    Manages schedule results using SQLite as the main storage. 
-    SQLite contains all generated schedules. 
-    This class keeps only the current window/page in memory for the GUI.
-    """
+    """Pages through SQLite-stored schedules; sorted pages stream DTOs on demand."""
 
     def __init__(
         self,
@@ -30,77 +27,73 @@ class HybridScheduleResultState(ScheduleResultState):
         super().__init__()
         # Repository that stores and loads generated schedules from SQLite.
         self._repository = repository
-        # Number of schedules to load into memory for one page/window.
+        # Number of schedules per page.
         self._window_size = window_size
         # Zero-based index of the currently loaded page.
         self._current_page_idx: int = 0
-        # Option B: when a sort is active, this holds the GLOBALLY sorted list of
-        # schedule ids (lightweight integers). Pages are then served by fetching
-        # the schedules for the ids in the current page slice. Empty when no sort
-        # is active, in which case paging falls back to position-based windows.
-        self._sorted_ids: List[int] = []
-        # Number of top-ranked schedules to show while a sort is active.
-        self._top_k: int = self.DEFAULT_TOP_K
+        # Sorted gidxs for the current page; empty in unsorted mode.
+        self._sorted_ids_chunk: List[int] = []
 
-    # Default number of top-ranked schedules shown in the sort view. The sort
-    # is global over all schedules, but only the best K are fetched for display,
-    # since no user reviews more than that. Tunable by the team.
-    DEFAULT_TOP_K = 100
+    # ── Sort control ────────────────────────────────────────────────────────
 
-    def set_sort_priority(self, priority: list, top_k: int = DEFAULT_TOP_K) -> None:
-        """
-        Sets the global sort order (Option B) and shows the top_k best schedules.
-
-        The sort is global over every generated schedule (via the narrow score
-        table), but only the best top_k are fetched and held for display — the
-        default 10,000 page window is for the unsorted view, not this one.
-        Empty priority clears the sort and returns to position-based paging of
-        the full result set.
-        """
-        self._sort_priority = list(priority)
-        self._top_k = top_k
-        if self._sort_priority:
-            # Pass 1: global sort, held as a lightweight id list in memory.
-            self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
-        else:
-            self._sorted_ids = []
+    def set_sort_priority(self, priority: list) -> None:
+        """Sets the sort order; empty priority clears it and restores positional paging."""
+        self._sort_priority = [cid for cid in priority if cid in ALL_CRITERIA]
+        self._sorted_ids_chunk = []
         self._current_page_idx = 0
         self._current_index = 0
         self._load_current_page()
 
+    # ── Page loader ─────────────────────────────────────────────────────────
+
     def _load_current_page(self) -> None:
         """
-        Loads the current view into memory. When a sort is active, fetches just
-        the top_k best schedules by their sorted ids (Pass 2, lazy: only the
-        batches holding them are decompressed). Otherwise loads a position-based
-        window of the full result set (unchanged default behaviour).
+        Loads data for the current page index.
+        Sorted: loads sorted gidxs for this page. 
+        Unsorted: loads full DTOs.
         """
-        if self._sorted_ids:
-            # Sort view: only the best top_k, never the full page window.
-            top_ids = self._sorted_ids[:self._top_k]
-            self._schedules = self._repository.get_schedules_by_ids(top_ids)
+        offset = self._current_page_idx * self._window_size
+        if self._sort_priority:
+            # Pass 1: sorted integer IDs for this page 
+            self._sorted_ids_chunk = self._repository.get_sorted_ids_page(
+                self._sort_priority, offset, self._window_size
+            )
+            # Pass 2: actual DTOs will be fetched one at a time by get_schedule().
+            self._schedules = []
         else:
-            offset = self._current_page_idx * self._window_size
+            self._sorted_ids_chunk = []
             self._schedules = self._repository.get_window(offset, self._window_size)
+
+    # ── On-demand sorted schedule fetch ─────────────────────────────────────
+
+    def get_schedule(self, index: int) -> ScheduleDTO:
+        """
+        Return the schedule at the given within-page index.
+        Sorted: looks up gidx from chunk and fetches via batch cache. 
+        Unsorted: base class.
+        """
+        if self._sort_priority:
+            if index < 0 or index >= len(self._sorted_ids_chunk):
+                raise IndexError(
+                    f"schedule index {index} out of range "
+                    f"(page has {len(self._sorted_ids_chunk)} entries)"
+                )
+            gidx = self._sorted_ids_chunk[index]
+            results = self._repository.get_schedules_by_ids([gidx])
+            if results:
+                return results[0]
+            raise IndexError(
+                f"could not resolve sorted schedule at index {index} (gidx={gidx})"
+            )
+        return super().get_schedule(index)
 
     # ── Streaming write notification ────────────────────────────────────────
 
     def add_schedules_batch(self, batch_size: int) -> None:
-        """
-        Updates the current view after a new batch was saved to SQLite. 
-        The worker already saved the schedules to SQLite. 
-        This refreshes the view so the GUI can show new results while the search
-        is still running.
-        """
-        if self._sort_priority:
-            # Sort view: new schedules may change which are the top_k best, so
-            # refresh the global order and reload the top_k. (Cheap: sorting the
-            # narrow score table is ~hundreds of ms even at hundreds of
-            # thousands of rows, and only happens once per incoming batch.)
-            self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
-            self._load_current_page()
-        elif len(self._schedules) < self._window_size:
-            # Unsorted view: only reload while the current page isn't full yet.
+        """Reloads the page if it isn't full yet; skipped in sorted mode."""
+        # In sorted mode skip per-batch re-sorting to avoid GUI hang.
+        # In unsorted mode only reload while the current page isn't full yet.
+        if not self._sort_priority and len(self._schedules) < self._window_size:
             self._load_current_page()
 
     # ── Totals ─────────────────────────────────────────────────────────────
@@ -118,7 +111,12 @@ class HybridScheduleResultState(ScheduleResultState):
         return self.count() > 0
 
     def current_window_size(self) -> int:
-        """Returns how many schedules are currently loaded in memory."""
+        """
+        Returns the number of schedules available on the current page.
+        
+        """
+        if self._sort_priority:
+            return len(self._sorted_ids_chunk)
         return len(self._schedules)
 
     # ── Paged navigation ───────────────────────────────────────────────────
@@ -136,29 +134,19 @@ class HybridScheduleResultState(ScheduleResultState):
         return (total + self._window_size - 1) // self._window_size
 
     def load_page(self, page: int) -> None:
-        """
-        Loads one page of schedules from SQLite into memory. 
-        The page number is converted to a SQLite offset. 
-        For example, page 2 with window size 10,000 starts at offset 20,000.
-        """
+        """Loads the given page; raises IndexError if out of range."""
         total = self.total_pages()
         if page < 0 or (total > 0 and page >= total):
             raise IndexError(f"page {page} out of range (have {total})")
-
-        # Convert the page number into the first schedule index for this page.
         self._current_page_idx = page
         self._current_index = 0
-        # Load this page — globally sorted (by id list) or position-based.
         self._load_current_page()
 
     # ── Reset for a new run ────────────────────────────────────────────────
 
     def set_schedules(self, schedules: list) -> None:
-        """
-        Resets the state before a new scheduling run. 
-        This clears the in-memory state and removes old generated schedules 
-        from SQLite, so old results will not mix with the new run."""
+        """Resets for a new run: clears in-memory state and wipes SQLite."""
         super().set_schedules(schedules)
         self._current_page_idx = 0
-        self._sorted_ids = []
+        self._sorted_ids_chunk = []
         self._repository.clear()
