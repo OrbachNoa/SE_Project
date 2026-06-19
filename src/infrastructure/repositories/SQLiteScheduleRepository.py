@@ -172,20 +172,22 @@ class SQLiteScheduleRepository:
                 "WHERE first_offset + batch_count > ? AND first_offset < ? ORDER BY first_offset",
                 (offset, offset + limit),
             ).fetchall()
-        wanted = set(range(offset, offset + limit))
         raw_map: dict = {}
         for first_off, batch_count, raw_blob in db_rows:
             data = zlib.decompress(raw_blob)
             if is_packed_blob(data):
                 _, rows = unpack_rows(data)
-                for gidx in wanted:
-                    if first_off <= gidx < first_off + batch_count:
-                        raw_map[gidx] = rows[gidx - first_off]
+                # Compute the exact overlap range instead of checking each of
+                # `limit` IDs against the batch bounds — O(overlap) not O(limit).
+                lo = max(offset, first_off)
+                hi = min(offset + limit, first_off + batch_count)
+                for gidx in range(lo, hi):
+                    raw_map[gidx] = rows[gidx - first_off]
             else:
                 batch: List[ScheduleDTO] = pickle.loads(data)
                 for i, dto in enumerate(batch):
                     gidx = first_off + i
-                    if gidx in wanted:
+                    if offset <= gidx < offset + limit:
                         raw_map[gidx] = dto
             if len(raw_map) >= limit:
                 break
@@ -233,9 +235,12 @@ class SQLiteScheduleRepository:
             data = zlib.decompress(raw_blob)
             if is_packed_blob(data):
                 _, rows = unpack_rows(data)
-                for gidx in gidx_set:
-                    if first_off <= gidx < first_off + batch_count and gidx not in raw_map:
-                        raw_map[gidx] = rows[gidx - first_off]
+                # Iterate the (small) batch, not the (large) gidx_set.
+                # O(batch_count) set-lookup vs O(|gidx_set|) range-check per batch.
+                for i, row in enumerate(rows):
+                    gidx = first_off + i
+                    if gidx in gidx_set and gidx not in raw_map:
+                        raw_map[gidx] = row
             else:
                 batch: List[ScheduleDTO] = pickle.loads(data)
                 for i, dto in enumerate(batch):
