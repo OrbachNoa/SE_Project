@@ -155,6 +155,18 @@ class AppController(QObject):
         """Applies sort configuration to the facade."""
         self._facade.apply_sort(priority_list)
 
+    def refresh_sort(self) -> None:
+        """Re-run the active sort once (called when generation finishes)."""
+        self._facade.refresh_sort()
+
+    def compute_sort_data(self, priority_list: List[str]) -> dict:
+        """Heavy, read-only sort computation (safe to call on a background thread)."""
+        return self._facade.compute_sort_data(priority_list)
+
+    def apply_sort_data(self, data: dict) -> None:
+        """Apply precomputed sort data to the live state (GUI thread only)."""
+        self._facade.apply_sort_data(data)
+
     def load_sort_config(self) -> List[str]:
         """Loads sort configuration from persistent settings."""
         settings = QSettings("SE_Project", "Scheduler")

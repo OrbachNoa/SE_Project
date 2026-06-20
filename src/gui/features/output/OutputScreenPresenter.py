@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import List
 
 from gui.features.output.PeriodNavigator import PeriodNavigator
-
+from src.gui.features.output.workers.SortWorker import SortWorker
 class OutputScreenPresenter:
     """Coordinates schedule paging, period navigation, display, and export guards."""
 
@@ -210,19 +210,56 @@ class OutputScreenPresenter:
         self._view.focus_back_button()
 
     def on_sort_config_changed(self, priority_list: List[str]) -> None:
-        """Called when sorting priority is updated and applied from the SortConfigPanel."""
-        if hasattr(self._controller, "apply_sort_config"):
-            self._controller.apply_sort_config(priority_list)
+        """Called when sorting priority is updated and applied from the SortConfigPanel.
+
+        The heavy sort runs on a background SortWorker so the GUI stays responsive
+        (Apply no longer freezes). The result is applied back on the GUI thread.
+        """
         if hasattr(self._controller, "save_sort_config"):
             self._controller.save_sort_config(priority_list)
+
+        # If the controller doesn't support the background path, fall back to the
+        # old synchronous apply so nothing breaks.
+        if not hasattr(self._controller, "compute_sort_data"):
+            if hasattr(self._controller, "apply_sort_config"):
+                self._controller.apply_sort_config(priority_list)
+            self._sync_page_info()
+            self._current_index = 0
+            self.show_current()
+            self.refresh_counter()
+            return
+
+        self._view.set_sorting_busy(True) if hasattr(self._view, "set_sorting_busy") else None
+        self._sort_worker = SortWorker(self._controller, priority_list)
+        self._sort_worker.ready.connect(self._on_sort_ready)
+        self._sort_worker.failed.connect(self._on_sort_failed)
+        self._sort_worker.start()
+
+    def _on_sort_ready(self, data: dict) -> None:
+        """Background sort finished — apply it on the GUI thread (fast)."""
+        self._controller.apply_sort_data(data)
+        if hasattr(self._view, "set_sorting_busy"):
+            self._view.set_sorting_busy(False)
         self._sync_page_info()
         self._current_index = 0
         self.show_current()
         self.refresh_counter()
 
+    def _on_sort_failed(self, message: str) -> None:
+        """Background sort failed — clear the busy state and surface the error."""
+        if hasattr(self._view, "set_sorting_busy"):
+            self._view.set_sorting_busy(False)
+        if hasattr(self._view, "show_error"):
+            self._view.show_error(f"Sorting failed: {message}")
+
     def on_search_finished(self) -> None:
         """Refresh the UI when schedule generation is finished."""
+        # Generation is done — run the global sort once now (it was skipped
+        # during generation to keep the GUI responsive). No-op if no sort active.
+        if hasattr(self._controller, "refresh_sort"):
+            self._controller.refresh_sort()
         self._sync_page_info()
+        self._current_index = 0
         self.show_current()
         self.refresh_counter()
 
