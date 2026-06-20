@@ -155,6 +155,12 @@ class ApplicationFacade:
         """Applies sort order synchronously (GUI thread)."""
         self._state.get_schedule_state().set_sort_priority(priority_list)
 
+    def refresh_sort(self) -> None:
+        """Re-run the active sort once (e.g. when generation finishes)."""
+        state = self._state.get_schedule_state()
+        if hasattr(state, "refresh_sort"):
+            state.refresh_sort()
+
     def compute_sort_data(self, priority_list: List[str]) -> dict:
         """Reads the data needed to apply a new sort order. Touches only the
         SQLite repository (thread-safe) and does not mutate the live schedule
