@@ -155,6 +155,12 @@ class ApplicationFacade:
         """Applies sort order synchronously (GUI thread)."""
         self._state.get_schedule_state().set_sort_priority(priority_list)
 
+    def get_active_sort_priority(self) -> list:
+        state = self._state.get_schedule_state()
+        if hasattr(state, "get_active_sort_priority"):
+            return state.get_active_sort_priority()
+        return []
+
     def refresh_sort(self) -> None:
         """Re-run the active sort once (e.g. when generation finishes)."""
         state = self._state.get_schedule_state()

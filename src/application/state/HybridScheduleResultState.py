@@ -26,11 +26,12 @@ class HybridScheduleResultState(ScheduleResultState):
         self._score_map: Dict[int, dict] = {}
         self._slots_ref: list = []
         self._dto_cache: Dict[int, ScheduleDTO] = {}
+        self._page_ids = None
 
     def set_sort_priority(self, priority: list) -> None:
         self._sort_priority = list(priority)
         if self._sort_priority:
-            self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
+            self._sorted_ids = [1]  # truthy marker; _load_current_page fetches the page
         else:
             self._sorted_ids = []
         self._current_page_idx = 0
@@ -40,24 +41,39 @@ class HybridScheduleResultState(ScheduleResultState):
     def _load_current_page(self) -> None:
         self._dto_cache.clear()
         self._schedules = []
-        if self._sorted_ids:
-            start = self._current_page_idx * self._window_size
-            page_ids = self._sorted_ids[start:start + self._window_size]
-            raw_map, score_map, slots_ref = self._repository.get_raw_by_ids(page_ids)
+        if self._sort_priority:
+            # Fetch THIS page's globally-sorted ids via LIMIT/OFFSET. SQLite sorts
+            # the whole score table (true global order) but returns only this page
+            # (~150ms, vs ~1.2s+ to return all ids). Schedules materialise lazily.
+            offset = self._current_page_idx * self._window_size
+            self._page_ids = self._repository.get_sorted_ids_page(
+                self._sort_priority, offset, self._window_size)
+            self._sorted_ids = self._page_ids
+            self._raw_map = {}
+            self._score_map = {}
+            if not self._slots_ref:
+                _, _, slots_ref = self._repository.get_raw_by_ids([])
+                self._slots_ref = slots_ref or []
         else:
+            self._page_ids = None
             offset = self._current_page_idx * self._window_size
             raw_map, score_map, slots_ref = self._repository.get_window_raw(offset, self._window_size)
-        self._raw_map = raw_map
-        self._score_map = score_map
-        self._slots_ref = slots_ref or []
+            self._raw_map = raw_map
+            self._score_map = score_map
+            self._slots_ref = slots_ref or []
 
     def get_schedule(self, index: int) -> ScheduleDTO:
-        if not self._raw_map:
+        # Fall back to the base list only when there is neither a loaded window
+        # nor an active sort. In sorted mode raw_map is intentionally empty
+        # (schedules are fetched lazily), so we must NOT short-circuit here.
+        if not self._raw_map and not self._sorted_ids:
             return super().get_schedule(index)
 
         if self._sorted_ids:
-            start = self._current_page_idx * self._window_size
-            page_ids = self._sorted_ids[start:start + self._window_size]
+            page_ids = getattr(self, "_page_ids", None)
+            if page_ids is None:
+                self._load_current_page()
+                page_ids = self._page_ids
             if index < 0 or index >= len(page_ids):
                 raise IndexError(
                     f"schedule index {index} out of range "
@@ -77,17 +93,23 @@ class HybridScheduleResultState(ScheduleResultState):
 
         raw = self._raw_map.get(global_idx)
         if raw is None:
-            # _raw_map is stale (sort applied mid-run; new results arrived).
-            # Reload transparently so the caller gets a valid DTO instead of crash.
-            self._load_current_page()
+            # Lazy fetch: pull just this one schedule (one batch-decode). In sorted
+            # mode raw_map starts empty so we never fetch the scattered page at once.
+            one_raw, one_score, slots_ref = self._repository.get_raw_by_ids([global_idx])
+            if slots_ref and not self._slots_ref:
+                self._slots_ref = slots_ref
+            self._raw_map.update(one_raw)
+            self._score_map.update(one_score)
             raw = self._raw_map.get(global_idx)
         if raw is None:
             raise IndexError(f"global index {global_idx} not in raw_map")
 
+        score = self._score_map.get(global_idx)
         if isinstance(raw, ScheduleDTO):
             dto = raw
+            if score:
+                dto.scores = score
         else:
-            score = self._score_map.get(global_idx)
             dto = row_to_dto(raw, self._slots_ref, score)
 
         _CACHE_MAX = 32
@@ -98,64 +120,54 @@ class HybridScheduleResultState(ScheduleResultState):
 
     def add_schedules_batch(self, batch_size: int) -> None:
         if self._sort_priority:
-            # During generation do NOT re-sort on every incoming batch. Calling
-            # get_sorted_ids() per batch runs a full ORDER BY over the whole
-            # score table hundreds of times (cost grows with table size) on the
-            # GUI thread, which freezes the UI. The sorted view is refreshed
-            # once, when generation finishes, via refresh_sort().
+            # During generation do NOT re-sort per batch (freezes the GUI). The
+            # sorted view is refreshed once when generation finishes.
             return
         elif self.current_window_size() < self._window_size:
             self._load_current_page()
 
     def refresh_sort(self) -> None:
-        """Re-run the global sort once. Called when generation finishes so the
-        sorted view reflects every schedule produced during the run. Safe to
-        call when no sort is active (it simply does nothing)."""
+        """Re-run the global sort once when generation finishes. Kept light: it
+        only recomputes the sorted-id list and resets to the first page. No page
+        raw is fetched here (schedules are materialised lazily on display)."""
         if self._sort_priority:
-            self._sorted_ids = self._repository.get_sorted_ids(self._sort_priority)
+            self._sorted_ids = [1]  # truthy marker; _load_current_page fetches the page
             self._current_page_idx = 0
             self._current_index = 0
             self._load_current_page()
 
-    # ── Background-threaded sort (avoids freezing the GUI on Apply) ──────────
-    # The heavy work (ORDER BY + first-page fetch) only READS the repository,
-    # which is thread-safe (guarded by its own lock) and spends almost all its
-    # time inside SQLite's C code — where the GIL is released — so running it in
-    # a QThread genuinely lets the GUI stay responsive. The result is a plain
-    # dict, handed back to the GUI thread which only assigns it (apply_sort_data).
+    def get_active_sort_priority(self) -> list:
+        """Return the currently active sort priority (empty list if none)."""
+        return list(self._sort_priority) if self._sort_priority else []
 
     def compute_sort_data(self, priority: list) -> dict:
-        """Heavy, read-only, background-safe. Computes the sorted id list AND
-        the first page's raw rows, so the GUI thread has nothing slow left to do.
-        Does NOT mutate any live state."""
+        """Heavy part, background-safe: the global ORDER BY only. No page fetch."""
         priority = list(priority)
         if priority:
-            sorted_ids = self._repository.get_sorted_ids(priority)
-            page_ids = sorted_ids[:self._window_size]
-            raw_map, score_map, slots_ref = self._repository.get_raw_by_ids(page_ids)
+            sorted_ids = self._repository.get_sorted_ids_page(priority, 0, self._window_size)
         else:
             sorted_ids = []
-            raw_map, score_map, slots_ref = self._repository.get_window_raw(0, self._window_size)
-        return {
-            "priority": priority,
-            "sorted_ids": sorted_ids,
-            "raw_map": raw_map,
-            "score_map": score_map,
-            "slots_ref": slots_ref or [],
-        }
+        return {"priority": priority, "sorted_ids": sorted_ids}
 
     def apply_sort_data(self, data: dict) -> None:
-        """Light, GUI-thread only. Assigns the precomputed sort result into the
-        live state — no SQLite work, no decompression, just references."""
+        """Light, GUI-thread: use the precomputed page-0 ids directly (no
+        re-fetch) so Apply is ~instant on the GUI thread."""
         self._sort_priority = data["priority"]
-        self._sorted_ids = data["sorted_ids"]
         self._current_page_idx = 0
         self._current_index = 0
         self._dto_cache.clear()
         self._schedules = []
-        self._raw_map = data["raw_map"]
-        self._score_map = data["score_map"]
-        self._slots_ref = data["slots_ref"]
+        if data["priority"]:
+            self._page_ids = data["sorted_ids"]
+            self._sorted_ids = self._page_ids if self._page_ids else [1]
+            self._raw_map = {}
+            self._score_map = {}
+            if not self._slots_ref:
+                _, _, slots_ref = self._repository.get_raw_by_ids([])
+                self._slots_ref = slots_ref or []
+        else:
+            self._sorted_ids = []
+            self._load_current_page()
 
     def count(self) -> int:
         return self._repository.count()
@@ -167,6 +179,9 @@ class HybridScheduleResultState(ScheduleResultState):
         return self.count() > 0
 
     def current_window_size(self) -> int:
+        if self._sorted_ids:
+            # full page of sorted ids (10k), even though raw is fetched lazily
+            return len(getattr(self, "_page_ids", []) or [])
         if self._raw_map:
             return len(self._raw_map)
         return len(self._schedules)
@@ -176,11 +191,6 @@ class HybridScheduleResultState(ScheduleResultState):
         return self._current_page_idx
 
     def total_pages(self) -> int:
-        # Always derive from the true schedule count, never from len(_sorted_ids).
-        # The sorted-id list is intentionally NOT refreshed on every batch during
-        # generation (that caused the GUI freeze), so it goes stale mid-run.
-        # count() reflects the live total and is the same whether sorted or not,
-        # so the page counter keeps ticking up to 100 (1M / 10k) as it always did.
         total = self.count()
         if total == 0:
             return 0

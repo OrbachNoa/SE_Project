@@ -155,6 +155,9 @@ class AppController(QObject):
         """Applies sort configuration to the facade."""
         self._facade.apply_sort(priority_list)
 
+    def get_active_sort_priority(self) -> list:
+        return self._facade.get_active_sort_priority()
+
     def refresh_sort(self) -> None:
         """Re-run the active sort once (called when generation finishes)."""
         self._facade.refresh_sort()
