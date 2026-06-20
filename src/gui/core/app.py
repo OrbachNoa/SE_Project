@@ -2,12 +2,18 @@ from PyQt6.QtWidgets import QMainWindow, QStackedWidget
 from gui.core.ScreenRouter import ScreenRouter
 from gui.features.input.InputScreen import InputScreen
 from gui.features.output.OutputScreen import OutputScreen
+from gui.features.clusters.ClusterOverviewScreen import ClusterOverviewScreen
+from gui.features.clusters.ClusterDetailScreen import ClusterDetailScreen
+from gui.features.clusters.ClusterCompareScreen import ClusterCompareScreen
 from gui.core.styles.Theme import APP_STYLESHEET
 from gui.core.styles.DialogStyles import DIALOG_STYLESHEET
 
 # Simple names used to identify the different screens in our app
-SCREEN_INPUT  = "input"
-SCREEN_OUTPUT = "output"
+SCREEN_INPUT           = "input"
+SCREEN_OUTPUT          = "output"
+SCREEN_CLUSTERS        = "clusters"
+SCREEN_CLUSTER_DETAIL  = "cluster_detail"
+SCREEN_CLUSTER_COMPARE = "cluster_compare"
 
 # This is the main window of the application that holds everything together
 class App(QMainWindow):
@@ -33,10 +39,22 @@ class App(QMainWindow):
         # Set up the router, which is responsible for switching between the different screens
         self._router = ScreenRouter(self._stack)
         
-        # Add our two main screens (Input and Output) to the router's memory
-        self._router.register(SCREEN_INPUT,  InputScreen(controller, self._router))
-        self._router.register(SCREEN_OUTPUT, OutputScreen(controller, self._router))
-        
+        # Add the main screens (Input, Output) to the router's memory
+        self._router.register(SCREEN_INPUT,   InputScreen(controller, self._router))
+        self._router.register(SCREEN_OUTPUT,  OutputScreen(controller, self._router))
+
+        # Cluster screens: the overview drives navigation into the detail and
+        # comparison screens, so it gets direct references to them.
+        cluster_detail  = ClusterDetailScreen(controller, self._router)
+        cluster_compare = ClusterCompareScreen(controller, self._router)
+        cluster_overview = ClusterOverviewScreen(
+            controller, self._router, cluster_detail, cluster_compare,
+            detail_name=SCREEN_CLUSTER_DETAIL, compare_name=SCREEN_CLUSTER_COMPARE,
+        )
+        self._router.register(SCREEN_CLUSTERS,        cluster_overview)
+        self._router.register(SCREEN_CLUSTER_DETAIL,  cluster_detail)
+        self._router.register(SCREEN_CLUSTER_COMPARE, cluster_compare)
+
         # Decide which screen the user should see first when the app opens
         self._router.show(SCREEN_INPUT)
 

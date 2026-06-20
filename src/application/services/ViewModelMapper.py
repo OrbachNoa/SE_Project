@@ -24,6 +24,11 @@ from src.application.viewmodels.ProgramViewModel import (
     ProgramCoursesViewModel,
     CourseRowViewModel,
 )
+from src.application.viewmodels.ClusterViewModel import (
+    ClusterCardViewModel,
+    ClusterComparisonViewModel,
+)
+from src.logic.clustering import CriterionDisplay
 
 # ----- helpers ---------------------------------------------------------
 from data.programs import programs_data
@@ -38,13 +43,13 @@ class ViewModelMapper:
     """Stateless converter from domain/DTO inputs to GUI view models."""
 
     # ----- schedules -------------------------------------------------------
-    
+
     def _item_from_assignment(
         self,
         a: AssignmentDTO,
         selected_programs: Optional[List[str]] = None,
     ) -> ScheduleItemViewModel:
-        
+
         # Filter programs if needed. If None, just dump everything.
         if selected_programs:
             relevant_pairs = [
@@ -62,7 +67,7 @@ class ViewModelMapper:
         # Title is just the course name. Subtitle holds the ID and the colored req string.
         title = a.course_name
         subtitle = f"ID: {a.course_id}<br><span style='color: #0f766e;'>{req_str}</span>"
-        
+
         # Tooltip for when someone actually hovers over this tiny box
         tooltip = (
             f"{a.course_name} ({a.course_id})\n"
@@ -201,3 +206,62 @@ class ViewModelMapper:
                 )
             )
         return result
+
+    # ----- clusters --------------------------------------------------------
+
+    def to_cluster_cards(self, result) -> List[ClusterCardViewModel]:
+        """Map a ClusterResult into overview cards (one per family)."""
+        criteria = result.criteria
+        cards: List[ClusterCardViewModel] = []
+        for cluster in result.clusters:
+            summary = [
+                (CriterionDisplay.label(name),
+                 CriterionDisplay.display_value(name, cluster.summary.get(name, 0.0)))
+                for name in criteria
+            ]
+            cards.append(
+                ClusterCardViewModel(
+                    cluster_id=cluster.cluster_id,
+                    title=f"Family {cluster.cluster_id + 1}",
+                    size=cluster.size,
+                    estimated_population_size=cluster.estimated_population_size,
+                    sampled=result.sampled,
+                    description=cluster.description or "",
+                    summary=summary,
+                )
+            )
+        return cards
+
+    def to_cluster_comparison(
+        self,
+        result,
+        cluster_a,
+        cluster_b,
+        rep_dto_a: ScheduleDTO,
+        rep_dto_b: ScheduleDTO,
+        selected_programs: Optional[List[str]] = None,
+    ) -> ClusterComparisonViewModel:
+        """Build a side-by-side comparison of two families' representatives.
+
+        The two representative schedules are rendered as schedule view models; the
+        feature table lists each criterion's value for both archetypes and flags
+        the rows that differ, so the GUI can highlight the real distinctions.
+        """
+        left_vm = self.to_schedule_vm(rep_dto_a, selected_programs=selected_programs)
+        right_vm = self.to_schedule_vm(rep_dto_b, selected_programs=selected_programs)
+
+        feats_a = cluster_a.representative_features or {}
+        feats_b = cluster_b.representative_features or {}
+        rows = []
+        for name in result.criteria:
+            la = CriterionDisplay.display_value(name, feats_a.get(name, 0.0))
+            lb = CriterionDisplay.display_value(name, feats_b.get(name, 0.0))
+            rows.append((CriterionDisplay.label(name), la, lb, la != lb))
+
+        return ClusterComparisonViewModel(
+            left_title=f"Family {cluster_a.cluster_id + 1}",
+            right_title=f"Family {cluster_b.cluster_id + 1}",
+            left_schedule=left_vm,
+            right_schedule=right_vm,
+            feature_rows=rows,
+        )
