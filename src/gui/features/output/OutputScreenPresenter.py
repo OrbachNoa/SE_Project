@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import List
 
 from gui.features.output.PeriodNavigator import PeriodNavigator
-from src.gui.features.output.workers.SortWorker import SortWorker
+from gui.features.output.workers.SortWorker import SortWorker
+
 class OutputScreenPresenter:
     """Coordinates schedule paging, period navigation, display, and export guards."""
 
@@ -253,11 +254,25 @@ class OutputScreenPresenter:
             self._view.show_error(f"Sorting failed: {message}")
 
     def on_search_finished(self) -> None:
-        """Refresh the UI when schedule generation is finished."""
-        # Generation is done — run the global sort once now (it was skipped
-        # during generation to keep the GUI responsive). No-op if no sort active.
-        if hasattr(self._controller, "refresh_sort"):
-            self._controller.refresh_sort()
+        """Refresh the UI when schedule generation is finished.
+
+        If a sort is active, the final global re-sort (to include schedules
+        produced after the user sorted) runs on the SAME background worker as
+        Apply, so generation-end doesn't freeze the GUI. If no sort is active,
+        just refresh the view.
+        """
+        active = []
+        if hasattr(self._controller, "get_active_sort_priority"):
+            active = self._controller.get_active_sort_priority() or []
+        if active and hasattr(self._controller, "compute_sort_data"):
+            # background re-sort, identical path to Apply
+            if hasattr(self._view, "set_sorting_busy"):
+                self._view.set_sorting_busy(True)
+            self._sort_worker = SortWorker(self._controller, active)
+            self._sort_worker.ready.connect(self._on_sort_ready)
+            self._sort_worker.failed.connect(self._on_sort_failed)
+            self._sort_worker.start()
+            return
         self._sync_page_info()
         self._current_index = 0
         self.show_current()
