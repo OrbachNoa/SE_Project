@@ -187,9 +187,51 @@ class AppController(QObject):
         settings.setValue("output/sort_priority", priority_list)
 
     # ------------------------------------------------------------------
+    # Clustering (groups the generated schedules into families)
+    # ------------------------------------------------------------------
+
+    def compute_clusters(self, k=None):
+        """Cluster the generated results into families (first computation)."""
+        return self._facade.compute_clusters(k)
+
+    def recompute_clusters(self, k: int):
+        """Re-cluster with a new K without re-running the scheduler."""
+        return self._facade.recompute_clusters(k)
+
+    def cluster_from_request(self, text: str):
+        """Cluster according to a free-text request (LLM or keyword fallback)."""
+        return self._facade.compute_clusters_from_request(text)
+
+    def get_cluster_interpretation(self) -> str:
+        """How the last free-text clustering request was understood."""
+        return self._facade.get_cluster_interpretation()
+
+    def get_active_k(self) -> int:
+        """The number of families in the current clustering result."""
+        return self._facade.get_active_k()
+
+    def has_clusters(self) -> bool:
+        return self._facade.has_clusters()
+
+    def get_cluster_size(self, cluster_id: int) -> int:
+        return self._facade.get_cluster_size(cluster_id)
+
+    def get_cluster_schedule_view(self, cluster_id: int, index_in_cluster: int) -> ScheduleViewModel:
+        return self._facade.get_cluster_schedule_vm(cluster_id, index_in_cluster)
+
+    def get_representative_view(self, cluster_id: int) -> ScheduleViewModel:
+        return self._facade.get_representative_vm(cluster_id)
+
+    def get_cluster_comparison(self, cluster_id_a: int, cluster_id_b: int):
+        return self._facade.get_cluster_comparison(cluster_id_a, cluster_id_b)
+
+    def save_cluster_schedule(self, cluster_id: int, index_in_cluster: int, path: str) -> None:
+        self._facade.export_cluster_schedule(cluster_id, index_in_cluster, path)
+
+    # ------------------------------------------------------------------
     # State accessors for GUI components
     # ------------------------------------------------------------------
-    
+
     def get_loaded_courses(self) -> list:
         """Courses currently loaded (for the course list widget)."""
         return self._facade.get_loaded_courses()

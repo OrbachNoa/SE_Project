@@ -204,6 +204,11 @@ class HybridScheduleResultState(ScheduleResultState):
         self._current_index = 0
         self._load_current_page()
 
+    def get_repository(self) -> SQLiteScheduleRepository:
+        """Expose the backing repository (used by the clustering feature, which
+        reads score vectors and fetches schedules by global id)."""
+        return self._repository
+
     def set_schedules(self, schedules: list) -> None:
         super().set_schedules(schedules)
         self._current_page_idx = 0

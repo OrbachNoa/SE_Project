@@ -45,6 +45,14 @@ class SolutionBarWidget(QFrame):
         self.sort_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self.sort_btn)
 
+        # Opens the cluster overview, which groups the schedules into families.
+        self.clusters_btn = QPushButton("⊞  View Clusters")
+        self.clusters_btn.setObjectName("btn-sort")
+        self.clusters_btn.setToolTip("Group the results into representative families")
+        self.clusters_btn.setFixedHeight(36)
+        self.clusters_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout.addWidget(self.clusters_btn)
+
         # Adds invisible space to push subsequent groups to the right
         layout.addStretch()
 

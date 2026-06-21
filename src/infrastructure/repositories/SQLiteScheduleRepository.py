@@ -106,6 +106,42 @@ class SQLiteScheduleRepository:
                 )
         return {row[0]: {cid: row[i + 1] for i, cid in enumerate(ALL_CRITERIA)} for row in rows}
 
+    # ── Clustering support: cheap score-vector reads ───────────────────────
+
+    def count_scores(self) -> int:
+        """Number of schedules that have a stored score row.
+
+        gidx values are assigned contiguously from 0, so this doubles as the
+        population size the clustering sampler draws indices from.
+        """
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM schedule_scores").fetchone()
+        return int(row[0]) if row else 0
+
+    def read_score_vectors(self, criteria: List[str], gidxs: List[int]) -> tuple:
+        """Read score vectors for the given gidxs, projected onto ``criteria``.
+
+        Returns ``(ids, vectors)`` where ``ids`` are the gidxs actually found (in
+        ascending order) and ``vectors[i]`` is the score vector for ``ids[i]`` in
+        ``criteria`` order. Reads only the narrow ``schedule_scores`` table, so
+        building the clustering feature matrix never unpickles a schedule.
+        """
+        if not gidxs or not criteria:
+            return [], []
+        cols = ", ".join(_SCORE_COLS[c] for c in criteria)
+        found: dict = {}
+        with self._lock:
+            for i in range(0, len(gidxs), 900):
+                chunk = gidxs[i:i + 900]
+                placeholders = ", ".join(["?"] * len(chunk))
+                for row in self._conn.execute(
+                    f"SELECT gidx, {cols} FROM schedule_scores WHERE gidx IN ({placeholders})",
+                    chunk,
+                ).fetchall():
+                    found[row[0]] = [float(v) for v in row[1:]]
+        ids = sorted(found)
+        return ids, [found[g] for g in ids]
+
     def _decode_batch(self, raw: bytes, first_offset: int, wanted_ids: "set[int] | None" = None) -> dict:
         """Decode one stored batch into {global_index: ScheduleDTO}."""
         data = zlib.decompress(raw)
