@@ -40,17 +40,16 @@ QSpinBox#k-spin::up-button {{
     border-left: 1px solid #CBD5E1;
     border-top-right-radius: 8px;
     background-color: #F8FAFC;
+    image: url("data/assets/up-svg.svg");
 }}
 QSpinBox#k-spin::up-button:hover {{
     background-color: #E2E8F0;
 }}
-QSpinBox#k-spin::up-arrow {{
-    image: url("data/assets/up-svg.svg");
-    width: 10px;
-    height: 10px;
-}}
-QSpinBox#k-spin:disabled::up-arrow {{
+QSpinBox#k-spin::up-button:disabled {{
     image: url("data/assets/up-disabled-svg.svg");
+}}
+QSpinBox#k-spin::up-arrow {{
+    image: none;
 }}
 QSpinBox#k-spin::down-button {{
     subcontrol-origin: border;
@@ -59,17 +58,16 @@ QSpinBox#k-spin::down-button {{
     border-left: 1px solid #CBD5E1;
     border-bottom-right-radius: 8px;
     background-color: #F8FAFC;
+    image: url("data/assets/down-svg.svg");
 }}
 QSpinBox#k-spin::down-button:hover {{
     background-color: #E2E8F0;
 }}
-QSpinBox#k-spin::down-arrow {{
-    image: url("data/assets/down-svg.svg");
-    width: 10px;
-    height: 10px;
-}}
-QSpinBox#k-spin:disabled::down-arrow {{
+QSpinBox#k-spin::down-button:disabled {{
     image: url("data/assets/down-disabled-svg.svg");
+}}
+QSpinBox#k-spin::down-arrow {{
+    image: none;
 }}
 
 /* ── Clustering Request Bar ──────────────────────────────────────── */

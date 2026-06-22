@@ -239,8 +239,7 @@ class OutputScreen(Screen):
 
     def _on_open_sort_panel(self) -> None:
         from gui.features.output.widgets.SortConfigPanel import SortConfigPanel
-        current_priority = self._presenter._controller.load_sort_config()
-        dialog = SortConfigPanel(current_priority, self)
+        dialog = SortConfigPanel([], self)
         dialog.config_changed.connect(self._presenter.on_sort_config_changed)
         dialog.exec()
 

@@ -119,6 +119,8 @@ class InputScreenPresenter:
         self._controller.cancel_scheduling()
         self._set_running_mode(False)
         self._view.set_progress_text("")
+        if hasattr(self._view, "mark_inputs_dirty"):
+            self._view.mark_inputs_dirty()
 
     # Navigate to the results screen
     def on_view_results_clicked(self) -> None:
