@@ -179,6 +179,7 @@ class ConstraintsSettingsDialog(QDialog):
         spin_col.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         spin_col.setSpacing(8)
         spinbox = QSpinBox()
+        spinbox.setObjectName("settings-comparator")
         spinbox.setRange(meta.min_k, meta.max_k)
         spinbox.setValue(current_k if current_k is not None else meta.default_k)
         spinbox.setFixedWidth(62)

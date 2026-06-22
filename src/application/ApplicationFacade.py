@@ -6,7 +6,7 @@ relevant, updates AppState or maps domain data to view models.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from src.application.state.AppState import AppState
 from src.application.services.FileImportService import FileImportService
@@ -242,7 +242,7 @@ class ApplicationFacade:
         self._cluster_interpretation = ""           # automatic, no custom request
         return self._mapper.to_cluster_cards(run.result)
 
-    def compute_clusters_from_request(self, text: str) -> List[ClusterCardViewModel]:
+    def compute_clusters_from_request(self, text: str, k: Optional[int] = None) -> List[ClusterCardViewModel]:
         """Cluster according to a free-text request.
 
         The request is translated (LLM if configured, else a keyword parser) into
@@ -257,6 +257,10 @@ class ApplicationFacade:
             raise RuntimeError("clustering requires the SQLite-backed result store")
 
         translation = self._request_translator.translate(text)
+        if k is not None:
+            from src.logic.clustering.ClusterConfig import K_MODE_FIXED
+            translation.config.k_mode = K_MODE_FIXED
+            translation.config.k = k
         coordinator = ClusteringCoordinator(repo)
         coordinator.prepare(translation.config)      # criteria/weights/sample from request
         run = coordinator.cluster(None)              # K from the config (auto or fixed)

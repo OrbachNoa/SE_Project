@@ -198,9 +198,9 @@ class AppController(QObject):
         """Re-cluster with a new K without re-running the scheduler."""
         return self._facade.recompute_clusters(k)
 
-    def cluster_from_request(self, text: str):
+    def cluster_from_request(self, text: str, k: Optional[int] = None):
         """Cluster according to a free-text request (LLM or keyword fallback)."""
-        return self._facade.compute_clusters_from_request(text)
+        return self._facade.compute_clusters_from_request(text, k)
 
     def get_cluster_interpretation(self) -> str:
         """How the last free-text clustering request was understood."""

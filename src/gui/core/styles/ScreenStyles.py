@@ -169,6 +169,7 @@ QPushButton#btn-export {{
     padding: 0 18px;
     font-weight: 600;
     font-size: 13px;
+    text-align: center;
 }}
 QPushButton#btn-export:hover {{
     background-color: {COLOR_PRIMARY_HOVER};
