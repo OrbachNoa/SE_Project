@@ -275,3 +275,99 @@ def test_program_with_only_non_exam_courses_returns_empty_schedule(
                 "A program with no 'Exam' courses should not create "
                 "any exam schedules."
             )
+
+
+# ===========================================================================
+# TC-ENG-009: With collect_checker_stats=True, get_checker_stats() returns
+# non-empty counters after a search. Two mandatory courses sharing three
+# candidate dates force enough forward-checking for every checker to be
+# called at least once.
+# ===========================================================================
+def test_checker_stats_are_populated_when_collection_is_enabled(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange
+    pe = make_program_entry(program_id="83101", year=2,
+                            requirement=Requirement.OBLIGATORY)
+    c1 = make_course(course_id="10101", program_entries=[pe])
+    c2 = make_course(course_id="10102", program_entries=[pe])
+    period = make_period(
+        start=date(2026, 6, 1), end=date(2026, 6, 3), excluded=[]
+    )
+    slots = SlotBuilder([period]).build([c1, c2])
+    scheduler = Scheduler(_default_checkers([period], [c1, c2]), collect_checker_stats=True)
+    observer = CollectingScheduleObserver()
+
+    # Act
+    scheduler.generateSchedules(slots, observer)
+    stats = scheduler.get_checker_stats()
+
+    # Assert — one stats entry per checker, each with real call counts.
+    assert len(stats) == 2
+    assert stats[0]["name"] == "ProgramYearConflictChecker"
+    assert stats[1]["name"] == "MoedOrderChecker"
+    assert all(entry["calls"] > 0 for entry in stats)
+
+
+# ===========================================================================
+# TC-ENG-010: Rejects are incremented exactly once per rejected placement.
+# A checker that rejects every candidate date must show calls == rejects,
+# both equal to the number of candidate dates actually probed.
+# ===========================================================================
+def test_checker_stats_rejects_increment_on_every_rejection(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange — a checker that rejects every placement it is asked about.
+    class RejectAllChecker:
+        def check(self, assignment, schedule):
+            return True  # always a conflict
+
+    pe = make_program_entry(program_id="83101", year=2,
+                            requirement=Requirement.OBLIGATORY)
+    course = make_course(course_id="10101", program_entries=[pe])
+    period = make_period(
+        start=date(2026, 6, 1), end=date(2026, 6, 3), excluded=[]
+    )
+    slots = SlotBuilder([period]).build([course])
+    scheduler = Scheduler([RejectAllChecker()], collect_checker_stats=True)
+    observer = CollectingScheduleObserver()
+
+    # Act
+    scheduler.generateSchedules(slots, observer)
+    stats = scheduler.get_checker_stats()
+
+    # Assert — every one of the 3 candidate dates was probed and rejected.
+    assert observer.schedules == []
+    assert len(stats) == 1
+    assert stats[0]["calls"] == 3
+    assert stats[0]["rejects"] == 3
+
+
+# ===========================================================================
+# TC-ENG-011: With collect_checker_stats=False (the default), get_checker_
+# stats() returns an empty list rather than None or a populated dict, both
+# before and after running a search.
+# ===========================================================================
+def test_checker_stats_disabled_by_default_returns_empty_list(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange
+    pe = make_program_entry(program_id="83101", year=2,
+                            requirement=Requirement.OBLIGATORY)
+    c1 = make_course(course_id="10101", program_entries=[pe])
+    c2 = make_course(course_id="10102", program_entries=[pe])
+    period = make_period(
+        start=date(2026, 6, 1), end=date(2026, 6, 3), excluded=[]
+    )
+    slots = SlotBuilder([period]).build([c1, c2])
+    scheduler = Scheduler(_default_checkers([period], [c1, c2]))
+
+    # Act
+    stats_before_run = scheduler.get_checker_stats()
+    observer = CollectingScheduleObserver()
+    scheduler.generateSchedules(slots, observer)
+    stats_after_run = scheduler.get_checker_stats()
+
+    # Assert — collection was never enabled, so both calls return [].
+    assert stats_before_run == []
+    assert stats_after_run == []

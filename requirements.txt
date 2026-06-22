@@ -7,3 +7,4 @@ pytest-qt
 
 # Phase 3 — scheduling engine
 psutil>=5.9.0
+numpy>=2.4.6

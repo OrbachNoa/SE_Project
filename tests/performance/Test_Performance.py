@@ -168,3 +168,175 @@ def test_maximum_load_under_30_seconds(make_course, make_program_entry,
         f"Optimisation required — see SCRUM-45."
     )
     assert schedules is not None
+
+
+# ---------------------------------------------------------------------------
+# V3 performance scenarios — imports added for this section only.
+# ---------------------------------------------------------------------------
+import random
+
+from src.models.ExamSchedule import ExamSchedule, ExamAssignment
+from src.logic.checkers.config.CheckerFactory import build_checkers
+from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
+from src.logic.comparators.ScheduleScorer import (
+    ScheduleScorer,
+    MIN_MANDATORY_GAP,
+    AVG_ALL_COURSES_GAP,
+    ELECTIVE_CONFLICTS,
+    MANDATORY_SPAN,
+    MAX_EXAMS_PER_DAY,
+)
+from src.application.dto.ScheduleDTO import ScheduleDTO
+from src.application.state.ScheduleReranker import rerank
+from src.logic.clustering.ClusteringService import ClusteringService
+from src.logic.clustering.ClusterConfig import ClusterConfig
+
+
+# ===========================================================================
+# TC-PER-003 — Scoring 1000 schedules with ScheduleScorer must stay under
+# 2 seconds, since score() runs once per generated schedule in the real
+# worker (potentially up to a million times per run).
+# ===========================================================================
+@pytest.mark.performance
+def test_schedule_scorer_scores_1000_schedules_under_2_seconds(
+    make_course, make_program_entry,
+):
+    # Arrange — 10 courses across 2 programs, shared by every schedule below.
+    # ScheduleScorer caches its course index by object identity, so the same
+    # course objects must be reused, not rebuilt, for each schedule.
+    courses = _build_courses(
+        make_course, make_program_entry,
+        num_programs=2, courses_per_program=5,
+    )
+    scorer = ScheduleScorer(courses)
+    schedules = []
+    for i in range(1000):
+        schedule = ExamSchedule()
+        for j, course in enumerate(courses):
+            exam_date = date(2026, 6, 1) + timedelta(days=(i + j) % 28)
+            schedule.addAssignment(
+                ExamAssignment(course=course, date=exam_date, moed=Moed.ALEPH, semester=Semester.FALL)
+            )
+        schedules.append(schedule)
+
+    # Act — measure only the scoring loop, not the schedule setup above.
+    start_time = time.perf_counter()
+    for schedule in schedules:
+        scorer.score(schedule)
+    elapsed = time.perf_counter() - start_time
+
+    # Assert
+    assert elapsed < 2.0, (
+        f"Scoring 1000 schedules took {elapsed:.2f}s, exceeding the 2.0s "
+        f"budget for ScheduleScorer.score()."
+    )
+
+
+# ===========================================================================
+# TC-PER-004 — Reranking 10000 already-scored schedules must stay under
+# 1 second: ScheduleReranker only ever sorts numbers already computed at
+# generation time, with no metric recomputation involved.
+# ===========================================================================
+@pytest.mark.performance
+def test_reranker_sorts_10000_schedules_under_1_second():
+    # Arrange — 10,000 pre-scored DTOs with varying values on two criteria.
+    schedules = [
+        ScheduleDTO(scores={
+            MIN_MANDATORY_GAP: float(i % 50),
+            MANDATORY_SPAN: float((i * 7) % 100),
+        })
+        for i in range(10_000)
+    ]
+
+    # Act
+    start_time = time.perf_counter()
+    result = rerank(schedules, [MIN_MANDATORY_GAP, MANDATORY_SPAN])
+    elapsed = time.perf_counter() - start_time
+
+    # Assert
+    assert elapsed < 1.0, (
+        f"Reranking 10000 schedules took {elapsed:.2f}s, exceeding the "
+        f"1.0s budget for ScheduleReranker.rerank()."
+    )
+    assert len(result) == 10_000
+
+
+# ===========================================================================
+# TC-PER-005 — A realistic load (5 programs x 10 courses, 30-day period)
+# with every V3 threshold checker active must still respond in under
+# 5 seconds, capped at a production-sized result window (max_results) —
+# the same cap SchedulingService uses to keep the UI responsive.
+# ===========================================================================
+@pytest.mark.performance
+def test_scheduler_with_all_v3_checkers_under_5_seconds(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange — same scale as TC-PER-001, but with every threshold checker
+    # turned on via build_checkers (min gap, elective cap, span, day cap).
+    courses = _build_courses(
+        make_course, make_program_entry,
+        num_programs=5, courses_per_program=10,
+    )
+    period = _build_period(
+        make_period,
+        start=date(2026, 6, 1), end=date(2026, 6, 30),
+        num_excluded=0,
+    )
+    slots = SlotBuilder([period]).build(courses)
+    config = ConstraintsConfig(
+        min_gap_obligatory=1,
+        min_gap_any=1,
+        elective_conflict_cap=5,
+        exam_span=1,
+        max_exams_per_day=10,
+    )
+    checkers = build_checkers(config, courses, None, slots)
+    scheduler = Scheduler(checkers)
+    observer = CollectingScheduleObserver()
+
+    # Act
+    start_time = time.perf_counter()
+    scheduler.generateSchedules(slots, observer, max_results=2000)
+    elapsed = time.perf_counter() - start_time
+
+    # Assert
+    assert elapsed < 5.0, (
+        f"Scheduler with all V3 checkers active took {elapsed:.2f}s for "
+        f"2000 results, exceeding the 5.0s budget."
+    )
+    assert len(observer.schedules) > 0
+
+
+# ===========================================================================
+# TC-PER-006 — The complete clustering pipeline (fit + cluster, including
+# automatic K selection) on 500 schedules must stay under 3 seconds.
+# ===========================================================================
+@pytest.mark.performance
+def test_clustering_service_pipeline_on_500_schedules_under_3_seconds():
+    # Arrange — 500 schedules with randomized but realistic-range scores.
+    rng = random.Random(42)
+    schedules = [
+        ScheduleDTO(scores={
+            MIN_MANDATORY_GAP: float(rng.randint(0, 30)),
+            AVG_ALL_COURSES_GAP: float(rng.randint(0, 20)),
+            ELECTIVE_CONFLICTS: float(-rng.randint(0, 5)),
+            MANDATORY_SPAN: float(rng.randint(0, 60)),
+            MAX_EXAMS_PER_DAY: float(-rng.randint(1, 6)),
+        })
+        for _ in range(500)
+    ]
+    service = ClusteringService(ClusterConfig.default())
+
+    # Act
+    start_time = time.perf_counter()
+    service.fit(schedules)
+    result = service.cluster()
+    elapsed = time.perf_counter() - start_time
+
+    # Assert
+    assert elapsed < 3.0, (
+        f"Clustering 500 schedules (fit + cluster) took {elapsed:.2f}s, "
+        f"exceeding the 3.0s budget."
+    )
+    assert result.k > 0
+    assert len(result.clusters) > 0
