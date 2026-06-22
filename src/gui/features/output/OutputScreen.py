@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget, QMenu
 
 from gui.common.components.HeaderWidget import HeaderWidget
 from gui.common.components.OutputCalendarWidget import OutputCalendarWidget
-from gui.common.helpers import create_divider
+from gui.common.helpers import create_divider, prompt_save_file
 from gui.core.screen import Screen
 from gui.features.output.OutputScreenPresenter import OutputScreenPresenter
 from gui.features.output.widgets.SchedulePdfExporter import export_schedule_pdf
@@ -93,7 +93,15 @@ class OutputScreen(Screen):
     # Connect UI signals to the presenter logic
     def _connect_events(self) -> None:
         self.solution_bar.back_btn.clicked.connect(self._presenter.on_back)
-        self.solution_bar.export_btn.clicked.connect(self._presenter.on_export_pdf)
+
+        export_menu = QMenu(self)
+        pdf_action = export_menu.addAction("Export as PDF")
+        txt_action = export_menu.addAction("Export as TXT")
+        self.solution_bar.export_btn.setMenu(export_menu)
+
+        pdf_action.triggered.connect(self._presenter.on_export_pdf)
+        txt_action.triggered.connect(self._presenter.on_export_txt)
+
         self.solution_bar.sort_btn.clicked.connect(self._on_open_sort_panel)
         self.solution_bar.clusters_btn.clicked.connect(self._on_open_clusters)
         self.solution_bar.prev_btn.clicked.connect(self._presenter.on_prev_solution)
@@ -178,6 +186,12 @@ class OutputScreen(Screen):
     def show_export_error(self, message: str) -> None:
         QMessageBox.critical(self, "Export error", message)
 
+    def ask_save_path(self, default_name: str) -> str:
+        return prompt_save_file(self, "Save schedule", default_name, "Text files (*.txt)")
+
+    def show_message(self, message: str) -> None:
+        QMessageBox.information(self, "Export", message)
+
     # Export functionality
     def export_schedule_pdf(self, schedule_view, current_index: int) -> None:
         export_schedule_pdf(schedule_view, current_index, parent=self)
@@ -232,7 +246,20 @@ class OutputScreen(Screen):
 
     def _on_open_clusters(self) -> None:
         """Navigate to the cluster overview screen (registered as "clusters")."""
-        self._presenter._router.show("clusters")
+        from PyQt6.QtCore import QCoreApplication
+        from PyQt6.QtGui import QCursor, QGuiApplication
+        
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+        self.solution_bar.clusters_btn.setText("Loading Clusters...")
+        self.solution_bar.clusters_btn.setEnabled(False)
+        QCoreApplication.processEvents()
+        
+        try:
+            self._presenter._router.show("clusters")
+        finally:
+            QGuiApplication.restoreOverrideCursor()
+            self.solution_bar.clusters_btn.setText("View Clusters")
+            self.solution_bar.clusters_btn.setEnabled(True)
 
     def _on_prev_month(self) -> None:
         self._presenter.on_prev_period()
@@ -250,7 +277,7 @@ class OutputScreen(Screen):
         self._presenter.on_enter()
 
     def on_leave(self) -> None:
-        pass
+        self._presenter.on_leave()
 
     @property
     def _prev_btn(self):

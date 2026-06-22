@@ -40,7 +40,17 @@ class ClusterDetailPresenter:
             self._index -= 1
             self._show_current()
 
-    def on_export(self) -> None:
+    def on_export_pdf(self) -> None:
+        if self._size == 0:
+            self._view.show_message("This family has no schedules to export.")
+            return
+        try:
+            schedule_vm = self._controller.get_cluster_schedule_view(self._cluster_id, self._index)
+            self._view.export_schedule_pdf(schedule_vm, self._index)
+        except Exception as error:
+            self._view.show_message(f"Could not read schedule: {error}")
+
+    def on_export_txt(self) -> None:
         if self._size == 0:
             self._view.show_message("This family has no schedules to export.")
             return

@@ -25,7 +25,7 @@ class App(QMainWindow):
         self._controller = controller
         
         # Set the window's title, default starting size, and the minimum size it can be shrunk to
-        self.setWindowTitle("Exam Scheduler v2.0")
+        self.setWindowTitle("Exam Scheduler v3.1")
         self.resize(1100, 720)
         self.setMinimumSize(800, 560)
         

@@ -147,7 +147,7 @@ QLabel#settings-unit {
 QLabel#settings-unit:disabled {
     color: #B6C0CC;
 }
-QSpinBox {
+QSpinBox#settings-comparator {
     border: 1px solid #CBD5E1;
     border-radius: 8px;
     padding: 5px 8px;
@@ -156,7 +156,7 @@ QSpinBox {
     color: #3E352F;
     min-height: 30px;
 }
-QSpinBox:disabled {
+QSpinBox#settings-comparator:disabled {
     color: #B6C0CC;
     background: #F1F5F9;
     border-color: #E2E8F0;

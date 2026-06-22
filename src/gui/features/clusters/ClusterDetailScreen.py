@@ -5,6 +5,7 @@ output screen; rendering reuses ``ScheduleCalendarView``.
 """
 from __future__ import annotations
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -12,6 +13,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QVBoxLayout,
+    QMenu
 )
 
 from gui.common.components.HeaderWidget import HeaderWidget
@@ -53,8 +55,11 @@ class ClusterDetailScreen(Screen):
         self._back_btn.setObjectName("btn-ghost")
         layout.addWidget(self._back_btn)
 
-        self._export_btn = QPushButton("⬇  Save schedule")
+        self._export_btn = QPushButton("Export")
         self._export_btn.setObjectName("btn-export")
+        self._export_btn.setToolTip("Export the current schedule as PDF or TXT")
+        self._export_btn.setFixedHeight(36)
+        self._export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self._export_btn)
 
         layout.addStretch()
@@ -74,7 +79,15 @@ class ClusterDetailScreen(Screen):
 
     def _connect_events(self) -> None:
         self._back_btn.clicked.connect(self._presenter.on_back)
-        self._export_btn.clicked.connect(self._presenter.on_export)
+
+        export_menu = QMenu(self)
+        pdf_action = export_menu.addAction("Export as PDF")
+        txt_action = export_menu.addAction("Export as TXT")
+        self._export_btn.setMenu(export_menu)
+
+        pdf_action.triggered.connect(self._presenter.on_export_pdf)
+        txt_action.triggered.connect(self._presenter.on_export_txt)
+
         self._prev_btn.clicked.connect(self._presenter.on_prev)
         self._next_btn.clicked.connect(self._presenter.on_next)
 
@@ -106,6 +119,10 @@ class ClusterDetailScreen(Screen):
 
     def show_message(self, message: str) -> None:
         QMessageBox.information(self, "Cluster", message)
+
+    def export_schedule_pdf(self, schedule_view, current_index: int) -> None:
+        from gui.features.output.widgets.SchedulePdfExporter import export_schedule_pdf
+        export_schedule_pdf(schedule_view, current_index, parent=self)
 
     # ── Screen lifecycle ─────────────────────────────────────────────────────
 

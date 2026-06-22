@@ -29,10 +29,10 @@ class SolutionBarWidget(QFrame):
         self.back_btn.setFixedHeight(36)
         layout.addWidget(self.back_btn)
 
-        # Export saves the schedule on screen to a PDF.
-        self.export_btn = QPushButton("Export PDF")
+        # Export saves the schedule on screen.
+        self.export_btn = QPushButton("Export")
         self.export_btn.setObjectName("btn-export")
-        self.export_btn.setToolTip("Save the current schedule as a PDF file")
+        self.export_btn.setToolTip("Export the current schedule as PDF or TXT")
         self.export_btn.setFixedHeight(36)
         self.export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self.export_btn)
@@ -46,7 +46,7 @@ class SolutionBarWidget(QFrame):
         layout.addWidget(self.sort_btn)
 
         # Opens the cluster overview, which groups the schedules into families.
-        self.clusters_btn = QPushButton("⊞  View Clusters")
+        self.clusters_btn = QPushButton("View Clusters")
         self.clusters_btn.setObjectName("btn-sort")
         self.clusters_btn.setToolTip("Group the results into representative families")
         self.clusters_btn.setFixedHeight(36)

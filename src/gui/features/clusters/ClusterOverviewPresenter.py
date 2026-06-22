@@ -21,10 +21,21 @@ class ClusterOverviewPresenter:
         self._compare = compare_screen
 
         self._compare_selection: List[int] = []
+        self._last_request_text: str = ""
+        self._last_k: Optional[int] = None
 
     # Entry point: compute clusters with automatic K and show the cards.
     def on_enter(self) -> None:
-        self._compute(k=None, recompute=False)
+        if self._last_request_text:
+            self._view._request_input.setText(self._last_request_text)
+            self.on_apply_request(self._last_request_text, k=self._last_k)
+        elif self._last_k is not None:
+            self._view._request_input.setText("")
+            self._view.set_k_value(self._last_k)
+            self._compute(k=self._last_k, recompute=False)
+        else:
+            self._view._request_input.setText("")
+            self._compute(k=None, recompute=False)
 
     def on_leave(self) -> None:
         pass
@@ -34,14 +45,19 @@ class ClusterOverviewPresenter:
         if k <= 0:
             self._view.show_message("K must be a positive integer.")
             return
-        self._compute(k=k, recompute=True)
+        req_text = self._view.get_request_text().strip()
+        self._last_request_text = req_text
+        if k == 0:
+            self._compute(k=None, recompute=True)
+        else:
+            self._compute(k=k, recompute=True)
 
     # User typed a free-text request and pressed Apply request.
-    def on_apply_request(self, text: str) -> None:
+    def on_apply_request(self, text: str, k: Optional[int] = None) -> None:
         self._compare_selection = []
         self._view.set_busy(True)
         try:
-            cards = self._controller.cluster_from_request(text)
+            cards = self._controller.cluster_from_request(text, k)
             interpretation = self._controller.get_cluster_interpretation()
         except Exception as error:
             self._view.set_busy(False)
@@ -64,6 +80,13 @@ class ClusterOverviewPresenter:
         self._view.set_interpretation(interpretation)
         self._view.render_cards(cards)
         self._view.set_compare_enabled(False)
+
+        # Save state on success
+        self._last_request_text = text
+        if k is not None:
+            self._last_k = k
+        else:
+            self._last_k = None
 
     def on_open_cluster(self, cluster_id: int) -> None:
         self._detail.enter_cluster(cluster_id)
