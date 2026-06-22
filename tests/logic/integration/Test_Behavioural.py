@@ -289,7 +289,7 @@ def test_course_with_no_matching_period_raises_clear_error(make_course, make_per
 
 
 # ---------------------------------------------------------------------------
-# V3 integration scenarios — imports added for this section only.
+# Threshold-based integration scenarios — imports added for this section only.
 # ---------------------------------------------------------------------------
 from src.logic.checkers.config.CheckerFactory import build_checkers
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
@@ -299,7 +299,7 @@ from src.application.state.ScheduleReranker import rerank
 
 
 # ===========================================================================
-# TC-BEH-008 — MinDaysBetweenExamsChecker (V3) keeps every mandatory gap >= k.
+# TC-BEH-008 — MinDaysBetweenExamsChecker keeps every mandatory gap >= k.
 # With three mandatory exams in the same cohort, a 5-day window, and k=2,
 # every returned schedule must place its exams at least 2 days apart.
 # ===========================================================================
@@ -338,7 +338,7 @@ def test_min_days_between_exams_checker_enforces_gap_in_every_result(
 
 
 # ===========================================================================
-# TC-BEH-009 — MaxExamsPerDayChecker (V3) never lets a day exceed k exams.
+# TC-BEH-009 — MaxExamsPerDayChecker never lets a day exceed k exams.
 # Four independent-program courses, a 2-day window, and k=2 must always
 # split the load so no single day ever carries more than 2 exams.
 # ===========================================================================
@@ -413,7 +413,7 @@ def test_impossible_min_gap_constraint_yields_zero_schedules(
 def test_reranker_sorts_real_scheduler_results_in_descending_order(
     make_course, make_program_entry, make_period,
 ):
-    # Arrange — 3 mandatory courses, 5-day window, no V3 threshold config.
+    # Arrange — 3 mandatory courses, 5-day window, no threshold config.
     pe = make_program_entry(
         program_id="83101", year=2, requirement=Requirement.OBLIGATORY,
     )
@@ -446,7 +446,7 @@ def test_reranker_sorts_real_scheduler_results_in_descending_order(
 
 
 # ===========================================================================
-# TC-BEH-012 — Full V3 pipeline: checker + scorer + reranker together.
+# TC-BEH-012 — Full scoring pipeline: checker + scorer + reranker together.
 # Two independent cohorts (2 mandatory courses each) under a min-gap
 # checker of k=2 must all satisfy the gap, and reranking the scored
 # results by MIN_MANDATORY_GAP must put the best-spaced schedules first.
@@ -474,7 +474,7 @@ def test_checker_scorer_and_reranker_work_together_end_to_end(
     scheduler = Scheduler(checkers)
     observer = CollectingScheduleObserver()
 
-    # Act — generate, score, and rerank in one full V3 pipeline pass.
+    # Act — generate, score, and rerank in one full scoring pipeline pass.
     scheduler.generateSchedules(slots, observer)
     scorer = ScheduleScorer(courses)
     dtos = [

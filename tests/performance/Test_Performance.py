@@ -171,7 +171,7 @@ def test_maximum_load_under_30_seconds(make_course, make_program_entry,
 
 
 # ---------------------------------------------------------------------------
-# V3 performance scenarios — imports added for this section only.
+# Threshold checkers performance scenarios — imports added for this section only.
 # ---------------------------------------------------------------------------
 import random
 
@@ -263,12 +263,12 @@ def test_reranker_sorts_10000_schedules_under_1_second():
 
 # ===========================================================================
 # TC-PER-005 — A realistic load (5 programs x 10 courses, 30-day period)
-# with every V3 threshold checker active must still respond in under
+# with every threshold checker active must still respond in under
 # 5 seconds, capped at a production-sized result window (max_results) —
 # the same cap SchedulingService uses to keep the UI responsive.
 # ===========================================================================
 @pytest.mark.performance
-def test_scheduler_with_all_v3_checkers_under_5_seconds(
+def test_scheduler_with_all_threshold_checkers_under_5_seconds(
     make_course, make_program_entry, make_period,
 ):
     # Arrange — same scale as TC-PER-001, but with every threshold checker
@@ -301,7 +301,7 @@ def test_scheduler_with_all_v3_checkers_under_5_seconds(
 
     # Assert
     assert elapsed < 5.0, (
-        f"Scheduler with all V3 checkers active took {elapsed:.2f}s for "
+        f"Scheduler with all threshold checkers active took {elapsed:.2f}s for "
         f"2000 results, exceeding the 5.0s budget."
     )
     assert len(observer.schedules) > 0

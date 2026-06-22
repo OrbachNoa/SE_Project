@@ -1,7 +1,7 @@
 """
 Test_ThresholdCheckers.py — Unit tests for the configurable threshold checkers.
 
-These four checkers were introduced in version 3.0. Unlike the "hard" conflict
+These four checkers are threshold-based. Unlike the "hard" conflict
 checkers (ProgramYearConflictChecker, MoedOrderChecker), each of these is driven
 by a user-configurable threshold k that is set in the Settings screen, and each
 one can be turned on or off independently:

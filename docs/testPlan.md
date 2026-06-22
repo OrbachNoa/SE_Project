@@ -106,7 +106,7 @@ This field tests the core logic of the system and is devided into Unit Tests and
   * Tests the SchedulingService for correct scheduling logic.
 
 * **Test Hybrid State:**
-  * Tests the HybridState class for correct state management.
+  * Tests the HybridState class for correct state management, including efficient window-based database pagination.
 
 ### 3.2 GUI Tests
 This field tests the GUI aspect of the system and is devided into Unit Tests and Integration Tests.
@@ -144,7 +144,7 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
   * Tests the OutputScreen widget for correct initial state, forward/backward schedule navigation, calendar month display, schedule counter updates, and back-to-input routing.
 
 * **Test Output Screen Presenter:**
-  * Tests the OutputScreenPresenter for correct counter refresh, solution-bar state (next/prev enabled flags), page loading, calendar rendering from a ScheduleViewModel, PDF export guards (empty schedule, zero total), and export error handling.
+  * Tests the OutputScreenPresenter for correct counter refresh, solution-bar state (next/prev enabled flags), page loading, calendar rendering from a ScheduleViewModel, background thread lifecycle management on view transitions, PDF and TXT export guards (empty schedule, zero total), and export error handling.
 
 * **Test Period Navigator:**
   * Tests the PeriodNavigator for correct initialisation with and without periods, next/previous navigation boundary enforcement, label generation, date-list construction, and rejection of invalid date ranges.
@@ -170,7 +170,7 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
 #### 3.2.2 Integration Tests
 
 * **Test GUI:**
-  * End-to-end GUI tests using `pytest-qt` (qtbot) that simulate complete user flows headlessly; covering file loading (replace and update modes), program selection, schedule generation, router navigation, PDF export, and full real-pipeline execution with actual parsers and a SQLite repository.
+  * End-to-end GUI tests using `pytest-qt` (qtbot) that simulate complete user flows headlessly; covering file loading (replace and update modes), program selection, schedule generation, router navigation, dropdown-based PDF export, and full real-pipeline execution with actual parsers and a SQLite repository.
 
 * **Test GUI Integration:**
   * Tests that the ScreenRouter correctly registers, transitions between, and tracks history for the InputScreen and OutputScreen.
