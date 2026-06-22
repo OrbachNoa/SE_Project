@@ -240,7 +240,7 @@ def test_export_pdf_flow(qtbot, viewmodel_mapper):
         assert router._current_name() == "output"
         
         # Act
-        qtbot.mouseClick(output_screen.solution_bar.export_btn, Qt.MouseButton.LeftButton)
+        output_screen.solution_bar.export_btn.menu().actions()[0].trigger()
         
         # Assert
         assert output_screen.export_schedule_pdf.call_count == 1
@@ -388,7 +388,7 @@ def test_export_pdf_actual_file(qtbot, viewmodel_mapper, tmp_path):
         assert router._current_name() == "output"
         
         # Act
-        qtbot.mouseClick(output_screen.solution_bar.export_btn, Qt.MouseButton.LeftButton)
+        output_screen.solution_bar.export_btn.menu().actions()[0].trigger()
         
         # Assert
         print("MOCK_SAVE CALLS:", mock_file_dialog.getSaveFileName.mock_calls)

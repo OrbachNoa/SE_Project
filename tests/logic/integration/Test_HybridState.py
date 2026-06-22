@@ -68,7 +68,8 @@ def test_hybrid_state_load_page(mock_repository, make_schedule_dto):
     state = HybridScheduleResultState(mock_repository, window_size=10)
     
     dummy_dtos = [make_schedule_dto() for _ in range(5)]
-    mock_repository.get_window.return_value = dummy_dtos
+    raw_map = {i: dummy for i, dummy in enumerate(dummy_dtos)}
+    mock_repository.get_window_raw.return_value = (raw_map, {}, [])
     state._current_index = 3 
     
     # Act
@@ -77,7 +78,7 @@ def test_hybrid_state_load_page(mock_repository, make_schedule_dto):
     # Assert
     assert state.current_page == 1
     assert state.current_index == 0
-    mock_repository.get_window.assert_called_once_with(10, 10)
+    mock_repository.get_window_raw.assert_called_once_with(10, 10)
     assert state.current_window_size() == 5
 
 # ===========================================================================
@@ -118,14 +119,15 @@ def test_hybrid_state_add_schedules_batch_under_capacity(mock_repository, make_s
     state._current_page_idx = 1
     
     dummy_dtos = [make_schedule_dto() for _ in range(8)]
-    mock_repository.get_window.return_value = dummy_dtos
+    raw_map = {i: dummy for i, dummy in enumerate(dummy_dtos)}
+    mock_repository.get_window_raw.return_value = (raw_map, {}, [])
     
     # Act
     state.add_schedules_batch(3)
     
     # Assert
-    mock_repository.get_window.assert_called_once_with(10, 10)
-    assert len(state._schedules) == 8
+    mock_repository.get_window_raw.assert_called_once_with(10, 10)
+    assert state.current_window_size() == 8
 
 # ===========================================================================
 # TC-HYB-STA-009: Verify add_schedules_batch does not fetch if at capacity.
@@ -139,4 +141,4 @@ def test_hybrid_state_add_schedules_batch_at_capacity(mock_repository, make_sche
     state.add_schedules_batch(5)
     
     # Assert
-    mock_repository.get_window.assert_not_called()
+    mock_repository.get_window_raw.assert_not_called()
