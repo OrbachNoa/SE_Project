@@ -18,6 +18,7 @@ feature slots in here with no engine change.
 """
 from __future__ import annotations
 
+import warnings
 from typing import List, Optional, Sequence
 
 import numpy as np
@@ -37,6 +38,18 @@ from src.logic.clustering.WeightedEuclideanDistanceMetric import (
     WeightedEuclideanDistanceMetric,
 )
 
+try:
+    from src.logic.clustering.ScikitLearnKMeansStrategy import ScikitLearnKMeansStrategy
+    _SKLEARN_AVAILABLE = True
+except ImportError:
+    _SKLEARN_AVAILABLE = False
+    warnings.warn(
+        "scikit-learn not found — clustering will use the slower pure-Python "
+        "K-means fallback. Install scikit-learn for full performance.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+
 
 class ClusteringService:
     """Single entry point for turning a set of schedules into K families."""
@@ -50,11 +63,18 @@ class ClusteringService:
         self._config = config or ClusterConfig.default()
         self._extractor = ScoreFeatureExtractor(self._config.criteria)
         self._metric = self._build_metric(self._config)
-        # The strategy can be overridden (e.g. a scikit-learn adapter) but the
-        # default is the in-house, dependency-free K-means.
-        self._strategy = strategy or KMeansClusteringStrategy(
-            metric=self._metric, seed=self._config.seed
-        )
+        # Prefer the scikit-learn strategy (faster, multiple restarts); fall
+        # back to the in-house implementation when sklearn is not installed.
+        if strategy is not None:
+            self._strategy = strategy
+        elif _SKLEARN_AVAILABLE:
+            self._strategy = ScikitLearnKMeansStrategy(
+                random_state=self._config.seed
+            )
+        else:
+            self._strategy = KMeansClusteringStrategy(
+                metric=self._metric, seed=self._config.seed
+            )
         self._auto_k = AutoKSelector(
             strategy=self._strategy, metric=self._metric, seed=self._config.seed
         )
@@ -65,6 +85,7 @@ class ClusteringService:
         self._raw_matrix: Optional[np.ndarray] = None     # un-normalized (n, d)
         self._population_size: int = 0
         self._fitted: bool = False
+        self._cached_auto_k: Optional[int] = None        # memoised silhouette result
 
     # ── fit (expensive, done once per working set) ───────────────────────────
 
@@ -90,6 +111,7 @@ class ClusteringService:
         self._matrix = FeatureNormalizer().fit_transform(raw)
         self._population_size = population_size or raw.shape[0]
         self._fitted = True
+        self._cached_auto_k = None   # new matrix → silhouette must re-run
         return self
 
     def fit(
@@ -177,9 +199,11 @@ class ClusteringService:
                 raise ValueError("k must be a positive integer")
             return k
         if self._config.k_mode == K_MODE_AUTO:
-            return self._auto_k.choose(
-                self._matrix, self._config.k_min, self._config.k_max
-            ).k
+            if self._cached_auto_k is None:
+                self._cached_auto_k = self._auto_k.choose(
+                    self._matrix, self._config.k_min, self._config.k_max
+                ).k
+            return self._cached_auto_k
         return self._config.k
 
     @staticmethod

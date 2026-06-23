@@ -190,6 +190,18 @@ class AppController(QObject):
     # Clustering (groups the generated schedules into families)
     # ------------------------------------------------------------------
 
+    def get_cluster_coordinator(self, fresh: bool = False):
+        """Return (or create) the ClusteringCoordinator for background use."""
+        return self._facade.get_cluster_coordinator(fresh)
+
+    def cards_from_run(self, run):
+        """Store a finished ClusteringRun and return its card view models."""
+        return self._facade.cards_from_run(run)
+
+    def invalidate_clustering(self):
+        """Discard the cached cluster result (e.g. called after generation completes)."""
+        self._facade.invalidate_clustering()
+
     def compute_clusters(self, k=None):
         """Cluster the generated results into families (first computation)."""
         return self._facade.compute_clusters(k)
@@ -297,6 +309,9 @@ class AppController(QObject):
         """Handles completion steps cleanly and resets control state logic for subsequent jobs."""
         self._stop_progress_timer()
         self._early_nav_fired = False
+        # Discard any mid-generation cluster result so the next visit to the
+        # cluster screen re-computes on the complete post-generation dataset.
+        self._facade.invalidate_clustering()
         self.search_finished.emit()
 
     def _handle_error_occurred(self, message: str) -> None:
