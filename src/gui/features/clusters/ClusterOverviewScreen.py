@@ -25,7 +25,6 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.common.components.HeaderWidget import HeaderWidget
-from gui.common.helpers import create_divider
 from gui.core.screen import Screen
 from gui.features.clusters.ClusterOverviewPresenter import ClusterOverviewPresenter
 from gui.features.clusters.widgets.ClusterCardWidget import ClusterCardWidget
@@ -50,7 +49,6 @@ class ClusterOverviewScreen(Screen):
         root.addWidget(HeaderWidget(parent=self))
         self._build_toolbar(root)
         self._build_request_bar(root)
-        root.addWidget(create_divider())
         self._build_cards_area(root)
 
         self._presenter = ClusterOverviewPresenter(
@@ -83,16 +81,18 @@ class ClusterOverviewScreen(Screen):
 
         layout.addWidget(QLabel("Number of families (K):"))
         self._k_spin = QSpinBox()
+        self._k_spin.setObjectName("k-spin")
         self._k_spin.setRange(1, 50)
         self._k_spin.setValue(3)
-        self._k_spin.setFixedWidth(70)
+        self._k_spin.setFixedWidth(80)
         layout.addWidget(self._k_spin)
 
         self._apply_btn = QPushButton("Apply")
         self._apply_btn.setObjectName("btn-secondary")
         layout.addWidget(self._apply_btn)
 
-        self._compare_btn = QPushButton("Compare selected (pick 2)")
+        self._compare_btn = QPushButton("Compare selected")
+        self._compare_btn.setToolTip("In order to compare select two families")
         self._compare_btn.setObjectName("btn-secondary")
         self._compare_btn.setEnabled(False)
         layout.addWidget(self._compare_btn)
@@ -115,11 +115,15 @@ class ClusterOverviewScreen(Screen):
         root.addWidget(self._scroll, stretch=1)
 
     def _build_request_bar(self, root: QVBoxLayout) -> None:
+        container_layout = QVBoxLayout()
+        container_layout.setContentsMargins(24, 16, 24, 10)
+        container_layout.setSpacing(0)
+
         bar = QFrame()
-        bar.setObjectName("month-nav-bar")
+        bar.setObjectName("clustering-request-bar")
         layout = QVBoxLayout(bar)
-        layout.setContentsMargins(24, 10, 24, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(20, 14, 20, 14)
+        layout.setSpacing(10)
 
         row = QHBoxLayout()
         row.setSpacing(10)
@@ -148,11 +152,12 @@ class ClusterOverviewScreen(Screen):
         layout.addWidget(self._busy_bar)
 
         self._interpretation_label = QLabel("")
+        self._interpretation_label.setObjectName("interpretation-label")
         self._interpretation_label.setWordWrap(True)
-        self._interpretation_label.setStyleSheet("color: #0f766e; font-style: italic;")
         layout.addWidget(self._interpretation_label)
 
-        root.addWidget(bar)
+        container_layout.addWidget(bar)
+        root.addLayout(container_layout)
 
     def _connect_events(self) -> None:
         self._back_btn.clicked.connect(self._presenter.on_back)
@@ -213,7 +218,7 @@ class ClusterOverviewScreen(Screen):
     def set_compare_enabled(self, enabled: bool) -> None:
         self._compare_btn.setEnabled(enabled)
         self._compare_btn.setText(
-            "Compare selected (2/2)" if enabled else "Compare selected (pick 2)"
+            "Compare selected (2/2)" if enabled else "Compare selected"
         )
 
     def show_message(self, message: str) -> None:

@@ -24,10 +24,18 @@ class ClusterOverviewPresenter:
 
         self._compare_selection: List[int] = []
         self._worker: Optional[ClusterWorker] = None
+        self._last_request_text: str = ""
+        self._last_k: Optional[int] = None
 
     # Entry point: compute clusters. Reuse the last active K if one exists so
     # the view stays consistent after a generation run invalidates the cache.
     def on_enter(self) -> None:
+        # Restore last request text in the input field
+        if self._last_request_text:
+            self._view._request_input.setText(self._last_request_text)
+        else:
+            self._view._request_input.setText("")
+        # Use last active K for consistency
         prev_k = self._controller.get_active_k()
         self._kick_off(k=prev_k or None, recompute=False)
 
@@ -39,14 +47,15 @@ class ClusterOverviewPresenter:
         if k <= 0:
             self._view.show_message("K must be a positive integer.")
             return
+        self._last_k = k
         self._kick_off(k=k, recompute=True)
 
     # User typed a free-text request and pressed Apply request.
-    def on_apply_request(self, text: str) -> None:
+    def on_apply_request(self, text: str, k: Optional[int] = None) -> None:
         self._compare_selection = []
         self._view.set_busy(True)
         try:
-            cards = self._controller.cluster_from_request(text)
+            cards = self._controller.cluster_from_request(text, k)
             interpretation = self._controller.get_cluster_interpretation()
         except Exception as error:
             self._view.set_busy(False)
@@ -69,6 +78,13 @@ class ClusterOverviewPresenter:
         self._view.set_interpretation(interpretation)
         self._view.render_cards(cards)
         self._view.set_compare_enabled(False)
+
+        # Save state on success
+        self._last_request_text = text
+        if k is not None:
+            self._last_k = k
+        else:
+            self._last_k = None
 
     def on_open_cluster(self, cluster_id: int) -> None:
         self._detail.enter_cluster(cluster_id)

@@ -29,6 +29,12 @@ class OutputScreenPresenter:
         if hasattr(self._controller, "search_finished"):
             self._controller.search_finished.connect(self.on_search_finished)
 
+        # True only while OutputScreen is the currently visible screen.
+        # Guards background callbacks (SortWorker ready, search_finished) so
+        # they are silently discarded when the user is on another screen.
+        self._is_active = False
+        self._sort_worker = None
+
     @property
     def current_index(self) -> int:
         return self._current_index
@@ -156,6 +162,32 @@ class OutputScreenPresenter:
 
         self._view.export_schedule_pdf(schedule_view, self._current_index)
 
+    # Initiates the TXT export process for the current schedule
+    def on_export_txt(self) -> None:
+        if self._total == 0:
+            self._view.show_nothing_to_export("There is no schedule to export yet.")
+            return
+
+        try:
+            schedule_view = self._controller.get_schedule_view(self._current_index)
+        except Exception as error:
+            self._view.show_export_error(f"Could not read the current schedule:\n{error}")
+            return
+
+        if schedule_view.is_empty():
+            self._view.show_nothing_to_export("This schedule has no exams to export.")
+            return
+
+        path = self._view.ask_save_path(f"exam_schedule_solution_{self._current_index + 1}.txt")
+        if not path:
+            return
+
+        try:
+            self._controller.save_schedule(self._current_index, path)
+            self._view.show_message(f"Saved to:\n{path}")
+        except Exception as error:
+            self._view.show_export_error(f"Could not save schedule:\n{error}")
+
     # Navigation helpers for period blocks and solution indices
     def on_prev_period(self) -> None:
         if self._periods.move_previous():
@@ -203,12 +235,35 @@ class OutputScreenPresenter:
 
     # Initial setup steps when navigating to this screen
     def on_enter(self) -> None:
+        self._is_active = True
         self._current_index = 0
         self._sync_page_info()
         self._periods.reset(self._get_available_periods())
         self.show_current()
         self.refresh_counter()
         self._view.focus_back_button()
+
+    def on_leave(self) -> None:
+        """Called when the user navigates away from the OutputScreen.
+
+        Marks the screen as inactive so that background callbacks
+        (SortWorker ready/failed, search_finished, total_count_updated)
+        are silently discarded instead of touching state that may have
+        been reset by a new generation run on the InputScreen.
+        """
+        self._is_active = False
+        # Stop any background sort still running so its signals are not
+        # delivered to a screen the user has already left.
+        _w = self._sort_worker
+        if _w is not None and _w.isRunning():
+            try:
+                _w.ready.disconnect(self._on_sort_ready)
+                _w.failed.disconnect(self._on_sort_failed)
+            except (RuntimeError, TypeError):
+                pass
+            _w.quit()
+            _w.wait()
+        self._sort_worker = None
 
     def on_sort_config_changed(self, priority_list: List[str]) -> None:
         """Called when sorting priority is updated and applied from the SortConfigPanel.
@@ -238,6 +293,9 @@ class OutputScreenPresenter:
 
     def _on_sort_ready(self, data: dict) -> None:
         """Background sort finished — apply it on the GUI thread (fast)."""
+        if not self._is_active:
+            # User navigated away before the worker finished so sorting isnt needed.
+            return
         self._controller.apply_sort_data(data)
         if hasattr(self._view, "set_sorting_busy"):
             self._view.set_sorting_busy(False)
@@ -261,6 +319,9 @@ class OutputScreenPresenter:
         Apply, so generation-end doesn't freeze the GUI. If no sort is active,
         just refresh the view.
         """
+        # User may have left while generation was running so no new searches are needed
+        if not self._is_active:
+            return
         active = []
         if hasattr(self._controller, "get_active_sort_priority"):
             active = self._controller.get_active_sort_priority() or []

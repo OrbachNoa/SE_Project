@@ -286,3 +286,213 @@ def test_course_with_no_matching_period_raises_clear_error(make_course, make_per
     assert "SPRI" in msg, (
         f"Error must mention the missing semester; got: {msg!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Threshold-based integration scenarios — imports added for this section only.
+# ---------------------------------------------------------------------------
+from src.logic.checkers.config.CheckerFactory import build_checkers
+from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
+from src.logic.comparators.ScheduleScorer import ScheduleScorer, MIN_MANDATORY_GAP
+from src.application.dto.ScheduleDTO import ScheduleDTO
+from src.application.state.ScheduleReranker import rerank
+
+
+# ===========================================================================
+# TC-BEH-008 — MinDaysBetweenExamsChecker keeps every mandatory gap >= k.
+# With three mandatory exams in the same cohort, a 5-day window, and k=2,
+# every returned schedule must place its exams at least 2 days apart.
+# ===========================================================================
+def test_min_days_between_exams_checker_enforces_gap_in_every_result(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange — 3 mandatory courses in one cohort, a 5-day window, k=2.
+    pe = make_program_entry(
+        program_id="83101", year=2, requirement=Requirement.OBLIGATORY,
+    )
+    courses = [
+        make_course(course_id="10101", program_entries=[pe]),
+        make_course(course_id="10102", program_entries=[pe]),
+        make_course(course_id="10103", program_entries=[pe]),
+    ]
+    period = make_period(start=date(2026, 6, 1), end=date(2026, 6, 5), excluded=[])
+    slots = SlotBuilder([period]).build(courses)
+    config = ConstraintsConfig(min_gap_obligatory=2)
+    checkers = build_checkers(config, courses, None, slots)
+    scheduler = Scheduler(checkers)
+    observer = CollectingScheduleObserver()
+
+    # Act
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+
+    # Assert — every pair of exams in every returned schedule is at least
+    # 2 days apart; the scenario must also be satisfiable at all.
+    assert len(schedules) > 0, "Sanity: a gap of 2 over 5 days must be satisfiable"
+    for s in schedules:
+        days = sorted(a.date for a in s.assignments)
+        gaps = [(days[i + 1] - days[i]).days for i in range(len(days) - 1)]
+        assert min(gaps) >= 2, (
+            f"Schedule has a gap below k=2 between mandatory exams: days={days}"
+        )
+
+
+# ===========================================================================
+# TC-BEH-009 — MaxExamsPerDayChecker never lets a day exceed k exams.
+# Four independent-program courses, a 2-day window, and k=2 must always
+# split the load so no single day ever carries more than 2 exams.
+# ===========================================================================
+def test_max_exams_per_day_checker_never_exceeds_k_in_any_result(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange — 4 courses in 4 distinct programs, a 2-day window, k=2.
+    courses = [
+        make_course(
+            course_id=f"1010{i}",
+            program_entries=[make_program_entry(program_id=f"8310{i}", year=2)],
+        )
+        for i in range(1, 5)
+    ]
+    period = make_period(start=date(2026, 6, 1), end=date(2026, 6, 2), excluded=[])
+    slots = SlotBuilder([period]).build(courses)
+    config = ConstraintsConfig(max_exams_per_day=2)
+    checkers = build_checkers(config, courses, None, slots)
+    scheduler = Scheduler(checkers)
+    observer = CollectingScheduleObserver()
+
+    # Act
+    scheduler.generateSchedules(slots, observer)
+    schedules = observer.schedules
+
+    # Assert — no day in any returned schedule carries more than k=2 exams.
+    assert len(schedules) > 0, "Sanity: 4 exams over 2 days at k=2 must be satisfiable"
+    for s in schedules:
+        counts: dict = {}
+        for a in s.assignments:
+            counts[a.date] = counts.get(a.date, 0) + 1
+        assert max(counts.values()) <= 2, (
+            f"Schedule places more than k=2 exams on one day: {counts}"
+        )
+
+
+# ===========================================================================
+# TC-BEH-010 — Impossible constraints make the scheduler return zero
+# results, instead of crashing or silently violating the rule. Three
+# mandatory exams cannot keep a 10-day gap inside a 3-day window.
+# ===========================================================================
+def test_impossible_min_gap_constraint_yields_zero_schedules(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange — k=10 cannot fit inside a 3-day window for any pair of exams.
+    pe = make_program_entry(
+        program_id="83101", year=2, requirement=Requirement.OBLIGATORY,
+    )
+    courses = [
+        make_course(course_id="10101", program_entries=[pe]),
+        make_course(course_id="10102", program_entries=[pe]),
+        make_course(course_id="10103", program_entries=[pe]),
+    ]
+    period = make_period(start=date(2026, 6, 1), end=date(2026, 6, 3), excluded=[])
+    slots = SlotBuilder([period]).build(courses)
+    config = ConstraintsConfig(min_gap_obligatory=10)
+    checkers = build_checkers(config, courses, None, slots)
+    scheduler = Scheduler(checkers)
+    observer = CollectingScheduleObserver()
+
+    # Act
+    scheduler.generateSchedules(slots, observer)
+
+    # Assert
+    assert observer.schedules == []
+
+
+# ===========================================================================
+# TC-BEH-011 — ScheduleReranker orders real scheduler results by a chosen
+# criterion strictly in descending order (higher score first).
+# ===========================================================================
+def test_reranker_sorts_real_scheduler_results_in_descending_order(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange — 3 mandatory courses, 5-day window, no threshold config.
+    pe = make_program_entry(
+        program_id="83101", year=2, requirement=Requirement.OBLIGATORY,
+    )
+    courses = [
+        make_course(course_id="10101", program_entries=[pe]),
+        make_course(course_id="10102", program_entries=[pe]),
+        make_course(course_id="10103", program_entries=[pe]),
+    ]
+    period = make_period(start=date(2026, 6, 1), end=date(2026, 6, 5), excluded=[])
+    slots = SlotBuilder([period]).build(courses)
+    scheduler = Scheduler(_default_checkers([period], courses))
+    observer = CollectingScheduleObserver()
+    scheduler.generateSchedules(slots, observer)
+
+    scorer = ScheduleScorer(courses)
+    dtos = [
+        ScheduleDTO(scores=scorer.score(snapshot)) for snapshot in observer.schedules
+    ]
+
+    # Act
+    reranked = rerank(dtos, [MIN_MANDATORY_GAP])
+
+    # Assert — the score sequence never increases, and there is real
+    # variety in it (otherwise the ordering check would be vacuous).
+    values = [d.scores[MIN_MANDATORY_GAP] for d in reranked]
+    assert len(set(values)) > 1, "Sanity: this scenario must produce varying scores"
+    assert all(values[i] >= values[i + 1] for i in range(len(values) - 1)), (
+        f"Reranked scores are not in descending order: {values}"
+    )
+
+
+# ===========================================================================
+# TC-BEH-012 — Full scoring pipeline: checker + scorer + reranker together.
+# Two independent cohorts (2 mandatory courses each) under a min-gap
+# checker of k=2 must all satisfy the gap, and reranking the scored
+# results by MIN_MANDATORY_GAP must put the best-spaced schedules first.
+# ===========================================================================
+def test_checker_scorer_and_reranker_work_together_end_to_end(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange — 2 cohorts of 2 mandatory courses each, 5-day window, k=2.
+    pe_x = make_program_entry(
+        program_id="83101", year=2, requirement=Requirement.OBLIGATORY,
+    )
+    pe_y = make_program_entry(
+        program_id="83102", year=2, requirement=Requirement.OBLIGATORY,
+    )
+    courses = [
+        make_course(course_id="10101", program_entries=[pe_x]),
+        make_course(course_id="10102", program_entries=[pe_x]),
+        make_course(course_id="10103", program_entries=[pe_y]),
+        make_course(course_id="10104", program_entries=[pe_y]),
+    ]
+    period = make_period(start=date(2026, 6, 1), end=date(2026, 6, 5), excluded=[])
+    slots = SlotBuilder([period]).build(courses)
+    config = ConstraintsConfig(min_gap_obligatory=2)
+    checkers = build_checkers(config, courses, None, slots)
+    scheduler = Scheduler(checkers)
+    observer = CollectingScheduleObserver()
+
+    # Act — generate, score, and rerank in one full scoring pipeline pass.
+    scheduler.generateSchedules(slots, observer)
+    scorer = ScheduleScorer(courses)
+    dtos = [
+        ScheduleDTO(scores=scorer.score(snapshot)) for snapshot in observer.schedules
+    ]
+    reranked = rerank(dtos, [MIN_MANDATORY_GAP])
+
+    # Assert — the checker held for every result, and the reranked scores
+    # are sorted in descending order with the best schedule(s) on top.
+    assert len(observer.schedules) > 0, "Sanity: this scenario must be satisfiable"
+    for snapshot in observer.schedules:
+        score = scorer.score(snapshot)
+        assert score[MIN_MANDATORY_GAP] >= 2, (
+            f"A produced schedule violates the k=2 min-gap checker: {score}"
+        )
+
+    values = [d.scores[MIN_MANDATORY_GAP] for d in reranked]
+    assert all(values[i] >= values[i + 1] for i in range(len(values) - 1)), (
+        f"Reranked scores are not in descending order: {values}"
+    )
+    assert values[0] == max(values)
