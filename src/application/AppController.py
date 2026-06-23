@@ -134,6 +134,20 @@ class AppController(QObject):
     def save_schedule(self, index: int, path: str) -> None:
         """Exports the targeted processed schedule out onto disk storage locations."""
         self._facade.export(index, path)
+    
+    def save_schedule_csv(self, index: int, path: str) -> None:
+        """Exports the targeted processed schedule to a CSV (Excel) file."""
+        schedule_view = self.get_schedule_view(index)
+        
+        # Import the necessary components (adjust paths according to your project structure)
+        from src.file_io.formatters.ScheduleCsvFormatter import ScheduleCsvFormatter
+        from src.file_io.writers.BaseCsvWriter import BaseCsvWriter
+        
+        # Convert the complex view model into a flat table structure
+        headers, rows = ScheduleCsvFormatter.format(schedule_view)
+        
+        # Write the formatted data to the physical file
+        BaseCsvWriter.write(path, headers, rows)
 
     # ------------------------------------------------------------------
     # Page navigation 

@@ -188,6 +188,32 @@ class OutputScreenPresenter:
         except Exception as error:
             self._view.show_export_error(f"Could not save schedule:\n{error}")
 
+    # Initiates the CSV export process for the current schedule
+    def on_export_csv(self) -> None:
+        if self._total == 0:
+            self._view.show_nothing_to_export("There is no schedule to export yet.")
+            return
+
+        try:
+            schedule_view = self._controller.get_schedule_view(self._current_index)
+        except Exception as error:
+            self._view.show_export_error(f"Could not read the current schedule:\n{error}")
+            return
+
+        if schedule_view.is_empty():
+            self._view.show_nothing_to_export("This schedule has no exams to export.")
+            return
+
+        path = self._view.ask_save_path_csv(f"exam_schedule_solution_{self._current_index + 1}.csv")
+        if not path:
+            return
+
+        try:
+            self._controller.save_schedule_csv(self._current_index, path)
+            self._view.show_message(f"Saved to:\n{path}")
+        except Exception as error:
+            self._view.show_export_error(f"Could not save CSV schedule:\n{error}")
+
     # Navigation helpers for period blocks and solution indices
     def on_prev_period(self) -> None:
         if self._periods.move_previous():
