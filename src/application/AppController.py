@@ -254,6 +254,21 @@ class AppController(QObject):
     def save_cluster_schedule(self, cluster_id: int, index_in_cluster: int, path: str) -> None:
         self._facade.export_cluster_schedule(cluster_id, index_in_cluster, path)
 
+    def save_cluster_schedule_csv(self, cluster_id: int, index_in_cluster: int, path: str) -> None:
+        """
+        Exports a specific schedule from a cluster to a CSV file.
+        """
+        # Retrieve the specific schedule view model for this cluster item
+        schedule_view = self.get_cluster_schedule_view(cluster_id, index_in_cluster)
+        
+        # Import the formatting and writing utilities
+        from src.file_io.formatters.ScheduleCsvFormatter import ScheduleCsvFormatter
+        from src.file_io.writers.BaseCsvWriter import BaseCsvWriter
+        
+        # Format the data and write to the file
+        headers, rows = ScheduleCsvFormatter.format(schedule_view)
+        BaseCsvWriter.write(path, headers, rows)
+
     # ------------------------------------------------------------------
     # State accessors for GUI components
     # ------------------------------------------------------------------

@@ -83,10 +83,12 @@ class ClusterDetailScreen(Screen):
         export_menu = QMenu(self)
         pdf_action = export_menu.addAction("Export as PDF")
         txt_action = export_menu.addAction("Export as TXT")
+        csv_action = export_menu.addAction("Export as Excel (CSV)")
         self._export_btn.setMenu(export_menu)
 
         pdf_action.triggered.connect(self._presenter.on_export_pdf)
         txt_action.triggered.connect(self._presenter.on_export_txt)
+        csv_action.triggered.connect(self._presenter.on_export_csv)
 
         self._prev_btn.clicked.connect(self._presenter.on_prev)
         self._next_btn.clicked.connect(self._presenter.on_next)
@@ -116,6 +118,9 @@ class ClusterDetailScreen(Screen):
 
     def ask_save_path(self, default_name: str) -> str:
         return prompt_save_file(self, "Save schedule", default_name, "Text files (*.txt)")
+    
+    def ask_save_path_csv(self, default_name: str) -> str:
+        return prompt_save_file(self, "Save schedule as Excel/CSV", default_name, "CSV files (*.csv);;Excel files (*.xlsx)")
 
     def show_message(self, message: str) -> None:
         QMessageBox.information(self, "Cluster", message)
