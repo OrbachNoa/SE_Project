@@ -188,6 +188,34 @@ class OutputScreenPresenter:
         except Exception as error:
             self._view.show_export_error(f"Could not save schedule:\n{error}")
 
+    # Initiates the Excel export process for the current schedule
+    def on_export_excel(self) -> None:
+        if self._total == 0:
+            self._view.show_nothing_to_export("There is no schedule to export yet.")
+            return
+
+        try:
+            schedule_view = self._controller.get_schedule_view(self._current_index)
+        except Exception as error:
+            self._view.show_export_error(f"Could not read the current schedule:\n{error}")
+            return
+
+        if schedule_view.is_empty():
+            self._view.show_nothing_to_export("This schedule has no exams to export.")
+            return
+
+        path = self._view.ask_save_path_excel(f"exam_schedule_solution_{self._current_index + 1}.xlsx")
+        if not path:
+            return
+
+        try:
+            self._controller.save_schedule_excel(self._current_index, path)
+            self._view.show_message(f"Saved to:\n{path}")
+        except PermissionError:
+            self._view.show_export_error("Could not save because the file is open in Excel. Please close it and try again.")
+        except Exception as error:
+            self._view.show_export_error(f"Could not save Excel schedule:\n{error}")
+
     # Navigation helpers for period blocks and solution indices
     def on_prev_period(self) -> None:
         if self._periods.move_previous():
