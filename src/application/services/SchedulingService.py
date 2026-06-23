@@ -80,7 +80,17 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
         work_queue.cancel_join_thread()
 
 
-def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results, batch_size, work_source, config=None, result_counter=None):
+def _run_scheduler_process(slots, 
+                           courses, 
+                           selected_programs, 
+                           queue, 
+                           cancel_event, 
+                           max_results, 
+                           batch_size, 
+                           work_source, 
+                           config=None, 
+                           result_counter=None
+                           ):
     """
     This is the actual code that runs INSIDE each independent background worker.
     Each worker gets a copy of the raw data, builds its own tools, and starts crunching numbers.
@@ -119,19 +129,16 @@ class SchedulingService:
 
     def __init__(self, repository: SQLiteScheduleRepository) -> None:
         self._repository = repository
-        self._slot_builder: Optional[SlotBuilder] = None
-        self._checkers: List = []
         self._worker: Optional[SchedulerWorker] = None
 
     def build_slots(
         self, program_ids: List[str], courses: List[Course], periods: List[ExamPeriod]
     ) -> List[Slot]:
         """
-        Convert raw courses and dates into 'Slots'. 
+        Convert raw courses and dates into 'Slots'.
         Think of a Slot as an empty bucket waiting to be assigned a specific exam date.
         """
-        self._slot_builder = SlotBuilder(periods, program_ids)
-        return self._slot_builder.build(courses)
+        return SlotBuilder(periods, program_ids).build(courses)
 
     def generate_async(
         self,

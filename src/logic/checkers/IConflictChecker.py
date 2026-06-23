@@ -9,7 +9,14 @@ class IConflictChecker(ABC):
     @abstractmethod
     def check(self, assignment, schedule) -> bool:
         """
-        This function checks if we can add a new exam to the schedule.
+        Checks whether placing `assignment` into `schedule` would violate this
+        checker's rule. Returns True if there IS a violation (reject this
+        placement), False if the placement is acceptable.
+
+        May be called speculatively, for candidate dates that are never
+        actually committed (e.g. during forward-checking domain pruning), so
+        implementations must be pure functions of (assignment, schedule) and
+        must not mutate checker state here.
         """
         pass
 

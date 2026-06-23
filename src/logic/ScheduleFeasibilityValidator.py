@@ -7,7 +7,9 @@ from src.logic.checkers.config.CheckerFactory import build_checkers
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 from src.logic.feasibility.FeasibilityContext import FeasibilityContext
 from src.logic.feasibility.FeasibilityRule import FeasibilityRule
-from src.logic.feasibility.rules import MoedOrderDomainRule, NonEmptyDomainRule
+from src.logic.feasibility.MandatorySpanGapRule import MandatorySpanGapRule
+from src.logic.feasibility.MoedOrderDomainRule import MoedOrderDomainRule
+from src.logic.feasibility.NonEmptyDomainRule import NonEmptyDomainRule
 
 
 class ScheduleFeasibilityValidator:
@@ -24,6 +26,7 @@ class ScheduleFeasibilityValidator:
         self._structural_rules = structural_rules or [
             NonEmptyDomainRule(),
             MoedOrderDomainRule(),
+            MandatorySpanGapRule(),
         ]
 
     def validate(

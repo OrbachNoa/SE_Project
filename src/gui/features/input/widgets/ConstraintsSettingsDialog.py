@@ -23,7 +23,14 @@ from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 
 @dataclass(frozen=True)
 class _ConstraintMeta:
-    """Static metadata for one constraint row."""
+    """Static metadata for one constraint row.
+
+    min_k/max_k bound the spinbox so the GUI can never submit an invalid k
+    (e.g. min_k=1 for constraints that require a positive k, matching the
+    validation enforced for the CLI's equivalent flags in src/main.py). max_k
+    is a sane UI ceiling, not a constraint imposed by the scheduling logic
+    itself, which accepts any positive int.
+    """
     label: str
     description: str
     unit: str

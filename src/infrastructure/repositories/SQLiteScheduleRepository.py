@@ -266,34 +266,6 @@ class SQLiteScheduleRepository:
             self._conn.execute("DELETE FROM schedule_scores")
             self._conn.commit()
 
-    def get_window(self, offset: int, limit: int) -> List[ScheduleDTO]:
-        """Return a normal DTO window for the requested page."""
-        with self._lock:
-            # Find all batches that overlap the requested range.
-            rows = self._conn.execute(
-                "SELECT first_offset, batch_count, data FROM schedule_batches "
-                "WHERE first_offset + batch_count > ? AND first_offset < ? ORDER BY first_offset",
-                (offset, offset + limit),
-            ).fetchall()
-
-        wanted = set(range(offset, offset + limit))
-        result_by_id: dict = {}
-
-        for first_off, batch_count, raw in rows:
-            # Decode only the part of the batch that belongs to this page.
-            overlap = {g for g in wanted if first_off <= g < first_off + batch_count}
-            result_by_id.update(self._decode_batch(raw, first_off, overlap))
-
-            if len(result_by_id) >= limit:
-                break
-
-        # Return schedules in the same order as their global ids.
-        return [
-            result_by_id[g]
-            for g in range(offset, offset + limit)
-            if g in result_by_id
-        ]
-
     def get_window_raw(self, offset: int, limit: int) -> tuple:
         """Return raw rows for a page, without building full ScheduleDTO objects.
 
@@ -339,23 +311,6 @@ class SQLiteScheduleRepository:
         score_map = self._scores_for_ids(list(raw_map.keys()))
 
         return raw_map, score_map, self._slots
-
-    def get_sorted_ids(self, priority: List[str]) -> List[int]:
-        """Return all schedule ids sorted by the selected score priority."""
-        with self._lock:
-            if not priority:
-                # No sort preference means normal generation order.
-                rows = self._conn.execute(
-                    "SELECT gidx FROM schedule_scores ORDER BY gidx"
-                ).fetchall()
-            else:
-                # Sort by the score columns the user chose, best scores first.
-                order = ", ".join(f"{_SCORE_COLS[c]} DESC" for c in priority)
-                rows = self._conn.execute(
-                    f"SELECT gidx FROM schedule_scores ORDER BY {order}"
-                ).fetchall()
-
-        return [r[0] for r in rows]
 
     def get_sorted_ids_page(
         self,

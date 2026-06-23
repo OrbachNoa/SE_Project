@@ -11,18 +11,6 @@ from src.logic.feasibility.helpers import enum_name, first_after
 from src.models.Enums import Moed
 
 
-class NonEmptyDomainRule(FeasibilityRule):
-    def validate(self, context: FeasibilityContext) -> List[str]:
-        errors = []
-        for slot in context.slots:
-            if not slot.candidateDates:
-                errors.append(
-                    f"Course {slot.course.courseId} ({slot.course.name}) has no available "
-                    f"dates for {enum_name(slot.semester)} {enum_name(slot.moed)}."
-                )
-        return errors
-
-
 class MoedOrderDomainRule(FeasibilityRule):
     _MOED_RANK = {
         Moed.ALEPH: 1,
