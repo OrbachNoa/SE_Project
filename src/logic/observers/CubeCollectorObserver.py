@@ -1,9 +1,5 @@
-"""Observer used only during cube generation.
-
-It is handed to the Scheduler with a small target_depth, so every
-on_schedule_found call carries a *partial* schedule (a cube). It snapshots that
-cube's dates into a WorkUnit. It is intentionally minimal: no cancellation, no
-progress, no error/finish handling.
+"""
+Collects partial schedules and turns them into WorkUnits.
 """
 from __future__ import annotations
 
@@ -14,31 +10,33 @@ from src.logic.parallel.WorkUnit import WorkUnit
 
 
 class CubeCollectorObserver(IScheduleObserver):
-    """Collects partial schedules from cube generation into WorkUnits."""
+    """Observer used only while splitting the search into work units."""
 
     def __init__(self) -> None:
+        # Stores all work units created from the partial schedules.
         self._units: List[WorkUnit] = []
 
     def on_schedule_found(self, schedule) -> None:
-        # The schedule keeps mutating during backtracking, so copy the dates
-        # into a fresh list now instead of holding a reference to it. The
-        # partitioner runs with fixed leading-index order, so assignment i
-        # belongs to slot i and the dates are already aligned by position.
+        # Save only the dates, because the worker can rebuild the assignments from its own slots.
         self._units.append(WorkUnit(seed_dates=[a.date for a in schedule.assignments]))
 
     def on_progress(self, value: int) -> None:
+        # Progress is not needed while we only collect work units.
         pass
 
     def should_cancel(self) -> bool:
+        # This collector does not control cancellation.
         return False
 
     def on_finished(self) -> None:
+        # Nothing to do when cube collection is finished.
         pass
 
     def on_error(self, message: str) -> None:
+        # Errors are handled by the caller that runs the partitioning step.
         pass
 
     @property
     def units(self) -> List[WorkUnit]:
-        """The cubes collected so far, one per partial schedule found."""
+        """Return the work units collected so far."""
         return self._units
