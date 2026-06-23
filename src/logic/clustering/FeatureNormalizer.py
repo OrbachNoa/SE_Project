@@ -43,7 +43,14 @@ class FeatureNormalizer:
         return (np.asarray(matrix, dtype=float) - self._min) / self._range
 
     def fit_transform(self, matrix: np.ndarray) -> np.ndarray:
-        """Convenience: ``fit`` then ``transform`` on the same population."""
+        """Convenience: ``fit`` then ``transform`` on the same population.
+
+        Returns an empty array of the same shape when given an empty matrix
+        (0 rows) instead of raising, so callers don't need to guard.
+        """
+        matrix = np.asarray(matrix, dtype=float)
+        if matrix.ndim == 2 and matrix.shape[0] == 0:
+            return matrix
         return self.fit(matrix).transform(matrix)
 
     def transform_one(self, vector: np.ndarray) -> np.ndarray:
@@ -54,3 +61,15 @@ class FeatureNormalizer:
     def _ensure_fitted(self) -> None:
         if self._min is None or self._range is None:
             raise RuntimeError("normalizer used before fit() was called")
+
+
+def normalize_features(vectors: np.ndarray) -> np.ndarray:
+    """Min-max normalize an (n, d) matrix to [0, 1] per column.
+
+    Identical-value columns map to 0.0 (not NaN).  Empty input (0 rows)
+    returns the same empty array without raising.
+
+    This is a convenience wrapper for callers that want a one-call API
+    without constructing a ``FeatureNormalizer`` explicitly.
+    """
+    return FeatureNormalizer().fit_transform(np.asarray(vectors, dtype=float))

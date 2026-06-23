@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from src.infrastructure.concurrency.ClusterWorker import ClusterWorker
+
 
 class ClusterOverviewPresenter:
     """Computes clusters, renders cards, and coordinates navigation/comparison."""
@@ -21,21 +23,21 @@ class ClusterOverviewPresenter:
         self._compare = compare_screen
 
         self._compare_selection: List[int] = []
+        self._worker: Optional[ClusterWorker] = None
         self._last_request_text: str = ""
         self._last_k: Optional[int] = None
 
-    # Entry point: compute clusters with automatic K and show the cards.
+    # Entry point: compute clusters. Reuse the last active K if one exists so
+    # the view stays consistent after a generation run invalidates the cache.
     def on_enter(self) -> None:
+        # Restore last request text in the input field
         if self._last_request_text:
             self._view._request_input.setText(self._last_request_text)
-            self.on_apply_request(self._last_request_text, k=self._last_k)
-        elif self._last_k is not None:
-            self._view._request_input.setText("")
-            self._view.set_k_value(self._last_k)
-            self._compute(k=self._last_k, recompute=False)
         else:
             self._view._request_input.setText("")
-            self._compute(k=None, recompute=False)
+        # Use last active K for consistency
+        prev_k = self._controller.get_active_k()
+        self._kick_off(k=prev_k or None, recompute=False)
 
     def on_leave(self) -> None:
         pass
@@ -45,12 +47,8 @@ class ClusterOverviewPresenter:
         if k <= 0:
             self._view.show_message("K must be a positive integer.")
             return
-        req_text = self._view.get_request_text().strip()
-        self._last_request_text = req_text
-        if k == 0:
-            self._compute(k=None, recompute=True)
-        else:
-            self._compute(k=k, recompute=True)
+        self._last_k = k
+        self._kick_off(k=k, recompute=True)
 
     # User typed a free-text request and pressed Apply request.
     def on_apply_request(self, text: str, k: Optional[int] = None) -> None:
@@ -113,32 +111,58 @@ class ClusterOverviewPresenter:
     def on_back(self) -> None:
         self._router.back()
 
-    # ── helpers ──────────────────────────────────────────────────────────────
+    # ── background work ───────────────────────────────────────────────────────
 
-    def _compute(self, k: Optional[int], recompute: bool) -> None:
+    def _kick_off(self, k: Optional[int], recompute: bool) -> None:
+        """Start a ClusterWorker so clustering runs off the GUI thread."""
         self._compare_selection = []
+
+        # fresh=True forces a new sample+fit (on_enter); fresh=False reuses
+        # the already-fitted matrix for a cheap K-change (on_apply_k).
+        coordinator = self._controller.get_cluster_coordinator(fresh=not recompute)
+        if coordinator is None:
+            self._view.show_message("No schedules to cluster yet. Generate schedules first.")
+            return
+
+        # Only show the spinner when prepare() is actually going to run.
+        # If the coordinator is already prepared, the worker will finish
+        # near-instantly from the cached matrix — showing the spinner would
+        # only produce a distracting flash.
+        if not coordinator.is_prepared:
+            self._view.set_busy(True)
+
+        self._worker = ClusterWorker(coordinator, k=k)
+        self._worker.finished.connect(self._on_worker_finished)
+        self._worker.failed.connect(self._on_worker_failed)
+        self._worker.start()
+
+    def _on_worker_finished(self, run) -> None:
+        self._view.set_busy(False)
         try:
-            if recompute:
-                cards = self._controller.recompute_clusters(k)
-            else:
-                cards = self._controller.compute_clusters(k)
-        except Exception as error:  # generation may not have produced results yet
+            # Store the run in the facade (so get_active_k etc. work) and
+            # convert to card view models — both are cheap, GUI thread is fine.
+            cards = self._controller.cards_from_run(run)
+        except Exception as error:
             self._view.render_cards([])
             self._view.set_summary("")
-            self._view.show_message(f"Could not compute clusters: {error}")
+            self._view.show_message(f"Could not render clusters: {error}")
             return
 
         if not cards:
             self._view.render_cards([])
             self._view.set_summary("")
-            self._view.show_message(
-                "No schedules to cluster yet. Generate schedules first."
-            )
+            self._view.show_message("No schedules to cluster yet. Generate schedules first.")
             return
 
         active_k = self._controller.get_active_k()
         self._view.set_k_value(active_k)
         self._view.set_summary(f"{active_k} families")
-        self._view.set_interpretation("")  # automatic grouping has no custom request
+        self._view.set_interpretation("")
         self._view.render_cards(cards)
         self._view.set_compare_enabled(False)
+
+    def _on_worker_failed(self, message: str) -> None:
+        self._view.set_busy(False)
+        self._view.render_cards([])
+        self._view.set_summary("")
+        self._view.show_message(f"Could not compute clusters: {message}")
