@@ -23,6 +23,12 @@ from src.logic.clustering.IClusteringStrategy import IClusteringStrategy
 from src.logic.clustering.IDistanceMetric import IDistanceMetric
 from src.logic.clustering.KMeansClusteringStrategy import KMeansClusteringStrategy
 
+try:
+    from sklearn.metrics import silhouette_score as _sklearn_silhouette
+    _HAS_SKLEARN = True
+except ImportError:
+    _HAS_SKLEARN = False
+
 
 @dataclass(slots=True)
 class KSelection:
@@ -65,11 +71,18 @@ class AutoKSelector:
         if upper < lower:
             return KSelection(k=lower, scores={})
 
+        # Build the pairwise distance matrix once — eval_points is constant
+        # across all K candidates, so the matrix is identical every iteration.
+        # sklearn recomputes it internally on every silhouette_score() call;
+        # the numpy fallback allocates O(n²d) on every call. Computing it here
+        # eliminates (k_max - k_min) redundant builds.
+        dist = self._build_dist_matrix(eval_points)
+
         scores: dict = {}
         best_k, best_score = lower, -1.0
         for k in range(lower, upper + 1):
             labels = self._strategy.cluster(eval_points, k).labels
-            score = self._silhouette(eval_points, labels)
+            score = self._silhouette_precomputed(dist, labels)
             scores[k] = score
             if score > best_score:
                 best_k, best_score = k, score
@@ -85,41 +98,47 @@ class AutoKSelector:
         idx = rng.choice(n, size=self._max_eval_points, replace=False)
         return points[idx]
 
-    def _silhouette(self, points: np.ndarray, labels: np.ndarray) -> float:
-        """Mean silhouette coefficient of a labelling (higher is better).
+    def _build_dist_matrix(self, points: np.ndarray) -> np.ndarray:
+        """Euclidean pairwise distance matrix for the eval sub-sample."""
+        p32 = points.astype(np.float32, copy=False)
+        if _HAS_SKLEARN:
+            from sklearn.metrics import pairwise_distances
+            return pairwise_distances(p32, metric='euclidean')
+        diff = p32[:, np.newaxis, :] - p32[np.newaxis, :, :]
+        return np.linalg.norm(diff, axis=2).astype(np.float32)
 
-        For each point: a = mean distance to its own cluster, b = mean distance
-        to the nearest other cluster; silhouette = (b - a) / max(a, b). Returns 0
-        for degenerate labellings (a single non-empty cluster).
-        """
+    def _silhouette_precomputed(self, dist: np.ndarray, labels: np.ndarray) -> float:
+        """Mean silhouette from a precomputed (n, n) distance matrix."""
         unique = np.unique(labels)
         if unique.size < 2:
             return 0.0
 
-        # Full pairwise distances on the (capped) evaluation set.
-        diff = points[:, np.newaxis, :] - points[np.newaxis, :, :]
-        dist = np.linalg.norm(diff, axis=2)
+        if _HAS_SKLEARN:
+            try:
+                return float(_sklearn_silhouette(dist, labels, metric='precomputed'))
+            except Exception:
+                pass
 
-        n = points.shape[0]
-        sil = np.zeros(n, dtype=float)
-        for i in range(n):
-            own = labels[i]
-            same = labels == own
-            same[i] = False  # exclude self
-            same_count = same.sum()
-            if same_count == 0:
-                sil[i] = 0.0  # lone point in its cluster
-                continue
-            a = dist[i, same].mean()
+        # Vectorised NumPy fallback — dist already built, no reallocation.
+        n = dist.shape[0]
+        a = np.zeros(n, dtype=float)
+        b = np.full(n, np.inf)
 
-            b = np.inf
-            for other in unique:
-                if other == own:
-                    continue
-                mask = labels == other
-                if mask.any():
-                    b = min(b, dist[i, mask].mean())
+        for c in unique:
+            mask = labels == c
+            idx = np.where(mask)[0]
+            size = idx.size
 
-            sil[i] = 0.0 if max(a, b) == 0 else (b - a) / max(a, b)
+            if size > 1:
+                intra_sum = dist[np.ix_(idx, idx)].sum(axis=1)
+                a[idx] = intra_sum / (size - 1)
 
+            not_idx = np.where(~mask)[0]
+            if not_idx.size > 0 and size > 0:
+                inter_mean = dist[np.ix_(not_idx, idx)].mean(axis=1)
+                b[not_idx] = np.minimum(b[not_idx], inter_mean)
+
+        b = np.where(np.isinf(b), 0.0, b)
+        denom = np.maximum(a, b)
+        sil = np.where(denom == 0, 0.0, (b - a) / denom)
         return float(sil.mean())

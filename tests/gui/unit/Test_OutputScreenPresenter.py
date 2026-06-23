@@ -296,3 +296,72 @@ def test_presenter_export_pdf_success():
     # Assert
     assert view.export_schedule_pdf.call_count == 1
     assert view.export_schedule_pdf.call_args[0] == (valid_view, 0)
+
+# ===========================================================================
+# TC-OSP-013: test on_leave disables active state and stops worker.
+# ===========================================================================
+def test_presenter_on_leave_stops_worker():
+    # Arrange
+    view = MagicMock()
+    controller = MagicMock()
+    router = MagicMock()
+    
+    presenter = OutputScreenPresenter(view, controller, router)
+    presenter._is_active = True
+    
+    mock_worker = MagicMock()
+    mock_worker.isRunning.return_value = True
+    presenter._sort_worker = mock_worker
+    
+    # Act
+    presenter.on_leave()
+    
+    # Assert
+    assert presenter._is_active is False
+    assert mock_worker.quit.call_count == 1
+    assert mock_worker.wait.call_count == 1
+    assert presenter._sort_worker is None
+
+# ===========================================================================
+# TC-OSP-014: test on_export_txt delegates to controller correctly.
+# ===========================================================================
+def test_presenter_on_export_txt_success():
+    # Arrange
+    view = MagicMock()
+    controller = MagicMock()
+    router = MagicMock()
+    
+    valid_view = ScheduleViewModel(items=[ScheduleItemViewModel(date="2026-06-01", title="A", subtitle="B", tooltip="C")], current_index=0, total=1)
+    controller.get_schedule_view.return_value = valid_view
+    view.ask_save_path.return_value = "C:/test/path.txt"
+    
+    presenter = OutputScreenPresenter(view, controller, router)
+    presenter._total = 1
+    
+    # Act
+    presenter.on_export_txt()
+    
+    # Assert
+    assert view.ask_save_path.call_count == 1
+    assert controller.save_schedule.call_count == 1
+    assert controller.save_schedule.call_args[0] == (0, "C:/test/path.txt")
+    assert view.show_message.call_count == 1
+
+# ===========================================================================
+# TC-OSP-015: test on_export_txt rejected when total is zero.
+# ===========================================================================
+def test_presenter_on_export_txt_guard_total_zero():
+    # Arrange
+    view = MagicMock()
+    controller = MagicMock()
+    router = MagicMock()
+    
+    presenter = OutputScreenPresenter(view, controller, router)
+    presenter._total = 0
+    
+    # Act
+    presenter.on_export_txt()
+    
+    # Assert
+    assert view.show_nothing_to_export.call_count == 1
+    assert controller.save_schedule.call_count == 0

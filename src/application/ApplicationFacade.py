@@ -214,11 +214,58 @@ class ApplicationFacade:
         return getter() if callable(getter) else None
 
     def _invalidate_clustering(self) -> None:
-        """Drop any cached clustering session (e.g. after a new generation run)."""
+        """Drop any cached clustering session (e.g. after a new generation run).
+
+        _active_k is intentionally kept so the next cluster screen entry re-uses
+        the same K the user was looking at rather than re-running auto-K and
+        potentially landing on a different value.
+        """
         self._cluster_coordinator = None
         self._cluster_run = None
-        self._active_k = 0
         self._cluster_interpretation = ""
+
+    def get_cluster_coordinator(self, fresh: bool = False):
+        """Return (or create) the ClusteringCoordinator for this session.
+
+        Returns the cached coordinator whenever it is already prepared and has
+        a result — even when ``fresh=True``.  A new coordinator is only built
+        when the cache is empty or has been explicitly invalidated via
+        ``invalidate_clustering()``.  This prevents the 530 ms silhouette loop
+        from re-running on every re-entry to the cluster screen.
+
+        Returns ``None`` when no SQLite repository is available yet.
+        """
+        from src.application.services.ClusteringCoordinator import ClusteringCoordinator
+
+        repo = self._get_schedule_repository()
+        if repo is None:
+            return None
+        cache_valid = (
+            self._cluster_coordinator is not None
+            and self._cluster_coordinator.is_prepared
+            and self._cluster_run is not None
+        )
+        if not cache_valid:
+            self._cluster_coordinator = ClusteringCoordinator(repo)
+        return self._cluster_coordinator
+
+    def invalidate_clustering(self) -> None:
+        """Discard the cached cluster result so the next screen entry re-computes.
+
+        Called after a generation run completes so the cluster screen always
+        reflects the full post-generation dataset rather than a mid-run snapshot.
+        """
+        self._invalidate_clustering()
+
+    def cards_from_run(self, run) -> List[ClusterCardViewModel]:
+        """Store a completed ClusteringRun and convert it to card view models.
+
+        Called by the GUI thread after ClusterWorker emits its finished signal.
+        """
+        self._cluster_run = run
+        self._active_k = run.result.k
+        self._cluster_interpretation = ""
+        return self._mapper.to_cluster_cards(run.result)
 
     def compute_clusters(self, k=None) -> List[ClusterCardViewModel]:
         """Sample, fit the engine, and cluster into families.
@@ -261,10 +308,18 @@ class ApplicationFacade:
             from src.logic.clustering.ClusterConfig import K_MODE_FIXED
             translation.config.k_mode = K_MODE_FIXED
             translation.config.k = k
-        coordinator = ClusteringCoordinator(repo)
-        coordinator.prepare(translation.config)      # criteria/weights/sample from request
-        run = coordinator.cluster(None)              # K from the config (auto or fixed)
-        self._cluster_coordinator = coordinator
+
+        cached = self._cluster_coordinator
+        if (cached is not None
+                and cached.is_prepared
+                and cached.config == translation.config):
+            run = cached.cluster(None)
+        else:
+            coordinator = ClusteringCoordinator(repo)
+            coordinator.prepare(translation.config)
+            run = coordinator.cluster(None)
+            self._cluster_coordinator = coordinator
+
         self._cluster_run = run
         self._active_k = run.result.k
         self._cluster_interpretation = translation.interpretation

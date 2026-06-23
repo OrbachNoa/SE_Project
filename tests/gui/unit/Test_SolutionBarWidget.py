@@ -36,7 +36,7 @@ def test_solution_bar_action_tooltips():
     
     # Assert
     assert "Back to input screen" in widget.back_btn.toolTip()
-    assert "Save the current schedule as a PDF" in widget.export_btn.toolTip()
+    assert "Export the current schedule as PDF or TXT" in widget.export_btn.toolTip()
 
 # ===========================================================================
 # TC-SBW-003: test back and export button clicks trigger signals.

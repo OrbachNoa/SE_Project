@@ -46,18 +46,20 @@ def test_queue_schedule_observer_buffering_and_flush(make_assignment):
     
     # Act
     observer.on_schedule_found(schedule)
-    call_count_after_first = mock_queue.put.call_count
-    
+    call_count_after_first = mock_queue.put_nowait.call_count
+
     observer.on_schedule_found(schedule)
-    call_count_after_second = mock_queue.put.call_count
-    msg_type, payload = mock_queue.put.call_args[0][0]
-    
+    call_count_after_second = mock_queue.put_nowait.call_count
+    msg_type, payload = mock_queue.put_nowait.call_args[0][0]
+    data, count, batch_scores = payload
+
     # Assert
     assert call_count_after_first == 0
     assert call_count_after_second == 1
     assert msg_type == "SCHEDULE_BATCH"
-    assert len(payload) == 2
-    buffer = pickle.loads(zlib.decompress(payload[0]))
+    assert count == 2
+    assert batch_scores == []
+    buffer = pickle.loads(zlib.decompress(data))
     assert len(buffer) == 2
     assert buffer[0].assignments[0].course_id == "10101"
 
@@ -75,34 +77,39 @@ def test_queue_schedule_observer_lifecycle(make_assignment):
     
     # Act
     observer.on_progress(75)
-    progress_call = mock_queue.put.call_args[0][0]
-    
+    progress_call = mock_queue.put_nowait.call_args[0][0]
+
     mock_cancel_event.is_set.return_value = True
     cancelled = observer.should_cancel()
     cancel_event_call_count = mock_cancel_event.is_set.call_count
-    
+
     observer.on_error("Fatal Error")
-    error_call = mock_queue.put.call_args[0][0]
-    
+    error_call = mock_queue.put_nowait.call_args[0][0]
+
     observer.on_schedule_found(schedule)
-    mock_queue.put.reset_mock()
-    
+    mock_queue.put_nowait.reset_mock()
+
+    # on_finished() flushes the pending buffer (non-blocking put_nowait)
+    # and then sends the terminal message via the blocking put().
     observer.on_finished()
+    batch_flush_call_count = mock_queue.put_nowait.call_count
+    msg_type, (batch_data, batch_size, batch_scores) = mock_queue.put_nowait.call_args[0][0]
     finished_call_count = mock_queue.put.call_count
-    calls = [call[0][0] for call in mock_queue.put.call_args_list]
-    
+    finished_type, finished_payload = mock_queue.put.call_args[0][0]
+
     # Assert
     assert progress_call == ("PROGRESS", 75)
     assert cancelled is True
     assert cancel_event_call_count == 1
     assert error_call == ("ERROR", "Fatal Error")
-    assert finished_call_count == 2
-    assert calls[0][0] == "SCHEDULE_BATCH"
-    batch_data, batch_size = calls[0][1]
+    assert batch_flush_call_count == 1
+    assert msg_type == "SCHEDULE_BATCH"
     assert batch_size == 1
     buffer = pickle.loads(zlib.decompress(batch_data))
     assert len(buffer) == 1
-    assert calls[1] == ("FINISHED", None)
+    assert finished_call_count == 1
+    assert finished_type == "FINISHED"
+    assert finished_payload["schedules_found"] == 1
 
 
 # ===========================================================================
