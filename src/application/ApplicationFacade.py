@@ -308,7 +308,6 @@ class ApplicationFacade:
             from src.logic.clustering.ClusterConfig import K_MODE_FIXED
             translation.config.k_mode = K_MODE_FIXED
             translation.config.k = k
-            
 
         cached = self._cluster_coordinator
         if (cached is not None
