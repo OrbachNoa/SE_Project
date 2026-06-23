@@ -46,28 +46,35 @@ class ClusteringCoordinator:
         self._service: Optional[ClusteringService] = None
         self._gidx_by_working_index: List[int] = []
         self._population: int = 0
+        self._config: Optional[ClusterConfig] = None
 
     # ── stateful path (overview: prepare once, change K cheaply) ─────────────
+
+    @property
+    def config(self) -> Optional[ClusterConfig]:
+        """The config that was passed to the last prepare() call, or None if not yet prepared."""
+        return self._config
 
     def prepare(self, config: Optional[ClusterConfig] = None) -> "ClusteringCoordinator":
         """Sample ids, read score vectors, and fit the engine — the expensive step."""
         cfg = config or ClusterConfig.default()
+        self._config = cfg
         population = self._repo.count_scores()
         if population <= 0:
             raise ValueError("no scored schedules available to cluster")
 
         sampler = ScheduleSampler(max_sample=cfg.max_sample, seed=cfg.seed)
         sampled_ids = sampler.sample_indices(population)
-
         ids, vectors = self._repo.read_score_vectors(list(cfg.criteria), sampled_ids)
-        if not vectors:
+
+        if len(vectors) == 0:
             raise ValueError("no score vectors could be read for the sample")
 
         service = ClusteringService(config=cfg)
         service.fit_vectors(vectors, population_size=population)
 
         self._service = service
-        self._gidx_by_working_index = list(ids)   # aligned with the vector rows
+        self._gidx_by_working_index = list(ids)
         self._population = population
         return self
 

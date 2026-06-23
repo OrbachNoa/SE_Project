@@ -13,6 +13,8 @@ import zlib
 import threading
 from typing import List
 
+import numpy as np
+
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.application.dto.PackedScheduleCodec import is_packed_blob, row_to_dto, unpack_rows
 from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
@@ -121,26 +123,33 @@ class SQLiteScheduleRepository:
     def read_score_vectors(self, criteria: List[str], gidxs: List[int]) -> tuple:
         """Read score vectors for the given gidxs, projected onto ``criteria``.
 
-        Returns ``(ids, vectors)`` where ``ids`` are the gidxs actually found (in
-        ascending order) and ``vectors[i]`` is the score vector for ``ids[i]`` in
-        ``criteria`` order. Reads only the narrow ``schedule_scores`` table, so
-        building the clustering feature matrix never unpickles a schedule.
+        Returns ``(ids, vectors)`` where ``ids`` is a list of int gidxs found
+        (ascending order) and ``vectors`` is an (n, d) float64 numpy array
+        whose row i is the score vector for ids[i] in criteria order.
+        Reads only the narrow ``schedule_scores`` table — no schedule unpickling.
         """
         if not gidxs or not criteria:
-            return [], []
+            return [], np.empty((0, len(criteria)), dtype=float)
         cols = ", ".join(_SCORE_COLS[c] for c in criteria)
-        found: dict = {}
+        all_rows: list = []
         with self._lock:
             for i in range(0, len(gidxs), 900):
                 chunk = gidxs[i:i + 900]
                 placeholders = ", ".join(["?"] * len(chunk))
-                for row in self._conn.execute(
-                    f"SELECT gidx, {cols} FROM schedule_scores WHERE gidx IN ({placeholders})",
-                    chunk,
-                ).fetchall():
-                    found[row[0]] = [float(v) for v in row[1:]]
-        ids = sorted(found)
-        return ids, [found[g] for g in ids]
+                all_rows.extend(
+                    self._conn.execute(
+                        f"SELECT gidx, {cols} FROM schedule_scores"
+                        f" WHERE gidx IN ({placeholders})",
+                        chunk,
+                    ).fetchall()
+                )
+        if not all_rows:
+            return [], np.empty((0, len(criteria)), dtype=float)
+        arr = np.array(all_rows, dtype=float)   # (n, 1+d) — one alloc, no boxing
+        order = np.argsort(arr[:, 0], kind='stable')
+        arr = arr[order]
+        return arr[:, 0].astype(int).tolist(), arr[:, 1:]
+
 
     def _decode_batch(self, raw: bytes, first_offset: int, wanted_ids: "set[int] | None" = None) -> dict:
         """Decode one stored batch into {global_index: ScheduleDTO}."""
