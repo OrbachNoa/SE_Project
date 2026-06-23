@@ -5,7 +5,6 @@ The GUI starts several processes, and each process uses this runner to search
 one part of the scheduling space and send results back through the queue.
 """
 from __future__ import annotations
-import os
 from multiprocessing import Queue
 from multiprocessing.synchronize import Event
 from typing import List
@@ -31,7 +30,6 @@ class SchedulerProcessRunner:
         work_source,
         scorer=None,
         result_counter=None,
-        collect_checker_stats: bool = False,
     ) -> None:
         if work_source is None:
             raise ValueError("SchedulerProcessRunner requires a work_source")
@@ -53,8 +51,6 @@ class SchedulerProcessRunner:
         self._work_source = work_source
         # Shared counter so all processes respect the same max_results limit.
         self._result_counter = result_counter
-        # Used only when we want checker debug statistics.
-        self._collect_checker_stats = collect_checker_stats
 
 
     def run(self) -> None:
@@ -67,9 +63,6 @@ class SchedulerProcessRunner:
 
         # Reuse one observer so batches can continue across work units.
         observer = self._create_observer()
-        # Counts how many work units this process handled.
-        cubes_processed = 0
-
 
         try:
             # One scheduler is reused for all units handled by this process.
@@ -80,8 +73,6 @@ class SchedulerProcessRunner:
                 # None is the real stop signal.
                 if unit is None:
                     break
-                # Count this unit for diagnostics.
-                cubes_processed += 1
 
                 # The work unit stores only dates, so we rebuild real assignments from local slots.
                 seeds = [
@@ -99,11 +90,7 @@ class SchedulerProcessRunner:
                 )
 
             # Send one FINISHED message for the whole process, not per work unit.
-            observer.on_finished(extra_stats={
-                "pid": os.getpid(),
-                "cubes_processed": cubes_processed,
-                "checker_stats": scheduler.get_checker_stats(),
-            })
+            observer.on_finished()
 
         except Exception as e:
             # Report crashes so the main process can stop waiting.
@@ -127,4 +114,4 @@ class SchedulerProcessRunner:
 
     def _create_scheduler(self) -> Scheduler:
         """Create the backtracking scheduler with this process rules."""
-        return Scheduler(self._checkers, collect_checker_stats=self._collect_checker_stats)
+        return Scheduler(self._checkers)

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 import threading
-import time
 from multiprocessing import Process, Queue, Event, Value
 from typing import List, Optional
 
@@ -81,7 +80,7 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
         work_queue.cancel_join_thread()
 
 
-def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results, batch_size, work_source, config=None, result_counter=None, collect_checker_stats=False):
+def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results, batch_size, work_source, config=None, result_counter=None):
     """
     This is the actual code that runs INSIDE each independent background worker.
     Each worker gets a copy of the raw data, builds its own tools, and starts crunching numbers.
@@ -104,7 +103,6 @@ def _run_scheduler_process(slots, courses, selected_programs, queue, cancel_even
             work_source,
             scorer=scorer,
             result_counter=result_counter,
-            collect_checker_stats=collect_checker_stats,
         )
         runner.run()
     except Exception as e:

@@ -15,40 +15,9 @@ class Scheduler:
     and sends every valid schedule to the observer.
     """
 
-    def __init__(self, checkers: List[IConflictChecker], collect_checker_stats: bool = False):
+    def __init__(self, checkers: List[IConflictChecker]):
         # These are the rules that decide if a date is allowed or not.
         self._checkers = checkers
-
-        # Optional diagnostics mode.
-        # Disabled by default because collecting stats adds work inside _forward_check.
-        self._collect_checker_stats = collect_checker_stats
-
-        # Stats mode keeps one call counter and one reject counter for each checker.
-        if collect_checker_stats:
-            self._checker_calls = [0] * len(checkers)
-            self._checker_rejects = [0] * len(checkers)
-
-
-
-    def get_checker_stats(self) -> List[dict]:
-        """
-        Return how much each checker was used and how much it rejected.
-        """
-
-        # If diagnostics mode was not enabled, there are no stats to return.
-        if not self._collect_checker_stats:
-            return []
-        stats = []
-        # Build a readable stats row for each checker.
-        for checker, calls, rejects in zip(self._checkers, self._checker_calls, self._checker_rejects):
-            stats.append({
-                "name": type(checker).__name__,
-                "scope": getattr(checker, "_scope", None).value if getattr(checker, "_scope", None) else None,
-                "k": getattr(checker, "_k", None),
-                "calls": calls,
-                "rejects": rejects,
-            })
-        return stats
 
     def generateSchedules(
         self,
@@ -116,43 +85,6 @@ class Scheduler:
         """Return narrowed domains, or None if some slot has no valid dates left."""
         checkers = self._checkers
         narrowed: List[_Domain] = []
-
-        # Optional diagnostics mode.
-        # Disabled by default because collecting stats adds work inside _forward_check.
-        if self._collect_checker_stats:
-            calls, rejects = self._checker_calls, self._checker_rejects
-
-            for slot, candidate_dates in domains:
-                # Reuse one temporary assignment instead of creating a new one for every date.
-                probe = ExamAssignment(
-                    course=slot.course, date=None, moed=slot.moed, semester=slot.semester
-                )
-
-                # Dates that are still valid for this slot.
-                surviving = []
-                for d in candidate_dates:
-                    # Reuse one temporary assignment instead of creating a new one for every date.
-                    probe.date = d
-                    rejected = False
-                    # Stats mode checks manually so we can count which checker was called and rejected.
-                    for i, checker in enumerate(checkers):
-                        calls[i] += 1
-                        if checker.check(probe, schedule):
-                            rejects[i] += 1
-                            rejected = True
-                            break
-                    if not rejected:
-                        surviving.append(d)
-
-
-                # If this slot has no possible dates left, this branch cannot become a schedule.
-                if not surviving:
-                    return None
-                
-                narrowed.append((slot, surviving))
-            return narrowed
-
-
 
         # Normal fast path: keep only dates that no checker rejects.
         for slot, candidate_dates in domains:
