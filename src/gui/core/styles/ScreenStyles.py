@@ -268,4 +268,18 @@ QLabel#calendar-placeholder-subtitle {{
     background: transparent;
     border: none;
 }}
+/* ── Dropdown Menus ──────────────────────────────────────────────── */
+QMenu {{
+    background-color: #FFFFFF;
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 6px;
+}}
+QMenu::item {{
+    padding: 6px 25px 6px 10px;
+    color: {COLOR_TEXT};
+}}
+QMenu::item:selected {{
+    background-color: {COLOR_BG};
+    color: {COLOR_PRIMARY_HOVER};
+}}
 """
