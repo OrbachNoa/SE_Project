@@ -65,26 +65,28 @@ class ClusterDetailPresenter:
         except Exception as error:
             self._view.show_message(f"Could not save: {error}")
 
-    # Initiates the CSV export process for the current cluster schedule
-    def on_export_csv(self) -> None:
+    # Initiates the Excel export process for the current cluster schedule
+    def on_export_excel(self) -> None:
         # Check if there is data to export
         if self._size == 0:
             self._view.show_message("This family has no schedules to export.")
             return
 
         # Prompt the user for the save location
-        path = self._view.ask_save_path_csv(
-            f"family_{self._cluster_id + 1}_schedule_{self._index + 1}.csv"
+        path = self._view.ask_save_path_excel(
+            f"family_{self._cluster_id + 1}_schedule_{self._index + 1}.xlsx"
         )
         if not path:
             return
 
         try:
             # Call the controller to handle the saving logic
-            self._controller.save_cluster_schedule_csv(self._cluster_id, self._index, path)
+            self._controller.save_cluster_schedule_excel(self._cluster_id, self._index, path)
             self._view.show_message(f"Saved to:\n{path}")
+        except PermissionError:
+            self._view.show_message("Could not save because the file is open in Excel. Please close it and try again.")
         except Exception as error:
-            self._view.show_message(f"Could not save CSV schedule: {error}")
+            self._view.show_message(f"Could not save Excel schedule: {error}")
 
     # ── helpers ──────────────────────────────────────────────────────────────
 

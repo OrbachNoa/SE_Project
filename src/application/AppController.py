@@ -10,6 +10,10 @@ from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
 
+# Import the formatting and writing utilities
+from src.file_io.formatters.ScheduleCsvFormatter import ScheduleCsvFormatter
+from src.file_io.writers.BaseExcelWriter import BaseExcelWriter
+
 if TYPE_CHECKING:
     from src.application.ApplicationFacade import ApplicationFacade
     from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
@@ -135,19 +139,13 @@ class AppController(QObject):
         """Exports the targeted processed schedule out onto disk storage locations."""
         self._facade.export(index, path)
     
-    def save_schedule_csv(self, index: int, path: str) -> None:
-        """Exports the targeted processed schedule to a CSV (Excel) file."""
+    def save_schedule_excel(self, index: int, path: str) -> None:
+        """Exports the main schedule directly to an auto-fitted Excel file."""
         schedule_view = self.get_schedule_view(index)
-        
-        # Import the necessary components (adjust paths according to your project structure)
-        from src.file_io.formatters.ScheduleCsvFormatter import ScheduleCsvFormatter
-        from src.file_io.writers.BaseCsvWriter import BaseCsvWriter
-        
         # Convert the complex view model into a flat table structure
         headers, rows = ScheduleCsvFormatter.format(schedule_view)
-        
         # Write the formatted data to the physical file
-        BaseCsvWriter.write(path, headers, rows)
+        BaseExcelWriter.write(path, headers, rows)
 
     # ------------------------------------------------------------------
     # Page navigation 
@@ -254,20 +252,13 @@ class AppController(QObject):
     def save_cluster_schedule(self, cluster_id: int, index_in_cluster: int, path: str) -> None:
         self._facade.export_cluster_schedule(cluster_id, index_in_cluster, path)
 
-    def save_cluster_schedule_csv(self, cluster_id: int, index_in_cluster: int, path: str) -> None:
-        """
-        Exports a specific schedule from a cluster to a CSV file.
-        """
+    def save_cluster_schedule_excel(self, cluster_id: int, index_in_cluster: int, path: str) -> None:
+        """Exports a specific cluster family schedule directly to an auto-fitted Excel file."""
         # Retrieve the specific schedule view model for this cluster item
         schedule_view = self.get_cluster_schedule_view(cluster_id, index_in_cluster)
-        
-        # Import the formatting and writing utilities
-        from src.file_io.formatters.ScheduleCsvFormatter import ScheduleCsvFormatter
-        from src.file_io.writers.BaseCsvWriter import BaseCsvWriter
-        
         # Format the data and write to the file
         headers, rows = ScheduleCsvFormatter.format(schedule_view)
-        BaseCsvWriter.write(path, headers, rows)
+        BaseExcelWriter.write(path, headers, rows)
 
     # ------------------------------------------------------------------
     # State accessors for GUI components
