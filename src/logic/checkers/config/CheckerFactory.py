@@ -13,11 +13,17 @@ from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 
 def build_checkers(config: ConstraintsConfig, courses: list,
                    selected_programs: list = None, slots: list = None) -> List[IConflictChecker]:
-    """Assembles the checker list for one scheduling run. Each Phase-3
-    threshold checker is added only when its config value is set. Every
-    checker's prepare() is then called once, so all precomputation happens in
-    this single place inside the worker process.
     """
+    Build the checkers used by one schedule generation run.
+
+    The basic rules are always added.
+    Optional rules are added only when the user enabled them in the config.
+
+    prepare() is called here so each checker can build its lookup data once,
+    before the scheduler starts checking candidate dates.
+    """
+
+    # Add the minimum-gap rules only if the user turned them on.
     min_gap_checkers: List[IConflictChecker] = []
     if config is not None:
         if config.min_gap_obligatory is not None:
@@ -25,20 +31,26 @@ def build_checkers(config: ConstraintsConfig, courses: list,
         if config.min_gap_any is not None:
             min_gap_checkers.append(MinDaysBetweenExamsChecker(GapScope.ANY, config.min_gap_any))
 
+    # These rules are part of the base scheduler behavior.
     checkers: List[IConflictChecker] = [
         ProgramYearConflictChecker(),
         MoedOrderChecker(),
         *min_gap_checkers,
     ]
 
+    # Add the rest of the optional rules selected by the user.
     if config is not None:
         if config.elective_conflict_cap is not None:
             checkers.append(ElectiveConflictCapChecker(config.elective_conflict_cap))
+
         if config.exam_span is not None:
             checkers.append(ExamSpanChecker(config.exam_span))
+
         if config.max_exams_per_day is not None:
             checkers.append(MaxExamsPerDayChecker(config.max_exams_per_day))
 
+    # Give every checker the data it needs before the search starts.
     for checker in checkers:
         checker.prepare(courses, selected_programs, slots)
+        
     return checkers
