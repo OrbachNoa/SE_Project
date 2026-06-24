@@ -4,53 +4,20 @@ from .SlotBuilder import Slot
 from .checkers.IConflictChecker import IConflictChecker
 from .observers.IScheduleObserver import IScheduleObserver
 
-# One remaining slot paired with its live domain: the candidate dates that
-# are still consistent with every assignment placed so far. Forward checking
-# narrows this list as the search descends; backtracking restores it.
+# A domain means one unscheduled slot and the dates that are still possible for it.
 _Domain = Tuple[Slot, List]
 
 
 class Scheduler:
-    """Builds valid schedules with backtracking, forward checking, and a
-    most-constrained-variable (MRV) heuristic.
+    """Core search engine for building valid exam schedules.
 
-    Invariant: every domain handed to _backtrack contains only dates that are
-    already consistent with the current schedule. _forward_check is the single
-    place that enforces it, so _backtrack never re-validates a date it is about
-    to try - it just places it.
+    It tries dates with backtracking, removes impossible dates early,
+    and sends every valid schedule to the observer.
     """
 
-    def __init__(self, checkers: List[IConflictChecker], collect_checker_stats: bool = False):
-        # Each checker represents one rule that a schedule must not break.
+    def __init__(self, checkers: List[IConflictChecker]):
+        # These are the rules that decide if a date is allowed or not.
         self._checkers = checkers
-        # Opt-in only: per-checker call/reject counters, used to measure which
-        # checker actually prunes the search (rejection rate) so checkers can be
-        # ordered by how often they short-circuit any(). Off by default because
-        # it replaces the any() short-circuit in _forward_check - the hottest
-        # loop in the search - with an explicit loop; real runs should pay
-        # nothing for a measurement nobody is reading.
-        self._collect_checker_stats = collect_checker_stats
-        if collect_checker_stats:
-            self._checker_calls = [0] * len(checkers)
-            self._checker_rejects = [0] * len(checkers)
-
-    def get_checker_stats(self) -> List[dict]:
-        """Per-checker call/reject counts gathered since this Scheduler was
-        created, in the same order as the checkers list. Empty when
-        collect_checker_stats was not enabled.
-        """
-        if not self._collect_checker_stats:
-            return []
-        stats = []
-        for checker, calls, rejects in zip(self._checkers, self._checker_calls, self._checker_rejects):
-            stats.append({
-                "name": type(checker).__name__,
-                "scope": getattr(checker, "_scope", None).value if getattr(checker, "_scope", None) else None,
-                "k": getattr(checker, "_k", None),
-                "calls": calls,
-                "rejects": rejects,
-            })
-        return stats
 
     def generateSchedules(
         self,
@@ -62,128 +29,88 @@ class Scheduler:
         use_mrv: bool = True,
         scorer=None,
     ) -> None:
-        """Runs the search and streams valid schedules via observer.
+        """Start the schedule search and stream every valid result to the observer."""
 
-        The optional parameters power cube-and-conquer parallelism without
-        changing the default behavior (omit them all to get exactly today's
-        full MRV search):
-
-        - target_depth: stop and report once this many slots are assigned. None
-          means len(slots), i.e. only complete schedules are reported (today's
-          behavior). A smaller value turns the same search into a cube
-          generator that emits *partial* schedules of that depth.
-        - seed_assignments: a list of already-validated assignments to pre-load
-          (aligned to the leading slots), so a worker resumes from a partial
-          schedule instead of rebuilding it. The search continues with the
-          slots after the seed.
-        - use_mrv: when True (default) each step picks the most-constrained
-          slot. Cube generation passes False to assign slots in their fixed
-          (leading-index) order, so every cube is a prefix over slots[0..K-1] -
-          this keeps the cubes disjoint and complete, which is what makes the
-          seed dates align to the leading slot indices.
-        """
+         # No exams to schedule.
         if not slots:
             return
 
-        # Stop early if any slot has no dates, so useless recursion is avoided.
+        # If one slot has no dates, no complete schedule can exist.
         if any(not slot.candidateDates for slot in slots):
             return
 
+        # By default we search for full schedules, not partial ones.
         if target_depth is None:
             target_depth = len(slots)
 
+
+        # Create the schedule object.
+        # Date-order support is enabled only if one of the checkers needs it.
         schedule = ExamSchedule(
             use_ordinal_index=any(
                 getattr(checker, "uses_ordinal_date_index", False)
                 for checker in self._checkers
             )
         )
+
+        # Keep an incremental score state only when scoring is enabled.
         score_state = scorer.create_state() if scorer is not None and hasattr(scorer, "create_state") else None
 
-        # Pre-load the seed (already validated by the partitioner) without
-        # re-running checkers; the search then resumes from the slots after it.
+        # If this worker starts from a partial schedule, load it first.
         if seed_assignments:
             for assignment in seed_assignments:
                 schedule.addAssignment(assignment)
                 if score_state is not None:
                     score_state.add_assignment(assignment)
+            
+            # Continue only with the slots that were not already assigned by the seed.
             remaining_slots = slots[len(seed_assignments):]
         else:
             remaining_slots = slots
 
-        # Establish the invariant once against the current (possibly seeded)
-        # schedule. From here on _backtrack keeps it true for every call.
+        # Build the first domains and remove dates that already conflict with the seed.
         domains = self._forward_check(
             [(slot, list(slot.candidateDates)) for slot in remaining_slots], schedule
         )
+        # If the seed already makes some slot impossible, stop this branch.
         if domains is None:
             return
 
         # Uses a list for the counter to pass it by reference during recursion.
         found_count = [0]
+        # Start the recursive search.
         self._backtrack(domains, schedule, observer, found_count, max_results, target_depth, use_mrv, score_state)
 
     def _forward_check(self, domains: List[_Domain], schedule: ExamSchedule) -> Optional[List[_Domain]]:
-        """Returns the domains keeping only dates still consistent with the
-        current schedule, or None if any slot is left with no options (a dead
-        end). The same checker.check() that validates a placement decides
-        consistency, so this only ever drops dates that are truly unreachable -
-        it never discards a date some valid completion still needs.
-
-        A single scratch ExamAssignment is reused across all the dates of a
-        slot (mutating only its date) instead of allocating one per candidate.
-        Checkers only read the assignment, never store it, so this is safe and
-        cuts object churn in the hottest loop of the whole search.
-        """
+        """Return narrowed domains, or None if some slot has no valid dates left."""
         checkers = self._checkers
         narrowed: List[_Domain] = []
-        if self._collect_checker_stats:
-            calls, rejects = self._checker_calls, self._checker_rejects
-            for slot, candidate_dates in domains:
-                probe = ExamAssignment(
-                    course=slot.course, date=None, moed=slot.moed, semester=slot.semester
-                )
-                surviving = []
-                for d in candidate_dates:
-                    probe.date = d
-                    # Explicit loop (instead of any()) so each checker's call/
-                    # reject count is attributed correctly, while still
-                    # stopping at the first rejection like any() would.
-                    rejected = False
-                    for i, checker in enumerate(checkers):
-                        calls[i] += 1
-                        if checker.check(probe, schedule):
-                            rejects[i] += 1
-                            rejected = True
-                            break
-                    if not rejected:
-                        surviving.append(d)
-                if not surviving:
-                    return None
-                narrowed.append((slot, surviving))
-            return narrowed
 
+        # Normal fast path: keep only dates that no checker rejects.
         for slot, candidate_dates in domains:
+            # Reuse one temporary assignment instead of creating a new one for every date.
             probe = ExamAssignment(
                 course=slot.course, date=None, moed=slot.moed, semester=slot.semester
             )
             surviving = []
             for d in candidate_dates:
                 probe.date = d
+                # If no checker rejects this date, keep it.
                 if not any(checker.check(probe, schedule) for checker in checkers):
                     surviving.append(d)
+
+
+            # If this slot has no possible dates left, this branch cannot become a schedule.
             if not surviving:
                 return None
             narrowed.append((slot, surviving))
         return narrowed
 
     def _select_most_constrained(self, domains: List[_Domain]) -> int:
-        """MRV: returns the index of the slot with the fewest remaining
-        candidate dates, so the search tries the hardest exam first and
-        fails (or succeeds) sooner.
-        """
+        """Pick the slot with the fewest dates left, so bad branches fail earlier."""
         best_index = 0
         best_size = len(domains[0][1])
+        # Search for the slot with the smallest remaining date list.
         for i in range(1, len(domains)):
             size = len(domains[i][1])
             if size < best_size:
@@ -201,18 +128,17 @@ class Scheduler:
         use_mrv: bool,
         score_state=None,
     ) -> None:
-
-        # Checks cancellation on every iteration to stop recursion immediately if the user clicked cancel.
+        """Recursive search: choose a slot, try each date, and go deeper."""
+        # Stop quickly if the user cancelled the search.
         if observer.should_cancel():
             return
 
-        # Stop searching after the requested number of schedules was found.
+        # Do not search more than the requested result limit.
         if found_count[0] >= max_results:
             return
 
-        # Once target_depth slots are assigned, report the schedule. For a full
-        # search this is the complete schedule (today's behavior); for cube
-        # generation it is a partial schedule of the requested depth.
+        # If we assigned enough slots, report the current schedule.
+        # The observer must copy it now because backtracking will keep changing it.
         if len(schedule.assignments) == target_depth:
             # This schedule will keep changing during backtracking.
             # The observer must copy or convert it now if it wants to keep this result.
@@ -223,13 +149,14 @@ class Scheduler:
             found_count[0] += 1
             return
 
-        # MRV for real search; fixed leading-index order for cube generation.
+        # Real search uses MRV.
+        # Cube generation uses fixed order so work units stay separated.
         chosen_index = self._select_most_constrained(domains) if use_mrv else 0
+        # Take the chosen slot out of the remaining work.
         slot, candidate_dates = domains[chosen_index]
         rest = domains[:chosen_index] + domains[chosen_index + 1:]
 
-        # Every date here is already known consistent (the invariant), so we
-        # place it directly without re-checking.
+        # Try every date that is still valid for this slot.
         for exam_date in candidate_dates:
             # A deeper recursive call may have already reached the result limit.
             if found_count[0] >= max_results:
@@ -238,6 +165,7 @@ class Scheduler:
             if observer.should_cancel():
                 return
 
+            # Try this date by placing the assignment into the current schedule.
             assignment = ExamAssignment(
                 course=slot.course, date=exam_date, moed=slot.moed, semester=slot.semester
             )
@@ -245,13 +173,14 @@ class Scheduler:
             if score_state is not None:
                 score_state.add_assignment(assignment)
 
-            # Propagate this choice into the remaining slots' domains. If it
-            # empties any of them, this branch is a dead end and we skip it.
+            # After placing this date, remove impossible dates from the remaining slots.
             narrowed_rest = self._forward_check(rest, schedule)
+
+            # Continue only if every remaining slot still has at least one valid date.
             if narrowed_rest is not None:
                 self._backtrack(narrowed_rest, schedule, observer, found_count, max_results, target_depth, use_mrv, score_state)
 
-            # Remove the assignment before trying the next possible date.
+            # Undo this choice before trying the next date.
             if score_state is not None:
                 score_state.pop_assignment()
             schedule.pop_last_assignment()

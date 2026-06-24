@@ -7,8 +7,9 @@ from src.logic.feasibility.FeasibilityContext import FeasibilityContext
 
 
 class FeasibilityRule(ABC):
-    """One conservative preflight check before the scheduler backtracks."""
+    """Base class for checks that run before the scheduler starts."""
 
     @abstractmethod
     def validate(self, context: FeasibilityContext) -> List[str]:
+        """Return problem messages, or an empty list if everything is ok."""
         pass

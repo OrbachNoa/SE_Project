@@ -5,14 +5,19 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class ConstraintsConfig:
-    """Toggle and threshold (k) for each Phase-3 threshold constraint.
+    """Stores the optional scheduling rules selected by the user.
 
-    A value of None disables the constraint. An integer is its k threshold.
-    Plain immutable data only, so it can be pickled and sent to each worker
-    process unchanged.
+    None means the rule is turned off.
+    An integer value means the rule is turned on with that k value.
     """
-    min_gap_obligatory: Optional[int] = None     # 2.1
-    min_gap_any: Optional[int] = None            # 2.2
-    elective_conflict_cap: Optional[int] = None  # 2.3
-    exam_span: Optional[int] = None              # 2.4
-    max_exams_per_day: Optional[int] = None      # 2.5
+
+    # 2.1 - Minimum days between mandatory exams in the same program and year.
+    min_gap_obligatory: Optional[int] = None
+    # 2.2 - Minimum days between any exams in the same program and year.
+    min_gap_any: Optional[int] = None
+    # 2.3 - Maximum allowed elective same-day pair conflicts per program.
+    elective_conflict_cap: Optional[int] = None
+    # 2.4 - Minimum span between first and last mandatory exam in a cohort.
+    exam_span: Optional[int] = None
+    # 2.5 - Maximum number of exams allowed on the same day.
+    max_exams_per_day: Optional[int] = None

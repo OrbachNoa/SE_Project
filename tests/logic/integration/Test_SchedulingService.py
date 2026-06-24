@@ -102,10 +102,13 @@ def test_run_scheduler_process_helper(mock_runner_cls):
     selected_programs = []
     queue = MagicMock()
     cancel_event = MagicMock()
-    
+    work_source = MagicMock()
+
     # Act
-    _run_scheduler_process(slots, courses, selected_programs, queue, cancel_event, max_results=10, batch_size=1000)
-    
+    _run_scheduler_process(
+        slots, courses, selected_programs, queue, cancel_event, max_results=10, batch_size=1000, work_source=work_source
+    )
+
     # Assert
     assert mock_runner_cls.call_count == 1
     args, kwargs = mock_runner_cls.call_args
@@ -114,6 +117,7 @@ def test_run_scheduler_process_helper(mock_runner_cls):
     assert args[2] == queue
     assert args[3] == cancel_event
     assert args[4] == 10
+    assert args[6] == work_source
     assert mock_runner.run.call_count == 1
 
 
@@ -167,5 +171,6 @@ def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mo
     assert mock_process_cls.call_count == 1
     args, kwargs = mock_process_cls.call_args
     process_args = kwargs.get("args") or args[0]
-    assert process_args[-2] == 1000000
-    assert process_args[-1] == 1000
+    assert process_args[-3] == 1000000
+    assert process_args[-2] == 1000
+    assert process_args[-1] is not None

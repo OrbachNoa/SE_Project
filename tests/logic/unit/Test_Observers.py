@@ -109,7 +109,7 @@ def test_queue_schedule_observer_lifecycle(make_assignment):
     assert len(buffer) == 1
     assert finished_call_count == 1
     assert finished_type == "FINISHED"
-    assert finished_payload["schedules_found"] == 1
+    assert finished_payload is None
 
 
 # ===========================================================================

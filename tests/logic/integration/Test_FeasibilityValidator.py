@@ -6,7 +6,8 @@ from src.logic.SlotBuilder import Slot, SlotBuilder
 from src.logic.ScheduleFeasibilityValidator import ScheduleFeasibilityValidator
 from src.logic.feasibility.FeasibilityContext import FeasibilityContext
 from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
-from src.logic.feasibility.rules import NonEmptyDomainRule, MoedOrderDomainRule
+from src.logic.feasibility.NonEmptyDomainRule import NonEmptyDomainRule
+from src.logic.feasibility.MoedOrderDomainRule import MoedOrderDomainRule
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 
 

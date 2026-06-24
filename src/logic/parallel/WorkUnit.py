@@ -1,10 +1,8 @@
-"""One unit of work for the dynamic work-stealing scheduler.
+"""A small search task that a worker process can take from the work queue.
 
-Placement note: this lives in the logic layer (not infrastructure) because it
-is a pure domain-search value object with no concurrency dependencies. The
-SearchSpacePartitioner (logic) produces it and the queue/runner (infrastructure)
-carry it, so keeping it in logic lets infrastructure depend on logic - never the
-other way around - which respects the Clean Architecture dependency rule.
+A WorkUnit stores only the dates that were already chosen for the first slots.
+The worker later rebuilds the real ExamAssignment objects from its own slots.
+This keeps the queue messages small and avoids passing heavy objects between processes.
 """
 from __future__ import annotations
 
@@ -15,13 +13,8 @@ from typing import List
 
 @dataclass(frozen=True)
 class WorkUnit:
-    """A single search cube: the seed dates for the leading slots.
+    """Fixed starting dates for one part of the scheduling search."""
 
-    seed_dates[i] is the chosen date for slots[i] (the partitioner assigns slots
-    in fixed leading-index order, so the alignment is by position). The resume
-    start index is simply len(seed_dates); it is not stored separately. The unit
-    deliberately carries only dates - no Course or ExamAssignment - so it stays
-    tiny on the queue and is reconstructed against the worker's own slots.
-    """
-
+    # seed_dates[i] is the fixed date for slots[i].
+    # The worker continues the search from len(seed_dates).
     seed_dates: List[date]
