@@ -65,11 +65,11 @@ class ExamSchedule:
             course_assignments.pop()
         self.version += 1
 
-    def course_ids_on_date(self, date) -> set:
-        """Return the set of course IDs scheduled on the given date.
-        Do not mutate the returned set.
+    def date_course_ids_index(self):
+        """Return the date index used by conflict checks.
+        Do not mutate the returned dict.
         """
-        return self._date_to_course_ids.get(date, _EMPTY_COURSE_IDS)
+        return self._date_to_course_ids
 
     def course_ids_on_ordinal(self, ordinal: int):
         """Return the set of course IDs scheduled on the given date ordinal.
@@ -79,8 +79,14 @@ class ExamSchedule:
             return self._date_to_course_ids.get(date.fromordinal(ordinal), _EMPTY_COURSE_IDS)
         return self._ordinal_to_course_ids.get(ordinal, _EMPTY_COURSE_IDS)
 
-    def assignments_for_course(self, course_id: str) -> list:
-        """Return the list of assignments for the given course.
-        Do not mutate the returned list.
+    def ordinal_course_ids_index(self):
+        """Return the ordinal-date index when it is enabled.
+        Do not mutate the returned dict.
         """
-        return self._course_to_assignments.get(course_id, [])
+        return self._ordinal_to_course_ids
+
+    def course_assignments_index(self):
+        """Return the course assignment index used by conflict checks.
+        Do not mutate the returned dict.
+        """
+        return self._course_to_assignments

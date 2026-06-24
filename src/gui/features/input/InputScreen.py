@@ -15,10 +15,12 @@ from gui.features.input.InputScreenPresenter import InputScreenPresenter
 from gui.features.input.widgets.ActionBarWidget import ActionBarWidget
 from gui.features.input.widgets.ProgramSelectorCardWidget import ProgramSelectorCardWidget
 from src.application.ImportBoundary import ImportMode
+from src.application.viewmodels.ProgramViewModel import ProgramViewModel
+from src.config import MAX_PROGRAMS
+from data.programs import programs_data
 
 
 SCREEN_OUTPUT = "output"
-MAX_PROGRAMS = 5
 
 
 # This class manages the layout and user interactions for the main Input screen.
@@ -30,7 +32,12 @@ class InputScreen(Screen):
 
         # Setup main components like the editor, program selector, and layouts
         self._editor_widget: CalendarEditorWidget | None = None
-        self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, self)
+        # Load up all the possible study programs from our data file
+        program_view_models = [
+            ProgramViewModel(program_id=p_id, display_name=p_name, course_count=0)
+            for p_id, p_name in programs_data.items()
+        ]
+        self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, program_view_models, self)
 
         # Create the main vertical layout that stacks everything from top to bottom
         root = QVBoxLayout(self)

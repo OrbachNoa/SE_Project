@@ -1,9 +1,9 @@
 """Plain state model for calendar exclusion editing."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from typing import List
 
+from gui.common.helpers import dates_between
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
 
@@ -106,20 +106,7 @@ class ExclusionModel:
 
     # Creates a list of every single date between our current start and end points
     def date_list(self) -> list[str]:
-        return self.dates_between(self._start_date, self._end_date)
-
-    # Helper math function: Takes two dates and generates a day-by-day list of all dates in between them
-    @staticmethod
-    def dates_between(start_date: str, end_date: str) -> list[str]:
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
-        if end < start:
-            return []
-
-        return [
-            (start + timedelta(days=offset)).strftime("%Y-%m-%d")
-            for offset in range((end - start).days + 1)
-        ]
+        return dates_between(self._start_date, self._end_date)
 
     # Pulls the data (dates, blocked days) from the selected period so we can show it on the screen
     def _load_current_period(self) -> None:

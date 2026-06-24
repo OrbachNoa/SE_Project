@@ -1,9 +1,9 @@
 """Small helper for navigating loaded exam periods."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from typing import List
 
+from gui.common.helpers import dates_between
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
 
@@ -72,18 +72,4 @@ class PeriodNavigator:
         period = self.current_period
         if period is None:
             return []
-        return self.dates_between(period.start_date, period.end_date)
-
-    # A static helper to calculate every day between two given dates
-    @staticmethod
-    def dates_between(start_date: str, end_date: str) -> list[str]:
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
-        if end < start:
-            return []
-
-        # Create a range of days and format them back into strings
-        return [
-            (start + timedelta(days=offset)).strftime("%Y-%m-%d")
-            for offset in range((end - start).days + 1)
-        ]
+        return dates_between(period.start_date, period.end_date)

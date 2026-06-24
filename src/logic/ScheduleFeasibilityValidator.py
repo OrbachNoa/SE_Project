@@ -10,6 +10,7 @@ from src.logic.feasibility.FeasibilityRule import FeasibilityRule
 from src.logic.feasibility.MandatorySpanGapRule import MandatorySpanGapRule
 from src.logic.feasibility.MoedOrderDomainRule import MoedOrderDomainRule
 from src.logic.feasibility.NonEmptyDomainRule import NonEmptyDomainRule
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 
 
 class ScheduleFeasibilityValidator:
@@ -56,11 +57,14 @@ class ScheduleFeasibilityValidator:
         If the list is empty, the validator did not find a problem before search.
         """
 
+        selected_index = SelectedProgramIndex(courses, selected_programs, slots)
+
         # Build the context object that all feasibility rules use.
         context = FeasibilityContext(
             selected_programs=selected_programs,
             slots=slots,
             config=config,
+            selected_index=selected_index,
         )
 
         # Save all feasibility errors here.
@@ -72,7 +76,7 @@ class ScheduleFeasibilityValidator:
             errors.extend(rule.validate(context))
 
         # Build the same checkers that the scheduler will use.
-        checkers = build_checkers(config, courses, selected_programs, slots)
+        checkers = build_checkers(config, courses, selected_programs, slots, selected_index)
 
         # Run feasibility bounds from the checkers.
         # These are fast capacity checks for the same rules used during search.

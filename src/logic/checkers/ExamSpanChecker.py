@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Dict, List, Set, Tuple
 
 from src.logic.checkers.IConflictChecker import IConflictChecker
 from src.logic.feasibility.helpers import all_dates, enum_name
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.models.Enums import Requirement
 
 
@@ -25,19 +25,20 @@ class ExamSpanChecker(IConflictChecker):
     """
 
     def __init__(self, k: int):
+        self._k = k
         # Minimum days required between the first exam and the last exam.
         self._min_span_days = k
 
         # Dict that save all obligatory courses for each group.
         # Key: program, year, semester, moed.
         # Value: set of course ids that must be in this group.
-        self._exam_span_groups: Dict[Tuple[str, int, object, object], Set[str]] = {}
+        self._exam_span_groups: Dict[Tuple[str, int, object, object], Tuple[str, ...]] = {}
 
-        # For each course save the cohorts that this course belongs to.
+        # For each course save the exact groups that this course belongs to.
         # Use it in check() to know which groups need to be checked for this course.
-        self._course_cohorts: Dict[str, Set[Tuple[str, int, object]]] = {}
+        self._course_group_keys: Dict[str, Tuple[Tuple[str, int, object, object], ...]] = {}
 
-    def prepare(self, courses: list, selected_programs: list = None, slots: list = None) -> None:
+    def prepare(self, courses: list, selected_programs: list = None, slots: list = None, selected_index=None) -> None:
         """
         Builds lookup tables before the search starts.
 
@@ -45,44 +46,36 @@ class ExamSpanChecker(IConflictChecker):
         to scan all courses and all entries every time.
         """
 
-        # Convert selected programs to set for fast lookup.
-        # If there are no selected programs, check all programs.
-        selected = set(selected_programs) if selected_programs else None
+        selected_index = selected_index or SelectedProgramIndex(courses, selected_programs, slots)
 
         group_members: Dict[Tuple[str, int, object, object], Set[str]] = {}
-        course_cohorts: Dict[str, Set[Tuple[str, int, object]]] = {}
+        course_group_keys: Dict[str, Set[Tuple[str, int, object, object]]] = {}
 
         # Go over all possible exam slots.
         for slot in (slots or []):
             course = slot.course
 
-            for entry in course.programEntries:
-                # Ignore programs that are not part of this run.
-                if selected and entry.programId not in selected:
-                    continue
-
+            for entry in selected_index.entries_for_slot(slot):
                 # Take only obligatory courses.
                 if entry.requirement is not Requirement.OBLIGATORY:
                     continue
 
-                # The entry must belong to the same semester as the slot.
-                if entry.semester != slot.semester:
-                    continue
-
                 # Add this course to the relevant group.
                 # The group is by program, year, semester and moed.
-                group_members.setdefault(
-                    (entry.programId, entry.year, slot.semester, slot.moed), set()
-                ).add(course.courseId)
+                group_key = (entry.programId, entry.year, slot.semester, slot.moed)
+                group_members.setdefault(group_key, set()).add(course.courseId)
 
-                # Save this course if he belongs to this program/year/semester cohort.
-                # Moed is not saved here because assignment already has moed in check().
-                course_cohorts.setdefault(course.courseId, set()).add(
-                    (entry.programId, entry.year, slot.semester)
-                )
+                # Save this course if he belongs to this exact span group.
+                course_group_keys.setdefault(course.courseId, set()).add(group_key)
 
-        self._exam_span_groups = group_members
-        self._course_cohorts = course_cohorts
+        self._exam_span_groups = {
+            group_key: tuple(members)
+            for group_key, members in group_members.items()
+        }
+        self._course_group_keys = {
+            course_id: tuple(group_keys)
+            for course_id, group_keys in course_group_keys.items()
+        }
 
     def check(self, assignment, schedule) -> bool:
         """
@@ -91,23 +84,25 @@ class ExamSpanChecker(IConflictChecker):
         Returns True if this assignment makes the obligatory exam span too short.
         """
 
-        # Get the cohorts that this course belongs to.
-        cohorts = self._course_cohorts.get(assignment.course.courseId)
+        # Get the span groups that this course belongs to.
+        group_keys = self._course_group_keys.get(assignment.course.courseId)
 
         # If this course is not obligatory in any checked group, there is no problem.
-        if not cohorts:
+        if not group_keys:
             return False
 
         moed = assignment.moed
         new_id = assignment.course.courseId
+        course_assignments = schedule.course_assignments_index()
 
-        for program_id, year, semester in cohorts:
+        for group_key in group_keys:
+            program_id, year, semester, group_moed = group_key
             # Check only the cohort from the same semester as the assignment.
-            if semester != assignment.semester:
+            if semester != assignment.semester or group_moed != moed:
                 continue
 
             # Get all obligatory courses in this group.
-            members = self._exam_span_groups.get((program_id, year, semester, moed))
+            members = self._exam_span_groups.get(group_key)
 
             if not members:
                 continue
@@ -120,8 +115,10 @@ class ExamSpanChecker(IConflictChecker):
                 continue
 
             # The exam we are trying to place is not in the schedule yet,
-            # so we add its date manually.
-            dates = [assignment.date]
+            # so we count its date manually.
+            placed_count = 1
+            first_date = assignment.date
+            last_date = assignment.date
 
             # Add dates of the other exams from this group that are already placed.
             for member_id in members:
@@ -129,18 +126,22 @@ class ExamSpanChecker(IConflictChecker):
                 if member_id == new_id:
                     continue
 
-                for a in schedule.assignments_for_course(member_id):
+                for a in course_assignments.get(member_id, ()):
                     # Take only assignments from the same moed and semester.
                     if a.moed == moed and a.semester == semester:
-                        dates.append(a.date)
+                        placed_count += 1
+                        if a.date < first_date:
+                            first_date = a.date
+                        elif a.date > last_date:
+                            last_date = a.date
 
             # If not all exams in the group are placed yet,
             # the span can still grow later, so dont fail now.
-            if len(dates) < expected:
+            if placed_count < expected:
                 continue
 
             # Calculate the amount of days between first exam and last exam.
-            span_days = (max(dates) - min(dates)).days
+            span_days = (last_date - first_date).days
 
             # If the span is smaller than k, this assignment creates conflict.
             if span_days < self._min_span_days:
@@ -160,29 +161,12 @@ class ExamSpanChecker(IConflictChecker):
         If the list is empty, this check did not find a problem.
         """
 
-        # Take the programs that the user selected.
-        selected = context.selected_set
-
         # Dict that groups obligatory slots by program, year, semester and moed.
-        groups: Dict[Tuple[str, int, object, object], Set] = defaultdict(set)
-
-        # Go over all slots that can be scheduled.
-        for slot in context.slots:
-            for entry in slot.course.programEntries:
-                # Ignore programs that are not selected.
-                if selected and entry.programId not in selected:
-                    continue
-
-                # Take only obligatory courses.
-                if entry.requirement is not Requirement.OBLIGATORY:
-                    continue
-
-                # The entry must match the semester of the slot.
-                if entry.semester != slot.semester:
-                    continue
-
-                # Add this slot to the relevant group.
-                groups[(entry.programId, entry.year, slot.semester, slot.moed)].add(slot)
+        groups: Dict[Tuple[str, int, object, object], Set] = (
+            context.selected_index.slots_by_program_year_semester_moed(
+                requirement=Requirement.OBLIGATORY
+            )
+        )
 
         # Save the messeges if we get impossible assignment.
         errors = []
