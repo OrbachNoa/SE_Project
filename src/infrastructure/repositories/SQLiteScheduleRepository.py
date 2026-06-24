@@ -18,9 +18,11 @@ import numpy as np
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.application.dto.PackedScheduleCodec import is_packed_blob, row_to_dto, unpack_rows
 from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
+from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 
 _DEFAULT_DB = os.path.join(tempfile.gettempdir(), "exam_scheduler_overflow.sqlite")
 _SCORE_COLS = {cid: f"s_{i}" for i, cid in enumerate(ALL_CRITERIA)}
+_EXT_FEATURE_COLS = {fid: f"f_{i}" for i, fid in enumerate(ALL_EXTENDED_FEATURES)}
 
 
 class SQLiteScheduleRepository:
@@ -63,6 +65,15 @@ class SQLiteScheduleRepository:
                 f"CREATE TABLE IF NOT EXISTS schedule_scores ("
                 f"    gidx INTEGER PRIMARY KEY, {score_cols})"
             )
+            existing = {
+                row[1]
+                for row in self._conn.execute("PRAGMA table_info(schedule_scores)").fetchall()
+            }
+            for col in _EXT_FEATURE_COLS.values():
+                if col not in existing:
+                    self._conn.execute(
+                        f"ALTER TABLE schedule_scores ADD COLUMN {col} REAL"
+                    )
             self._conn.commit()
 
     # ── Write ──────────────────────────────────────────────────────────────
@@ -72,7 +83,10 @@ class SQLiteScheduleRepository:
         self.insert_compressed_batch(data, len(batch))
 
     def insert_compressed_batch(self, data: bytes, batch_count: int,
-                                batch_scores: "List[dict] | None" = None) -> None:
+                                batch_scores: "List[dict] | None" = None,
+                                extended_scores: "List[dict] | None" = None) -> None:
+        _all_crit = list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES)
+        _all_cols = list(_SCORE_COLS.values()) + list(_EXT_FEATURE_COLS.values())
         with self._lock:
             first_offset = self._total_count
             self._conn.execute(
@@ -80,13 +94,19 @@ class SQLiteScheduleRepository:
                 (first_offset, batch_count, data),
             )
             if batch_scores:
-                placeholders = ", ".join(["?"] * (1 + len(ALL_CRITERIA)))
-                rows = [
-                    (first_offset + i, *[scores.get(cid, 0.0) for cid in ALL_CRITERIA])
-                    for i, scores in enumerate(batch_scores)
-                ]
+                col_list = ", ".join(_all_cols)
+                placeholders = ", ".join(["?"] * (1 + len(_all_crit)))
+                rows = []
+                for i, scores in enumerate(batch_scores):
+                    ext = extended_scores[i] if extended_scores and i < len(extended_scores) else {}
+                    merged = {**scores, **ext}
+                    rows.append((
+                        first_offset + i,
+                        *[merged.get(cid, 0.0) for cid in _all_crit],
+                    ))
                 self._conn.executemany(
-                    f"INSERT OR REPLACE INTO schedule_scores VALUES ({placeholders})", rows,
+                    f"INSERT OR REPLACE INTO schedule_scores (gidx, {col_list}) VALUES ({placeholders})",
+                    rows,
                 )
             self._conn.commit()
             self._total_count += batch_count
@@ -130,7 +150,8 @@ class SQLiteScheduleRepository:
         """
         if not gidxs or not criteria:
             return [], np.empty((0, len(criteria)), dtype=float)
-        cols = ", ".join(_SCORE_COLS[c] for c in criteria)
+        _col_map = {**_SCORE_COLS, **_EXT_FEATURE_COLS}
+        cols = ", ".join(_col_map[c] for c in criteria)
         all_rows: list = []
         with self._lock:
             for i in range(0, len(gidxs), 900):
