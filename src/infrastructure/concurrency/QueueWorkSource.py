@@ -1,19 +1,9 @@
-"""IWorkSource backed by a shared multiprocessing Queue.
+"""
+Work source that lets worker processes pull WorkUnits from a shared queue.
 
-Termination is the subtle part. A multiprocessing.Queue uses a background feeder
-thread, so right after put() the queue can momentarily look empty and
-get_nowait()/empty() can lie - with N workers hammering it at start, that would
-make a worker quit early and leave units unprocessed. So the stop signal is NOT
-"queue looks empty"; it is an explicit per-worker sentinel:
-
-    - the producer enqueues all WorkUnits, then one None sentinel per worker;
-    - a real WorkUnit is returned to the caller;
-    - a None sentinel means "this worker is done" -> return None;
-    - a timeout (queue momentarily empty) is NOT done -> retry.
-
-This makes the stop condition deterministic and independent of feeder timing.
-An optional cancel_event lets a worker stop pulling promptly when the user
-cancels, without waiting to drain remaining units.
+Workers keep pulling WorkUnits until they get None.
+None is used as the stop signal because queue.empty() is not reliable with
+multiprocessing.Queue.
 """
 from __future__ import annotations
 
@@ -26,27 +16,31 @@ from src.logic.parallel.WorkUnit import WorkUnit
 
 
 class QueueWorkSource(IWorkSource):
-    """Pulls WorkUnits from a shared queue using sentinel-per-worker termination."""
+    """Gives worker processes their next WorkUnit from the shared queue."""
 
     def __init__(self, work_queue: Queue, cancel_event=None, poll_timeout: float = 0.2) -> None:
-        # Shared queue holding the WorkUnits followed by one None per worker.
+        # Shared queue with all WorkUnits waiting for the workers.
         self._queue = work_queue
-        # Optional shared flag: when set, stop pulling new work immediately.
+        # Shared cancel flag. If the user cancels, workers stop taking new work.
         self._cancel_event = cancel_event
-        # How long to block before retrying, so a momentarily-empty queue (items
-        # still in flight) is not mistaken for "no more work".
+        # For waiting briefly so a temporary empty queue does not stop the worker.
         self._poll_timeout = poll_timeout
 
     def get_next(self) -> Optional[WorkUnit]:
+        """Return the next WorkUnit, or None when this worker should stop."""
         while True:
+            # If the user cancelled the search, stop this worker.
             if self._cancel_event is not None and self._cancel_event.is_set():
                 return None
             try:
+                # Wait a little for the next WorkUnit.
                 item = self._queue.get(timeout=self._poll_timeout)
             except _queue.Empty:
-                # Items may still be in flight from the feeder thread; retry.
+                # The queue may be briefly empty while work is still arriving, so retry.
                 continue
+
+            # None is the real stop signal for this worker.
             if item is None:
-                # Sentinel: this worker has reached the end of the work.
                 return None
+            
             return item

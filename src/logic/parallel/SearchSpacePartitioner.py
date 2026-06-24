@@ -1,17 +1,11 @@
-"""Adaptive-depth cube generation (cube-and-conquer) that replaces the old
-static round-robin slot partitioning.
+"""
+Splits the huge scheduling search space into smaller valid work units.
 
-It runs the real backtracking engine at increasing shallow depths until it has
-produced enough partial schedules ("cubes") to keep every process busy. Each
-cube becomes one WorkUnit. Because generation walks slots in fixed leading-index
-order (use_mrv=False), the cubes are the complete, disjoint set of valid
-prefixes over slots[0..depth-1]: every full schedule extends exactly one cube,
-so the union of the per-cube searches reproduces the whole solution set with no
-gaps and no duplicates.
+The idea is to run the real scheduler only for a few first slots, not until full schedules.
+Every valid partial schedule that is found becomes a WorkUnit.
+Later, the worker processes take these WorkUnits and continue the search from that point.
 
-Placement note: this is logic (search-space decomposition over slots+checkers),
-not infrastructure - it knows nothing about queues or processes. It only emits
-WorkUnits, which the infrastructure layer then distributes.
+This helps us divide the work between processes without giving them invalid or duplicate starting points.
 """
 from __future__ import annotations
 
@@ -23,47 +17,51 @@ from src.logic.checkers.IConflictChecker import IConflictChecker
 from src.logic.observers.CubeCollectorObserver import CubeCollectorObserver
 from src.logic.parallel.WorkUnit import WorkUnit
 
-# Aim for several units per process so a process that drains a cheap cube can
-# steal another instead of going idle. Tunable; benchmark before changing.
+# We create more work units than processes, so workers can grab another unit when they finish early.
 WORK_UNITS_PER_PROCESS = 8
 
-# Never split deeper than this. Cube generation at shallow depths is cheap;
-# going deep would itself become an expensive search.
+# Do not split too deep, because partitioning itself should stay cheap.
 MAX_PARTITION_DEPTH = 4
 
 
 class SearchSpacePartitioner:
-    """Generates work units (cubes) from the slots, using the real checkers for
-    pruning so that obviously dead prefixes are never emitted as units. The
-    checkers are used here only for cube generation and are then discarded; each
-    worker still builds its own checkers locally.
+    """Creates small starting points for the real schedule search.
+
+    Each WorkUnit is a valid partial schedule.
+    Later, a worker process takes that partial schedule and continues the search from there.
     """
 
     def __init__(self, checkers: List[IConflictChecker]) -> None:
+        # These checkers are used only to avoid creating impossible work units.
         self._checkers = checkers
 
     def partition(self, slots: List[Slot], num_processes: int) -> List[WorkUnit]:
+        """Break the search space into valid partial schedules."""
+
+        # No exams means there is no search space to split.
         if not slots:
             return []
 
+        # Aim for several small jobs per process, not just one job per process.
         target = max(1, num_processes * WORK_UNITS_PER_PROCESS)
+        # We cannot split deeper than the number of slots we actually have.
         max_depth = min(MAX_PARTITION_DEPTH, len(slots))
 
         units: List[WorkUnit] = []
+        # Start with a small prefix of slots, and increase it only if we need more work units.
         for depth in range(1, max_depth + 1):
+            # This observer turns every partial schedule into a WorkUnit.
             observer = CubeCollectorObserver()
-            # Fixed leading-index order keeps cubes disjoint and aligned to the
-            # leading slots; a large cap lets the whole frontier at this depth
-            # be enumerated (it is shallow, so this stays cheap).
+            # Create valid starting points, not full schedules.
+            # use_mrv=False keeps the dates in the same order as the slots.
             Scheduler(self._checkers).generateSchedules(
                 slots, observer, max_results=10 ** 9, target_depth=depth, use_mrv=False
             )
+
+            # Take the work units collected at this depth.
             units = observer.units
 
-            # Enough granularity, hit the depth ceiling, or split as deep as
-            # there are slots - stop and use what this depth produced. (Zero
-            # units means infeasible up to this depth, which is also a valid,
-            # if empty, answer.)
+            # Stop when we have enough units or when going deeper is not allowed anymore.
             if len(units) >= target or depth == max_depth or depth == len(slots):
                 break
 

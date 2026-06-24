@@ -1,10 +1,3 @@
-"""ConstraintsSettingsDialog — modal settings panel for Phase-3 threshold constraints.
-
-One row per constraint. A checkbox toggles the constraint on or off; its
-matching spinbox is disabled when the constraint is off. Clicking "Apply"
-builds a ConstraintsConfig and fires the on_apply callback. Clicking
-"Cancel" closes the dialog without making any change.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,7 +16,14 @@ from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 
 @dataclass(frozen=True)
 class _ConstraintMeta:
-    """Static metadata for one constraint row."""
+    """
+    Static data for one constraint row.
+
+    This class only describes how the row should look in the GUI:
+    label, description, unit, min/max value and default value.
+    The real scheduling config is built later in _apply().
+    """
+
     label: str
     description: str
     unit: str
@@ -32,6 +32,9 @@ class _ConstraintMeta:
     default_k: int
 
 
+# The order here is important.
+# The same indexes are used later in _current_k() and _apply()
+# to map each GUI row to the matching ConstraintsConfig field.
 _CONSTRAINTS: list[_ConstraintMeta] = [
     _ConstraintMeta(
         label="Min. gap — obligatory exams",
@@ -67,7 +70,12 @@ _CONSTRAINTS: list[_ConstraintMeta] = [
 
 
 class ConstraintsSettingsDialog(QDialog):
-    """Modal dialog for configuring the five Phase-3 threshold constraints."""
+    """
+    Dialog for choosing which threshold constraints are active.
+
+    The dialog does not run the scheduler and does not apply constraints directly.
+    It only builds a ConstraintsConfig and sends it back using on_apply.
+    """
 
     def __init__(
         self,
@@ -81,8 +89,12 @@ class ConstraintsSettingsDialog(QDialog):
         self.setMinimumWidth(680)
         self.setStyleSheet(APP_STYLESHEET + DIALOG_STYLESHEET + SETTINGS_DIALOG_STYLESHEET)
 
+        # Callback from InputScreenPresenter.
+        # When the user clicks Apply, the new ConstraintsConfig is passed there.
         self._on_apply = on_apply
-        # Each entry is (QCheckBox, QSpinBox) for the five constraints in order.
+
+        # Save the checkbox and spinbox of each row.
+        # The list order must match _CONSTRAINTS order.
         self._rows: list[Tuple[QCheckBox, QSpinBox]] = []
 
         outer = QVBoxLayout(self)
@@ -94,7 +106,7 @@ class ConstraintsSettingsDialog(QDialog):
         card_layout.setContentsMargins(26, 24, 26, 22)
         card_layout.setSpacing(14)
 
-        # ── Header ────────────────────────────────────────────────────────
+        # Header
         header_row = QHBoxLayout()
         header_row.setSpacing(12)
         title_col = QVBoxLayout()
@@ -115,12 +127,12 @@ class ConstraintsSettingsDialog(QDialog):
         header_row.addWidget(rules_badge, alignment=Qt.AlignmentFlag.AlignTop)
         card_layout.addLayout(header_row)
 
-        # ── Constraint rows ───────────────────────────────────────────────
+        # Build one row for each constraint metadata object.
         for i, meta in enumerate(_CONSTRAINTS):
             row_widget = self._build_row(meta, current_config, i)
             card_layout.addWidget(row_widget)
 
-        # ── Buttons ───────────────────────────────────────────────────────
+        # Buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
         btn_row.addStretch()
@@ -138,15 +150,20 @@ class ConstraintsSettingsDialog(QDialog):
         card_layout.addLayout(btn_row)
         outer.addWidget(card)
 
-    # ── Private helpers ────────────────────────────────────────────────────
-
     def _build_row(
         self,
         meta: _ConstraintMeta,
         current_config: Optional[ConstraintsConfig],
         index: int,
     ) -> QFrame:
-        """Build one constraint row: checkbox, text, spinbox."""
+        """
+        Build one constraint row.
+
+        If current_config has value for this row, the row starts enabled.
+        If the value is None, the row starts disabled.
+        """
+
+        # None means the constraint is currently disabled.
         current_k = self._current_k(current_config, index)
         is_on = current_k is not None
 
@@ -157,12 +174,10 @@ class ConstraintsSettingsDialog(QDialog):
         row_layout.setContentsMargins(16, 12, 16, 12)
         row_layout.setSpacing(14)
 
-        # Checkbox that toggles the whole constraint on/off.
         checkbox = QCheckBox()
         checkbox.setChecked(is_on)
         row_layout.addWidget(checkbox, alignment=Qt.AlignmentFlag.AlignTop)
 
-        # Label column: bold name + muted description.
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
         name_lbl = QLabel(meta.label)
@@ -174,45 +189,56 @@ class ConstraintsSettingsDialog(QDialog):
         text_col.addWidget(desc_lbl)
         row_layout.addLayout(text_col, stretch=1)
 
-        # Spinbox + unit label on the right.
         spin_col = QHBoxLayout()
         spin_col.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         spin_col.setSpacing(8)
         spinbox = QSpinBox()
         spinbox.setObjectName("settings-comparator")
         spinbox.setRange(meta.min_k, meta.max_k)
+
+        # If the constraint is already configured, show its saved value.
+        # Otherwise show the default value, even though the row is disabled.
         spinbox.setValue(current_k if current_k is not None else meta.default_k)
+
         spinbox.setFixedWidth(62)
         spinbox.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         spinbox.setEnabled(is_on)
         spinbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
         spinbox.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         spinbox.lineEdit().setReadOnly(True)
+
         step_col = QVBoxLayout()
         step_col.setSpacing(2)
+
         up_btn = QToolButton()
         up_btn.setObjectName("settings-step")
         up_btn.setArrowType(Qt.ArrowType.UpArrow)
         up_btn.setFixedSize(24, 15)
         up_btn.setEnabled(is_on)
+
         down_btn = QToolButton()
         down_btn.setObjectName("settings-step")
         down_btn.setArrowType(Qt.ArrowType.DownArrow)
         down_btn.setFixedSize(24, 15)
         down_btn.setEnabled(is_on)
+
         up_btn.clicked.connect(spinbox.stepUp)
         down_btn.clicked.connect(spinbox.stepDown)
+
         step_col.addWidget(up_btn)
         step_col.addWidget(down_btn)
+
         unit_lbl = QLabel(meta.unit)
         unit_lbl.setObjectName("settings-unit")
         unit_lbl.setEnabled(is_on)
+
         spin_col.addWidget(spinbox)
         spin_col.addLayout(step_col)
         spin_col.addWidget(unit_lbl)
         row_layout.addLayout(spin_col)
 
-        # Wire checkbox → enable/disable spinbox.
+        # The checkbox controls the whole row state.
+        # When unchecked, the value stays visible but will not be sent in _apply().
         checkbox.toggled.connect(spinbox.setEnabled)
         checkbox.toggled.connect(up_btn.setEnabled)
         checkbox.toggled.connect(down_btn.setEnabled)
@@ -224,6 +250,10 @@ class ConstraintsSettingsDialog(QDialog):
         return row
 
     def _set_row_active(self, row: QFrame, active: bool) -> None:
+        """
+        Update the row style after enabling or disabling it.
+        """
+
         row.setProperty("active", "true" if active else "false")
         row.style().unpolish(row)
         row.style().polish(row)
@@ -232,9 +262,15 @@ class ConstraintsSettingsDialog(QDialog):
     def _current_k(
         config: Optional[ConstraintsConfig], index: int
     ) -> Optional[int]:
-        """Extract the k value for the constraint at *index* from an existing config."""
+        """
+        Get the saved k value for the row index.
+
+        The fields list must stay in the same order as _CONSTRAINTS.
+        """
+
         if config is None:
             return None
+
         fields = [
             config.min_gap_obligatory,
             config.min_gap_any,
@@ -242,10 +278,17 @@ class ConstraintsSettingsDialog(QDialog):
             config.exam_span,
             config.max_exams_per_day,
         ]
+
         return fields[index]
 
     def _apply(self) -> None:
-        """Read each row and build a ConstraintsConfig, then fire the callback."""
+        """
+        Build ConstraintsConfig from the GUI rows and send it back.
+
+        Checked row means the constraint is active and gets an integer k.
+        Unchecked row means the constraint is disabled and gets None.
+        """
+
         def k(index: int) -> Optional[int]:
             checkbox, spinbox = self._rows[index]
             return spinbox.value() if checkbox.isChecked() else None
@@ -257,5 +300,7 @@ class ConstraintsSettingsDialog(QDialog):
             exam_span=k(3),
             max_exams_per_day=k(4),
         )
+
+        # Send the config back to the presenter/controller chain.
         self._on_apply(config)
         self.accept()

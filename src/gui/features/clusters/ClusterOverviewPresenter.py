@@ -51,6 +51,7 @@ class ClusterOverviewPresenter:
     # User typed a free-text request and pressed Apply request.
     def on_apply_request(self, text: str, k: Optional[int] = None) -> None:
         if not (text or "").strip():
+            self._controller.invalidate_clustering()
             self._kick_off(k=None, recompute=False)
             return
         self._compare_selection = []

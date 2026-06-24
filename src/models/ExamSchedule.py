@@ -8,7 +8,7 @@ _EMPTY_COURSE_IDS = frozenset()
 class ExamAssignment:
     """Represents one exam placement for a course."""
     __slots__ = ['course', 'date', 'moed', 'semester']
-    def __init__(self, course: Course, date: str, moed: Moed, semester: Semester):
+    def __init__(self, course: Course, date: date, moed: Moed, semester: Semester):
         self.course = course
         self.date = date
         self.moed = moed
@@ -23,6 +23,11 @@ class ExamSchedule:
         self._date_to_course_ids: dict = {}
         self._ordinal_to_course_ids: dict | None = {} if use_ordinal_index else None
         self._course_to_assignments: dict = {}
+        # Bumped on every mutation (add or pop). Checkers that cache derived
+        # data may use this to detect staleness; length alone is not safe
+        # because a pop followed by a different add can return to the same
+        # length with different content.
+        self.version: int = 0
 
     # Add an assignment and update the date index.
     def addAssignment(self, a: ExamAssignment) -> None:
@@ -37,6 +42,7 @@ class ExamSchedule:
                 self._ordinal_to_course_ids[ordinal] = set()
             self._ordinal_to_course_ids[ordinal].add(a.course.courseId)
         self._course_to_assignments.setdefault(a.course.courseId, []).append(a)
+        self.version += 1
 
     # Return assignments on the requested date.
     def getByDate(self, target_date) -> List[ExamAssignment]:
@@ -57,6 +63,7 @@ class ExamSchedule:
         course_assignments = self._course_to_assignments.get(removed.course.courseId)
         if course_assignments:
             course_assignments.pop()
+        self.version += 1
 
     def course_ids_on_date(self, date) -> set:
         """Return the set of course IDs scheduled on the given date.

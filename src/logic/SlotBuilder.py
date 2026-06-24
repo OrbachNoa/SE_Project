@@ -52,7 +52,12 @@ class SlotBuilder:
                         f"all required courses."
                     )
                 for moed, period in periods_for_sem:
-                    slots.append(Slot(course, sem, moed, period.availableDates))
+                    slots.append(Slot(
+                        course,
+                        sem,
+                        moed,
+                        self._ordered_candidates(moed, period.availableDates),
+                    ))
         return slots
 
     def _filterRelevantCourses(self, courses: List[Course]) -> List[Course]:
@@ -74,3 +79,10 @@ class SlotBuilder:
                 if program_entry.requirement == Requirement.OBLIGATORY:
                     score += 2
         return score
+
+    def _ordered_candidates(self, moed: Moed, dates: List[date]) -> List[date]:
+        """Order candidates for search without changing the date domain."""
+        ordered = list(dates)
+        if moed is Moed.ALEPH:
+            return ordered
+        return list(reversed(ordered))
