@@ -14,6 +14,7 @@ import zlib
 from src.logic.observers.IScheduleObserver import IScheduleObserver
 from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
 from src.application.dto.PackedScheduleCodec import encode_schedule, pack_rows
+from src.logic.clustering.ExtendedFeatureComputer import ExtendedFeatureComputer
 
 
 class QueueScheduleObserver(IScheduleObserver):
@@ -99,7 +100,9 @@ class QueueScheduleObserver(IScheduleObserver):
 
     def on_schedule_found(self, schedule: Any) -> None:
         # Score the schedule if needed, then add it to the current batch.
-        scores = self._scorer.score(schedule) if self._scorer is not None else None
+        scores = self._scorer.score(schedule) if self._scorer is not None else {}
+        ext = ExtendedFeatureComputer.compute(self._to_schedule_dto(schedule))
+        scores.update(ext)
         self._record_schedule(schedule, scores)
 
     def on_scored_schedule_found(self, schedule: Any, scores: dict) -> None:

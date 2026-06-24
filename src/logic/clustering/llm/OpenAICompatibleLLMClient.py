@@ -78,6 +78,7 @@ class OpenAICompatibleLLMClient(ILLMClient):
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._api_key}",
+                "User-Agent": "ExamScheduler/34.0",
             },
         )
 
