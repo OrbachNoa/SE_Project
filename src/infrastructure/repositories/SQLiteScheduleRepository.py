@@ -19,6 +19,7 @@ import numpy as np
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.application.dto.PackedScheduleCodec import is_packed_blob, row_to_dto, unpack_rows
 from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
+from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 
 
 # Default place for the overflow database.
@@ -28,6 +29,9 @@ _DEFAULT_DB = os.path.join(tempfile.gettempdir(), "exam_scheduler_overflow.sqlit
 # Map every score criterion to a short SQLite column name.
 # This keeps the score table simple and generic.
 _SCORE_COLS = {cid: f"s_{i}" for i, cid in enumerate(ALL_CRITERIA)}
+_EXT_FEATURE_COLS = {fid: f"f_{i}" for i, fid in enumerate(ALL_EXTENDED_FEATURES)}
+_ALL_SCORE_CRITERIA = list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES)
+_ALL_SCORE_COLS = list(_SCORE_COLS.values()) + list(_EXT_FEATURE_COLS.values())
 
 
 class SQLiteScheduleRepository:
@@ -96,7 +100,15 @@ class SQLiteScheduleRepository:
                 f"CREATE TABLE IF NOT EXISTS schedule_scores ("
                 f"    gidx INTEGER PRIMARY KEY, {score_cols})"
             )
-
+            existing = {
+                row[1]
+                for row in self._conn.execute("PRAGMA table_info(schedule_scores)").fetchall()
+            }
+            for col in _EXT_FEATURE_COLS.values():
+                if col not in existing:
+                    self._conn.execute(
+                        f"ALTER TABLE schedule_scores ADD COLUMN {col} REAL"
+                    )
             self._conn.commit()
 
     def insert_batch(self, batch: List[ScheduleDTO]) -> None:
@@ -107,13 +119,9 @@ class SQLiteScheduleRepository:
         # The real insert logic is shared with already-compressed batches.
         self.insert_compressed_batch(data, len(batch))
 
-    def insert_compressed_batch(
-        self,
-        data: bytes,
-        batch_count: int,
-        batch_scores: "List[dict] | None" = None,
-    ) -> None:
-        """Save one compressed batch and optionally save its score rows."""
+    def insert_compressed_batch(self, data: bytes, batch_count: int,
+                                batch_scores: "List[dict] | None" = None,
+                                extended_scores: "List[dict] | None" = None) -> None:
         with self._lock:
             # first_offset is the global index of the first schedule in this batch.
             first_offset = self._total_count
@@ -126,14 +134,18 @@ class SQLiteScheduleRepository:
 
             # If scores were already calculated, save them in the score table too.
             if batch_scores:
-                placeholders = ", ".join(["?"] * (1 + len(ALL_CRITERIA)))
-                rows = [
-                    (first_offset + i, *[scores.get(cid, 0.0) for cid in ALL_CRITERIA])
-                    for i, scores in enumerate(batch_scores)
-                ]
-
+                col_list = ", ".join(_ALL_SCORE_COLS)
+                placeholders = ", ".join(["?"] * (1 + len(_ALL_SCORE_CRITERIA)))
+                rows = []
+                for i, scores in enumerate(batch_scores):
+                    ext = extended_scores[i] if extended_scores and i < len(extended_scores) else {}
+                    merged = {**scores, **ext}
+                    rows.append((
+                        first_offset + i,
+                        *[merged.get(cid, 0.0) for cid in _ALL_SCORE_CRITERIA],
+                    ))
                 self._conn.executemany(
-                    f"INSERT OR REPLACE INTO schedule_scores VALUES ({placeholders})",
+                    f"INSERT OR REPLACE INTO schedule_scores (gidx, {col_list}) VALUES ({placeholders})",
                     rows,
                 )
 
@@ -181,9 +193,8 @@ class SQLiteScheduleRepository:
         """Read score vectors for clustering without loading full schedules."""
         if not gidxs or not criteria:
             return [], np.empty((0, len(criteria)), dtype=float)
-
-        # Read only the score columns that the clustering actually needs.
-        cols = ", ".join(_SCORE_COLS[c] for c in criteria)
+        _col_map = {**_SCORE_COLS, **_EXT_FEATURE_COLS}
+        cols = ", ".join(_col_map[c] for c in criteria)
         all_rows: list = []
 
         with self._lock:

@@ -125,7 +125,7 @@ class HeuristicRequestParser:
         # Prefer an explicit digit.
         for token in re.findall(r"\d+", low):
             value = int(token)
-            if 1 <= value <= 50:
+            if 2 <= value <= 20:
                 return value
         # Then a spelled-out number (English or Hebrew).
         for word, value in {**_EN_NUMBERS, **_HE_NUMBERS}.items():
