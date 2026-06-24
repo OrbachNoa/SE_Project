@@ -20,16 +20,16 @@ from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.logic.parallel.SearchSpacePartitioner import SearchSpacePartitioner
 from src.infrastructure.concurrency.QueueWorkSource import QueueWorkSource
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.config import (
+    DEFAULT_MAX_RESULTS,
+    DEFAULT_BATCH_SIZE,
+    WORK_UNITS_PER_WORKER,
+    RESULT_QUEUE_BATCHES_PER_WORKER,
+)
 
 # Used only to read the physical core count.
 # This does not pin the processes to P-cores.
 import psutil
-
-
-DEFAULT_MAX_RESULTS = 1000000
-DEFAULT_BATCH_SIZE = 1000
-WORK_UNITS_PER_WORKER = 8
-RESULT_QUEUE_BATCHES_PER_WORKER = 4
 
 
 def _default_num_processes() -> int:

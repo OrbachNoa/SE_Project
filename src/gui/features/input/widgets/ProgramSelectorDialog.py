@@ -10,9 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from gui.core.styles.Theme import APP_STYLESHEET
 from gui.core.styles.DialogStyles import DIALOG_STYLESHEET
-
-# Maximum number of programs the user may select at once.
-MAX_PROGRAMS = 5
+from src.config import MAX_PROGRAMS
 
 
 # This class creates one single "clickable card" for a specific program in the grid.

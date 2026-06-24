@@ -157,6 +157,14 @@ class CourseListWidget(QWidget):
         # Track live rendered blocks to prevent layout memory leaks on re-renders
         self._active_widgets: List[QWidget] = []
         self._build_ui()
+
+        # Created once and toggled on each render instead of recreated, so it
+        # doesn't leak a stray label into the layout every time render() runs.
+        self._empty_lbl = QLabel("No study programs loaded into context.")
+        self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_lbl.setObjectName("course-empty-lbl")
+        self._empty_lbl.setVisible(False)
+        self._container_layout.insertWidget(0, self._empty_lbl)
     
     # Sets up the outer container and adds a scrollbar so users can scroll if the list gets too long
     def _build_ui(self) -> None:
@@ -192,11 +200,8 @@ class CourseListWidget(QWidget):
         self._active_widgets.clear()
 
         # Display empty state if no programs are loaded
+        self._empty_lbl.setVisible(not programs_vm)
         if not programs_vm:
-            empty_lbl = QLabel("No study programs loaded into context.")
-            empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty_lbl.setObjectName("course-empty-lbl")
-            self._container_layout.insertWidget(0, empty_lbl)
             return
         
         # Add program blocks

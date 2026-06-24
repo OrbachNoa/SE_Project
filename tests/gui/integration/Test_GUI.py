@@ -418,7 +418,7 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path, make_schedule_dto):
     from src.application.services.FileImportService import FileImportService
     from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
     from src.application.state.HybridScheduleResultState import HybridScheduleResultState
-    from src.application.state.AppState import AppState
+    from src.application.state.InputDataState import InputDataState
     from src.infrastructure.cache.DiskCacheRepository import DiskCacheRepository
     from src.infrastructure.cache.FileChangeDetector import FileChangeDetector
     from src.application.services.InputCacheService import InputCacheService
@@ -428,41 +428,38 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path, make_schedule_dto):
     from src.application.services.ScheduleExportService import ScheduleExportService
     from src.file_io.writers.TextFileWriter import TextFileWriter
     from src.application.services.ViewModelMapper import ViewModelMapper
-    from src.application.ApplicationFacade import ApplicationFacade
     from src.application.AppController import AppController
-    
+
     # Arrange & Set up real components using tmp_path for db isolation
     db_path = str(tmp_path / "test_real_pipeline.sqlite")
     schedule_repository = SQLiteScheduleRepository(db_path=db_path)
     hybrid_state = HybridScheduleResultState(repository=schedule_repository)
-    state = AppState(schedule_state=hybrid_state)
-    
-    input_state = state.get_input_state()
+    input_state = InputDataState()
+
     # Use tmp_path for the disk cache so each test run is fully isolated
     # (shared .cache/data_cache.pkl leaks data across runs in UPDATE mode)
     cache_repository = DiskCacheRepository(cache_path=tmp_path / "data_cache.pkl")
     cache_detector = FileChangeDetector()
-    
+
     importer = FileImportService(
         cache_service=InputCacheService(cache_repository, cache_detector),
         parser_factory=ParserFactory(),
         merger=InputDataMerger(input_state),
         state=input_state,
     )
-    
+
     scheduler = SchedulingService(repository=schedule_repository)
     exporter = ScheduleExportService(writer=TextFileWriter())
     mapper = ViewModelMapper()
-    
-    facade = ApplicationFacade(
-        state=state,
+
+    controller = AppController(
         importer=importer,
         scheduler=scheduler,
         exporter=exporter,
         mapper=mapper,
+        input_state=input_state,
+        schedule_state=hybrid_state,
     )
-    
-    controller = AppController(facade)
     
     stack = QStackedWidget()
     router = ScreenRouter(stack)

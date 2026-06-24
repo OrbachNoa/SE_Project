@@ -17,9 +17,7 @@ from src.logic.checkers.IConflictChecker import IConflictChecker
 from src.logic.observers.CubeCollectorObserver import CubeCollectorObserver
 from src.logic.parallel.WorkUnit import WorkUnit
 from src.models.ExamSchedule import ExamAssignment
-
-# Do not split too deep, because partitioning itself should stay cheap.
-MAX_PARTITION_DEPTH = 4
+from src.config import MAX_PARTITION_DEPTH
 
 
 class SearchSpacePartitioner:
