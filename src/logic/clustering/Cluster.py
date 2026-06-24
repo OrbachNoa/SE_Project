@@ -8,7 +8,7 @@ counts back up when a sample was used.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass(slots=True)
@@ -42,6 +42,9 @@ class Cluster:
 
     # The representative schedule's own raw feature values.
     representative_features: Optional[Dict[str, float]] = None
+
+    # Min/max raw feature values of the cluster's members (criterion -> (min, max))
+    min_max: Dict[str, Tuple[float, float]] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

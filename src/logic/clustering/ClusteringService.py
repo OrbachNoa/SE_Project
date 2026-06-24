@@ -5,14 +5,14 @@ Wires the Strategy components together:
     (sample) -> extract features -> normalize -> choose K -> cluster
              -> pick representatives -> summarize
 
-and exposes the result as a ``ClusterResult``. The expensive work — building and
-normalizing the feature matrix — happens once in ``fit``. Re-running with a
-different K (a future manual override) only re-runs ``cluster`` on the cached
+and exposes the result as a `ClusterResult`. The expensive work — building and
+normalizing the feature matrix — happens once in `fit`. Re-running with a
+different K (a future manual override) only re-runs `cluster` on the cached
 matrix, which is cheap, so the UI stays responsive. The scheduling engine is
 never re-run.
 
 The service is deliberately ignorant of *where* the vectors come from. It is
-driven by a ``ClusterConfig`` (criteria, weights, K mode, seed), which is exactly
+driven by a `ClusterConfig` (criteria, weights, K mode, seed), which is exactly
 the object the future custom-clustering UI / LLM layer will produce — so that
 feature slots in here with no engine change.
 """
@@ -29,7 +29,7 @@ from src.logic.clustering.Cluster import Cluster, ClusterResult
 from src.logic.clustering.ClusterConfig import ClusterConfig, K_MODE_AUTO
 from src.logic.clustering.ClusterSummarizer import ClusterSummarizer
 from src.logic.clustering.EuclideanDistanceMetric import EuclideanDistanceMetric
-from src.logic.clustering.FeatureNormalizer import FeatureNormalizer
+from src.logic.clustering.FeatureNormalizer import FeatureNormalizer, ZScoreNormalizer
 from src.logic.clustering.IClusteringStrategy import IClusteringStrategy
 from src.logic.clustering.IDistanceMetric import IDistanceMetric
 from src.logic.clustering.KMeansClusteringStrategy import KMeansClusteringStrategy
@@ -108,7 +108,11 @@ class ClusteringService:
             )
 
         self._raw_matrix = raw
-        self._matrix = FeatureNormalizer().fit_transform(raw)
+        if self._config.normalizer == "zscore":
+            normalizer = ZScoreNormalizer()
+        else:
+            normalizer = FeatureNormalizer()
+        self._matrix = normalizer.fit_transform(raw)
         self._population_size = population_size or raw.shape[0]
         self._fitted = True
         self._cached_auto_k = None   # new matrix → silhouette must re-run
@@ -168,9 +172,10 @@ class ClusteringService:
                     estimated_population_size=int(round(len(member_indices) * scale)),
                     summary=self._summarize(member_indices, names),
                     representative_features=self._features_at(representative_index, names),
+                    min_max=self._summarize_min_max(member_indices, names),
                 )
             )
-
+        
         # Renumber 0..m-1 so ids stay contiguous even if a cluster came out empty.
         for new_id, cluster in enumerate(clusters):
             cluster.cluster_id = new_id
@@ -227,6 +232,13 @@ class ClusteringService:
         raw = self._raw_matrix[member_indices]
         means = raw.mean(axis=0)
         return {name: float(value) for name, value in zip(names, means)}
+
+    def _summarize_min_max(self, member_indices: List[int], names: List[str]) -> dict:
+        """Min/max raw (un-normalized) feature values of the cluster's members."""
+        raw = self._raw_matrix[member_indices]
+        mins = raw.min(axis=0)
+        maxs = raw.max(axis=0)
+        return {name: (float(mi), float(ma)) for name, mi, ma in zip(names, mins, maxs)}
 
     def _features_at(self, index: int, names: List[str]) -> dict:
         return {name: float(value) for name, value in zip(names, self._raw_matrix[index])}

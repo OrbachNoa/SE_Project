@@ -29,15 +29,22 @@ class ClusterOverviewPresenter:
 
     # Entry point: compute clusters. Reuse the last active K if one exists so
     # the view stays consistent after a generation run invalidates the cache.
+    # If entering for the first time (no active clusters), use default automatic K.
     def on_enter(self) -> None:
-        # Restore last request text in the input field
-        if self._last_request_text:
-            self._view._request_input.setText(self._last_request_text)
+        if self._controller.has_clusters():
+            # Restore last request text in the input field
+            if self._last_request_text:
+                self._view._request_input.setText(self._last_request_text)
+            else:
+                self._view._request_input.setText("")
+            # Use last active K for consistency
+            prev_k = self._controller.get_active_k()
+            self._kick_off(k=prev_k or None, recompute=False)
         else:
+            self._last_k = None
+            self._last_request_text = ""
             self._view._request_input.setText("")
-        # Use last active K for consistency
-        prev_k = self._controller.get_active_k()
-        self._kick_off(k=prev_k or None, recompute=False)
+            self._kick_off(k=None, recompute=False)
 
     def on_leave(self) -> None:
         pass
@@ -54,9 +61,17 @@ class ClusterOverviewPresenter:
     def on_apply_request(self, text: str, k: Optional[int] = None) -> None:
         self._compare_selection = []
         self._view.set_busy(True)
+        
+        import warnings
+        from sklearn.exceptions import ConvergenceWarning
+
         try:
-            cards = self._controller.cluster_from_request(text, k)
-            interpretation = self._controller.get_cluster_interpretation()
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", category=ConvergenceWarning)
+                cards = self._controller.cluster_from_request(text, k)
+                interpretation = self._controller.get_cluster_interpretation()
+                
+                custom_warn = "\n\n".join(list(dict.fromkeys([str(w.message) for w in caught if issubclass(w.category, ConvergenceWarning)])))
         except Exception as error:
             self._view.set_busy(False)
             self._view.render_cards([])
@@ -78,6 +93,8 @@ class ClusterOverviewPresenter:
         self._view.set_interpretation(interpretation)
         self._view.render_cards(cards)
         self._view.set_compare_enabled(False)
+
+        self._warn_capped_k(k, active_k, custom_warn if custom_warn else None)
 
         # Save state on success
         self._last_request_text = text
@@ -161,8 +178,28 @@ class ClusterOverviewPresenter:
         self._view.render_cards(cards)
         self._view.set_compare_enabled(False)
 
+        custom_warn = "\n\n".join(list(dict.fromkeys(self._worker.warnings))) if self._worker and self._worker.warnings else None
+        self._warn_capped_k(self._last_k, active_k, custom_warn)
+
     def _on_worker_failed(self, message: str) -> None:
         self._view.set_busy(False)
         self._view.render_cards([])
         self._view.set_summary("")
         self._view.show_message(f"Could not compute clusters: {message}")
+
+    def _warn_capped_k(self, requested_k: Optional[int], active_k: int, custom_warning: Optional[str] = None) -> None:
+        """Alerts the user if the requested cluster count was limited/capped or raised a warning."""
+        if (requested_k is not None and active_k < requested_k) or custom_warning:
+            if custom_warning:
+                msg = (
+                    f"Clustering Warning:\n\n{custom_warning}\n\n"
+                    f"The engine could not split the schedules into the requested {requested_k} families "
+                    f"because they do not have enough distinct score variations."
+                )
+            else:
+                msg = (
+                    f"Could only group into {active_k} families.\n\n"
+                    f"The generated schedules do not have enough distinct score variations "
+                    f"to form {requested_k} separate families."
+                )
+            self._view.show_message(msg)

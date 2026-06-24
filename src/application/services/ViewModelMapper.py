@@ -212,10 +212,42 @@ class ViewModelMapper:
     def to_cluster_cards(self, result) -> List[ClusterCardViewModel]:
         """Map a ClusterResult into overview cards (one per family)."""
         criteria = result.criteria
+        
+        # Calculate stats (mean, std) for each criterion across all clusters
+        stats = {}
+        for crit in criteria:
+            vals = [c.summary.get(crit, 0.0) for c in result.clusters]
+            mean = sum(vals) / len(vals) if vals else 0.0
+            variance = sum((v - mean) ** 2 for v in vals) / len(vals) if vals else 0.0
+            std = variance ** 0.5
+            stats[crit] = (mean, std)
+
         cards: List[ClusterCardViewModel] = []
         for cluster in result.clusters:
+            # Find defining criterion based on largest absolute Z-score deviation
+            defining_criterion = ""
+            max_abs_z = -1.0
+            for crit in criteria:
+                mean, std = stats.get(crit, (0.0, 0.0))
+                val = cluster.summary.get(crit, 0.0)
+                if std > 1e-9:
+                    z = (val - mean) / std
+                    if abs(z) > max_abs_z:
+                        max_abs_z = abs(z)
+                        defining_criterion = crit
+
+            # Format ranges for display
+            min_max_vm = {}
+            for name in criteria:
+                mi, ma = getattr(cluster, "min_max", {}).get(name, (0.0, 0.0))
+                min_max_vm[name] = (
+                    CriterionDisplay.display_value(name, mi),
+                    CriterionDisplay.display_value(name, ma)
+                )
+
             summary = [
-                (CriterionDisplay.label(name),
+                (name,
+                 CriterionDisplay.label(name),
                  CriterionDisplay.display_value(name, cluster.summary.get(name, 0.0)))
                 for name in criteria
             ]
@@ -228,6 +260,8 @@ class ViewModelMapper:
                     sampled=result.sampled,
                     description=cluster.description or "",
                     summary=summary,
+                    defining_criterion=defining_criterion,
+                    min_max=min_max_vm,
                 )
             )
         return cards

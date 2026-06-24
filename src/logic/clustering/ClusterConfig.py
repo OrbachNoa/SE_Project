@@ -15,7 +15,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
-from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
+from src.logic.comparators.ScheduleScorer import (
+    ALL_CRITERIA,
+    ELECTIVE_CONFLICTS,
+    MAX_EXAMS_PER_DAY,
+    MANDATORY_SPAN,
+    AVG_ALL_COURSES_GAP,
+    MIN_MANDATORY_GAP,
+)
 
 
 # How K is decided for a run.
@@ -44,6 +51,9 @@ class ClusterConfig:
     # reads these.
     weights: Dict[str, float] = field(default_factory=dict)
 
+    # Normalization strategy to use: "zscore" or "minmax".
+    normalizer: str = "zscore"
+
     # How the number of clusters is chosen.
     k_mode: str = K_MODE_AUTO
 
@@ -51,8 +61,8 @@ class ClusterConfig:
     k: Optional[int] = None
 
     # Auto-K search bounds (inclusive). K is searched in [k_min, k_max].
-    k_min: int = 2
-    k_max: int = 10
+    k_min: int = 3
+    k_max: int = 6
 
     # Upper bound on how many schedules are actually clustered. Above this the
     # pipeline draws a representative sample so the run stays responsive.
@@ -70,8 +80,8 @@ class ClusterConfig:
     def validate(self) -> None:
         """Raise ``ValueError`` if the config could not produce a valid run.
 
-        Centralising validation here means the future ``validate_config`` step
-        for LLM output is just ``ClusterConfig(**parsed).validate()``.
+        Centralising validation here means the future `validate_config` step
+        for LLM output is just `ClusterConfig(**parsed).validate()`.
         """
         if not self.criteria:
             raise ValueError("at least one criterion must be selected")
@@ -88,6 +98,9 @@ class ClusterConfig:
             raise ValueError(f"weights reference unknown criteria: {bad_weights}")
         if any(w < 0 for w in self.weights.values()):
             raise ValueError("weights must be non-negative")
+
+        if self.normalizer not in ("zscore", "minmax"):
+            raise ValueError(f"invalid normalizer: {self.normalizer!r}")
 
         if self.k_mode not in (K_MODE_AUTO, K_MODE_FIXED):
             raise ValueError(f"invalid k_mode: {self.k_mode!r}")
@@ -111,4 +124,13 @@ class ClusterConfig:
     @staticmethod
     def default() -> "ClusterConfig":
         """The out-of-the-box configuration used on automatic screen entry."""
-        return ClusterConfig()
+        return ClusterConfig(
+            weights={
+                ELECTIVE_CONFLICTS: 1.5,
+                MAX_EXAMS_PER_DAY: 1.5,
+                MANDATORY_SPAN: 1.0,
+                AVG_ALL_COURSES_GAP: 0.8,
+                MIN_MANDATORY_GAP: 0.8,
+            },
+            normalizer="zscore",
+        )

@@ -38,4 +38,7 @@ def label(criterion: str) -> str:
 def display_value(criterion: str, raw: float) -> str:
     """Format a raw score for display, de-negating where needed."""
     value = -raw if criterion in _NEGATED else raw
-    return f"{value:.1f}"
+    formatted = f"{value:.1f}"
+    if formatted == "-0.0":
+        return "0.0"
+    return formatted

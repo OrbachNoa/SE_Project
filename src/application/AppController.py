@@ -46,6 +46,8 @@ class AppController(QObject):
         self._early_nav_fired: bool = False
         # Polls repository count periodically instead of relying on per-schedule queue messages
         self._progress_timer: Optional[QTimer] = None
+        # In-memory sorting priority configuration for the current run
+        self._current_sort_priority: List[str] = []
 
     # ------------------------------------------------------------------
     # File loading & input state updates
@@ -86,6 +88,7 @@ class AppController(QObject):
         self._disconnect_worker()
         self._worker = None
         self._early_nav_fired = False
+        self._current_sort_priority = []
 
         # Request a new active execution worker handle from the centralized facade component
         try:
@@ -195,8 +198,13 @@ class AppController(QObject):
 
     def save_sort_config(self, priority_list: List[str]) -> None:
         """Saves sort configuration to persistent settings."""
+        self._current_sort_priority = priority_list
         settings = QSettings("SE_Project", "Scheduler")
         settings.setValue("output/sort_priority", priority_list)
+
+    def get_current_sort_priority(self) -> List[str]:
+        """Returns the current active sort configuration for the run."""
+        return self._current_sort_priority
 
     # ------------------------------------------------------------------
     # Clustering (groups the generated schedules into families)

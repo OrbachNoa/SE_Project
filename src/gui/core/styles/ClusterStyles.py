@@ -72,18 +72,22 @@ QSpinBox#k-spin::down-arrow {{
 
 /* ── Clustering Request Bar ──────────────────────────────────────── */
 QFrame#clustering-request-bar {{
-    background-color: {COLOR_PRIMARY};
-    border: 1px solid {COLOR_PRIMARY_HOVER};
+    background-color: #F8F5F0;
+    border: 1px solid #E4DFD5;
     border-radius: 12px;
 }}
 QFrame#clustering-request-bar QLabel {{
-    color: #FFFFFF;
+    color: {COLOR_TEXT};
     background: transparent;
 }}
 QFrame#clustering-request-bar QLabel#interpretation-label {{
-    color: #E0F2FE;
-    font-style: italic;
-    background: transparent;
+    color: #0369A1;
+    background-color: #E6F4F8;
+    border: 1px solid #BCE3EE;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-style: normal;
+    font-weight: 500;
 }}
 QFrame#clustering-request-bar QLineEdit {{
     background-color: #FFFFFF;
@@ -94,29 +98,29 @@ QFrame#clustering-request-bar QLineEdit {{
     font-size: 13px;
 }}
 QFrame#clustering-request-bar QLineEdit:focus {{
-    border-color: {COLOR_PRIMARY_HOVER};
+    border-color: {COLOR_PRIMARY};
 }}
 QFrame#clustering-request-bar QPushButton {{
-    background-color: rgba(255, 255, 255, 0.15);
+    background-color: {COLOR_PRIMARY};
     color: #FFFFFF;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid {COLOR_PRIMARY_HOVER};
     border-radius: 8px;
     padding: 6px 14px;
     font-weight: 600;
 }}
 QFrame#clustering-request-bar QPushButton:hover {{
-    background-color: rgba(255, 255, 255, 0.25);
+    background-color: {COLOR_PRIMARY_HOVER};
 }}
 QFrame#clustering-request-bar QPushButton:disabled {{
-    background-color: transparent;
-    color: rgba(255, 255, 255, 0.35);
-    border-color: rgba(255, 255, 255, 0.08);
+    background-color: #E2E8F0;
+    color: #94A3B8;
+    border-color: #CBD5E1;
 }}
 QFrame#clustering-request-bar QProgressBar {{
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: #E2E8F0;
 }}
 QFrame#clustering-request-bar QProgressBar::chunk {{
-    background-color: #FFFFFF;
+    background-color: {COLOR_PRIMARY};
 }}
 
 /* ── Cluster Card Widgets ────────────────────────────────────────── */
@@ -126,5 +130,125 @@ QFrame#card QLabel {{
 QFrame#card QFrame {{
     background: transparent;
     border: none;
+}}
+QFrame#card[selected="true"] {{
+    border: 2px solid {COLOR_PRIMARY};
+    background-color: #EBF8FA;
+    padding: 3px;
+}}
+QFrame#card QPushButton#btn-ghost:checked {{
+    background-color: {COLOR_PRIMARY};
+    color: #FFFFFF;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 6px 12px;
+}}
+QFrame#card QPushButton#btn-ghost:checked:hover {{
+    background-color: {COLOR_PRIMARY_HOVER};
+}}
+QFrame#card QToolTip {{
+    background-color: #F5F5F4;
+    color: #3E352F;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+}}
+QFrame#card QLabel#card-title {{
+    font-size: 15px;
+    color: #2B2521;
+    font-weight: bold;
+}}
+QFrame#card QLabel#card-size-label {{
+    color: #0f766e;
+    font-weight: 600;
+    font-size: 12px;
+}}
+QWidget#card-pills-widget {{
+    background: transparent;
+}}
+QFrame#card QLabel#pill-positive {{
+    background-color: #DCFCE7;
+    color: #15803D;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: bold;
+}}
+QFrame#card QLabel#pill-negative {{
+    background-color: #FEE2E2;
+    color: #B91C1C;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: bold;
+}}
+QFrame#card QLabel#pill-span {{
+    background-color: #E0F2FE;
+    color: #0369A1;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: bold;
+}}
+QFrame#card QLabel#pill-neutral {{
+    background-color: #F5F5F4;
+    color: #57534E;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: bold;
+}}
+QWidget#profile-indicator-container {{
+    background: transparent;
+}}
+QFrame#card QProgressBar#profile-progress {{
+    background-color: #E2E8F0;
+    border: none;
+    border-radius: 2px;
+}}
+QFrame#card QProgressBar#profile-progress::chunk {{
+    background-color: {COLOR_PRIMARY};
+    border-radius: 2px;
+}}
+QFrame#card QProgressBar#profile-progress[defining="true"]::chunk {{
+    background-color: #0f766e;
+}}
+QFrame#card QLabel#profile-status-check {{
+    color: #16A34A;
+    font-weight: bold;
+    font-size: 13px;
+    background: transparent;
+}}
+QFrame#card QLabel#profile-status-warning {{
+    color: #EA580C;
+    font-weight: bold;
+    font-size: 13px;
+    background: transparent;
+}}
+QFrame#card QLabel#profile-status-danger {{
+    color: #DC2626;
+    font-weight: bold;
+    font-size: 13px;
+    background: transparent;
+}}
+QFrame#card QLabel#profile-metric-name {{
+    color: #555;
+    font-size: 12px;
+    background: transparent;
+}}
+QFrame#card QLabel#profile-metric-name[defining="true"] {{
+    color: #0f766e;
+    font-weight: bold;
+}}
+QFrame#card QLabel#profile-metric-value {{
+    color: #333;
+    font-weight: 500;
+    font-size: 12px;
+    background: transparent;
+}}
+QFrame#card QLabel#profile-metric-value[defining="true"] {{
+    color: #0f766e;
+    font-weight: bold;
 }}
 """
