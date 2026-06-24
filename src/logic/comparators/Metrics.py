@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Dict, List, Optional, Set, Tuple
 
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.models.Enums import Requirement
 
 # One (program, year).
@@ -26,6 +27,7 @@ MoedCohort = Tuple[str, int, object]
 def build_cohort_index(
     courses: list,
     selected_programs: Optional[list] = None,
+    selected_index: Optional[SelectedProgramIndex] = None,
 ) -> Tuple[Dict[str, Set[Cohort]], Dict[str, Set[Cohort]]]:
     """Work out which cohorts each course belongs to, returning two indices.
 
@@ -35,58 +37,49 @@ def build_cohort_index(
     average-gap metric (2). When selected_programs is given, only those programs
     are counted.
     """
-    # Only these programs count; None means all of them.
-    selected = set(selected_programs) if selected_programs else None
-    obligatory: Dict[str, Set[Cohort]] = {}
-    any_req: Dict[str, Set[Cohort]] = {}
-    for course in courses:
-        for entry in course.programEntries:
-            if selected and entry.programId not in selected:
-                continue
-            cohort = (entry.programId, entry.year)
-            any_req.setdefault(course.courseId, set()).add(cohort)
-            if entry.requirement is Requirement.OBLIGATORY:
-                obligatory.setdefault(course.courseId, set()).add(cohort)
+    obligatory, any_req, _, _ = build_metric_indices(
+        courses,
+        selected_programs,
+        selected_index,
+    )
     return obligatory, any_req
 
 
 def build_span_index(
     courses: list,
     selected_programs: Optional[list] = None,
+    selected_index: Optional[SelectedProgramIndex] = None,
 ) -> Dict[str, Set[Cohort]]:
     """Index for the span metric (4): the obligatory cohorts each course is in.
 
     It only knows (program, year). The moed is added later, by the span metric
     itself, from each exam's own moed.
     """
-    obligatory, _ = build_cohort_index(courses, selected_programs)
+    obligatory, _ = build_cohort_index(courses, selected_programs, selected_index)
     return obligatory
 
 
 def build_program_index(
     courses: list,
     selected_programs: Optional[list] = None,
+    selected_index: Optional[SelectedProgramIndex] = None,
 ) -> Dict[str, Set[str]]:
     """Index for the exams-per-day metric (5): the programs each course is in.
 
     Grouped by program, across all years and any requirement.
     """
-    # Only these programs count; None means all of them.
-    selected = set(selected_programs) if selected_programs else None
-    course_programs: Dict[str, Set[str]] = {}
-    for course in courses:
-        programs = {
-            entry.programId for entry in course.programEntries
-            if not selected or entry.programId in selected
-        }
-        if programs:
-            course_programs[course.courseId] = programs
+    _, _, course_programs, _ = build_metric_indices(
+        courses,
+        selected_programs,
+        selected_index,
+    )
     return course_programs
 
 
 def build_elective_index(
     courses: list,
     selected_programs: Optional[list] = None,
+    selected_index: Optional[SelectedProgramIndex] = None,
 ) -> Dict[str, Set[Cohort]]:
     """Index for the elective-conflict metric (3): the cohorts where each course
     is elective.
@@ -94,19 +87,43 @@ def build_elective_index(
     Built once per run so the metric does not have to re-scan the course list on
     every schedule.
     """
-    # Only these programs count; None means all of them.
-    selected = set(selected_programs) if selected_programs else None
-    course_cohorts: Dict[str, Set[Cohort]] = {}
+    _, _, _, elective = build_metric_indices(
+        courses,
+        selected_programs,
+        selected_index,
+    )
+    return elective
+
+
+def build_metric_indices(
+    courses: list,
+    selected_programs: Optional[list] = None,
+    selected_index: Optional[SelectedProgramIndex] = None,
+) -> Tuple[
+    Dict[str, Set[Cohort]],
+    Dict[str, Set[Cohort]],
+    Dict[str, Set[str]],
+    Dict[str, Set[Cohort]],
+]:
+    """Build all metric indices from one selected-program entry scan."""
+
+    selected_index = selected_index or SelectedProgramIndex(courses, selected_programs)
+    obligatory: Dict[str, Set[Cohort]] = {}
+    any_req: Dict[str, Set[Cohort]] = {}
+    course_programs: Dict[str, Set[str]] = {}
+    elective: Dict[str, Set[Cohort]] = {}
+
     for course in courses:
-        for entry in course.programEntries:
-            if selected and entry.programId not in selected:
-                continue
-            if entry.requirement is not Requirement.ELECTIVE:
-                continue
-            course_cohorts.setdefault(course.courseId, set()).add(
-                (entry.programId, entry.year)
-            )
-    return course_cohorts
+        for entry in selected_index.entries_for_course(course.courseId):
+            cohort = (entry.programId, entry.year)
+            any_req.setdefault(course.courseId, set()).add(cohort)
+            course_programs.setdefault(course.courseId, set()).add(entry.programId)
+            if entry.requirement is Requirement.OBLIGATORY:
+                obligatory.setdefault(course.courseId, set()).add(cohort)
+            elif entry.requirement is Requirement.ELECTIVE:
+                elective.setdefault(course.courseId, set()).add(cohort)
+
+    return obligatory, any_req, course_programs, elective
 
 
 def _dates_by_cohort(

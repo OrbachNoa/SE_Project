@@ -6,23 +6,17 @@ class MoedOrderChecker(IConflictChecker):
     Checks that each course's moeds are scheduled in the correct order.
     """
     def __init__(self):
-        # Give each moed a rank, so we can compare their order.
-        self._moed_rank = {
-            Moed.ALEPH: 1,
-            Moed.BET: 2,
-            Moed.GIMEL: 3
-        }
+        pass
 
     def check(self, assignment, schedule) -> bool:
-        new_course_id = assignment.course.courseId
-        new_moed_rank = self._moed_rank.get(assignment.moed, 0)
-        same_course = schedule.assignments_for_course(assignment.course.courseId)
+        new_moed_rank = self._rank(assignment.moed)
+        same_course = schedule.course_assignments_index().get(assignment.course.courseId)
         if not same_course:
             return False
         # Compare the new assignment with exams already placed in the schedule.
         for existing in same_course:
             # Check only exams that belong to the same course.
-            existing_moed_rank = self._moed_rank.get(existing.moed, 0)
+            existing_moed_rank = self._rank(existing.moed)
 
             # If the existing moed is earlier, it must also have an earlier date.
             if existing_moed_rank < new_moed_rank:
@@ -42,3 +36,12 @@ class MoedOrderChecker(IConflictChecker):
 
         # Return no conflict after all existing exams pass the checks.
         return False
+
+    def _rank(self, moed) -> int:
+        if moed is Moed.ALEPH:
+            return 1
+        if moed is Moed.BET:
+            return 2
+        if moed is Moed.GIMEL:
+            return 3
+        return 0

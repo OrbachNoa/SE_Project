@@ -15,6 +15,7 @@ from bisect import bisect_left
 from typing import Dict, Optional
 
 from src.logic.comparators import Metrics
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 
 
 # Stable criterion ids, shared with the sort-config UI and the DTO score map.
@@ -41,13 +42,12 @@ ALL_CRITERIA = (
 class ScheduleScorer:
     """Computes all five sort scores for a schedule. Built once per run."""
 
-    def __init__(self, courses: list, selected_programs: Optional[list] = None):
+    def __init__(self, courses: list, selected_programs: Optional[list] = None, selected_index: Optional[SelectedProgramIndex] = None):
         # Build every index once, the same way the checkers prepare once.
-        obligatory, any_req = Metrics.build_cohort_index(
-            courses, selected_programs
+        selected_index = selected_index or SelectedProgramIndex(courses, selected_programs)
+        obligatory, any_req, program_idx, elective_idx = Metrics.build_metric_indices(
+            courses, selected_programs, selected_index
         )
-        program_idx = Metrics.build_program_index(courses, selected_programs)
-        elective_idx = Metrics.build_elective_index(courses, selected_programs)
 
         all_cohorts = set()
         for groups in obligatory.values():

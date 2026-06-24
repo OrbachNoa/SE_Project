@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from enum import Enum
 from typing import Dict, List, Set, Tuple
 
 from src.logic.checkers.IConflictChecker import IConflictChecker
 from src.logic.feasibility.helpers import all_dates, max_spaced_count
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.models.Enums import Requirement
 
 
@@ -49,7 +49,7 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
         # This makes check() faster because we can compare cohorts with bit operation.
         self._eligible_masks: Dict[str, int] = {}
 
-    def prepare(self, courses: list, selected_programs: list = None, slots: list = None) -> None:
+    def prepare(self, courses: list, selected_programs: list = None, slots: list = None, selected_index=None) -> None:
         """
         Builds lookup tables before the search starts.
 
@@ -57,9 +57,7 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
         direct lookup and bit mask comparison instead of scanning all courses.
         """
 
-        # Convert selected programs to set for fast lookup.
-        # If there are no selected programs, check all programs.
-        selected = set(selected_programs) if selected_programs else None
+        selected_index = selected_index or SelectedProgramIndex(courses, selected_programs)
 
         # For each course, save all cohorts that this course belongs to.
         eligible: Dict[str, Set[Tuple[str, int]]] = {}
@@ -70,11 +68,7 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
         for course in courses:
             cohorts: Set[Tuple[str, int]] = set()
 
-            for entry in course.programEntries:
-                # Ignore programs that are not part of this run.
-                if selected and entry.programId not in selected:
-                    continue
-
+            for entry in selected_index.entries_for_course(course.courseId):
                 # If scope is obligatory only, ignore non obligatory courses.
                 if (
                     self._scope is GapScope.OBLIGATORY_ONLY
@@ -123,13 +117,17 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
         new_ordinal = assignment.date.toordinal()
 
         eligible_masks = self._eligible_masks
+        eligible_mask_for_course = eligible_masks.get
+        # uses_ordinal_date_index = True guarantees the scheduler always
+        # builds the schedule with the ordinal index enabled for this checker.
+        ordinal_index = schedule.ordinal_course_ids_index()
 
         # A gap smaller than k is violation.
         # So we scan all dates from k-1 days before until k-1 days after.
         # Using ordinals avoids creating date or timedelta objects in this hot loop.
         for ordinal in range(new_ordinal - self._k + 1, new_ordinal + self._k):
             # Get all courses already assigned on this ordinal date.
-            other_ids = schedule.course_ids_on_ordinal(ordinal)
+            other_ids = ordinal_index.get(ordinal)
 
             if not other_ids:
                 continue
@@ -137,7 +135,7 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
             for other_id in other_ids:
                 # If the new course and the other course share at least one cohort,
                 # then they are too close and this is conflict.
-                if new_mask & eligible_masks.get(other_id, 0):
+                if new_mask & eligible_mask_for_course(other_id, 0):
                     return True
 
         # There is no problem.
@@ -158,28 +156,15 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
         if self._k is None:
             return []
 
-        # Take the programs that the user selected.
-        selected = context.selected_set
+        selected_index = context.selected_index
 
         # Dict that groups slots by program and year.
-        groups: Dict[Tuple[str, int], Set] = defaultdict(set)
-
-        # Go over all slots that can be scheduled.
-        for slot in context.slots:
-            for entry in slot.course.programEntries:
-                # Ignore programs that are not selected.
-                if selected and entry.programId not in selected:
-                    continue
-
-                # If scope is obligatory only, ignore non obligatory courses.
-                if (
-                    self._scope is GapScope.OBLIGATORY_ONLY
-                    and entry.requirement is not Requirement.OBLIGATORY
-                ):
-                    continue
-
-                # Add this slot to the relevant program/year group.
-                groups[(entry.programId, entry.year)].add(slot)
+        if self._scope is GapScope.OBLIGATORY_ONLY:
+            groups: Dict[Tuple[str, int], Set] = selected_index.slots_by_program_year(
+                requirement=Requirement.OBLIGATORY
+            )
+        else:
+            groups: Dict[Tuple[str, int], Set] = selected_index.slots_by_program_year()
 
         # Text for the error message according to the scope.
         label = "mandatory exams" if self._scope is GapScope.OBLIGATORY_ONLY else "all exams"
