@@ -23,6 +23,8 @@ from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 _DEFAULT_DB = os.path.join(tempfile.gettempdir(), "exam_scheduler_overflow.sqlite")
 _SCORE_COLS = {cid: f"s_{i}" for i, cid in enumerate(ALL_CRITERIA)}
 _EXT_FEATURE_COLS = {fid: f"f_{i}" for i, fid in enumerate(ALL_EXTENDED_FEATURES)}
+_ALL_SCORE_CRITERIA = list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES)
+_ALL_SCORE_COLS = list(_SCORE_COLS.values()) + list(_EXT_FEATURE_COLS.values())
 
 
 class SQLiteScheduleRepository:
@@ -85,8 +87,6 @@ class SQLiteScheduleRepository:
     def insert_compressed_batch(self, data: bytes, batch_count: int,
                                 batch_scores: "List[dict] | None" = None,
                                 extended_scores: "List[dict] | None" = None) -> None:
-        _all_crit = list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES)
-        _all_cols = list(_SCORE_COLS.values()) + list(_EXT_FEATURE_COLS.values())
         with self._lock:
             first_offset = self._total_count
             self._conn.execute(
@@ -94,15 +94,15 @@ class SQLiteScheduleRepository:
                 (first_offset, batch_count, data),
             )
             if batch_scores:
-                col_list = ", ".join(_all_cols)
-                placeholders = ", ".join(["?"] * (1 + len(_all_crit)))
+                col_list = ", ".join(_ALL_SCORE_COLS)
+                placeholders = ", ".join(["?"] * (1 + len(_ALL_SCORE_CRITERIA)))
                 rows = []
                 for i, scores in enumerate(batch_scores):
                     ext = extended_scores[i] if extended_scores and i < len(extended_scores) else {}
                     merged = {**scores, **ext}
                     rows.append((
                         first_offset + i,
-                        *[merged.get(cid, 0.0) for cid in _all_crit],
+                        *[merged.get(cid, 0.0) for cid in _ALL_SCORE_CRITERIA],
                     ))
                 self._conn.executemany(
                     f"INSERT OR REPLACE INTO schedule_scores (gidx, {col_list}) VALUES ({placeholders})",
