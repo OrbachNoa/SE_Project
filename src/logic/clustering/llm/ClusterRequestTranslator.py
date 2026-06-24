@@ -46,6 +46,9 @@ Choose from these topics ONLY (use exact names):
 - "conflicts"     : user wants fewer elective exam clashes
 - "general"       : general or unclear request — use all criteria
 
+When the request contains multiple conditions joined by AND / ו / גם / and also,
+identify a separate topic for EACH condition.
+
 Output ONLY valid JSON, no prose, no code fences, no <think> tags:
 {
   "topics": [<one or more topic names from the list above>],
@@ -69,7 +72,10 @@ Request: "תן לי 5 קבוצות לפי כל הקריטריונים"
 Output: {"topics": ["general"], "k_mode": "fixed", "k": 5, "explanation": "5 קבוצות לפי כל הקריטריונים"}
 
 Request: "I want no back-to-back mandatory exams"
-Output: {"topics": ["consecutive", "rest"], "k_mode": "auto", "explanation": "Grouping by consecutive mandatory exam days"}"""
+Output: {"topics": ["consecutive", "rest"], "k_mode": "auto", "explanation": "Grouping by consecutive mandatory exam days"}
+
+Request: "I want schedules with good preparation time before mandatory exams and easy days"
+Output: {"topics": ["study_prep", "daily_load"], "k_mode": "auto", "explanation": "Grouping by preparation time and daily exam load"}"""
 
 _USER_TEMPLATE = "Request:\n{request}\n\nReturn the JSON configuration."
 
