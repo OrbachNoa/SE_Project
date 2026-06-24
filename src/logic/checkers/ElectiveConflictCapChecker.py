@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from typing import Dict, List, Set
 
 from src.logic.checkers.IConflictChecker import IConflictChecker
 from src.logic.feasibility.helpers import all_dates, min_pair_conflicts, slots_by_domain
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.models.Enums import Requirement
 
 
@@ -21,6 +22,7 @@ class ElectiveConflictCapChecker(IConflictChecker):
     """
 
     def __init__(self, k: int):
+        self._k = k
         # Maximum elective conflict pairs allowed for one program.
         self._max_conflicts_per_program = k
 
@@ -53,13 +55,14 @@ class ElectiveConflictCapChecker(IConflictChecker):
 
         # If there is not cache ,build new index
         index: Dict[str, Counter] = {}
+        course_assignments = schedule.course_assignments_index()
 
         # For each program, count how many of its elective exams are already placed on each date.
         for program_id, electives in self._program_elective_sets.items():
             counts: Counter = Counter()
 
             for course_id in electives:
-                for assignment in schedule.assignments_for_course(course_id):
+                for assignment in course_assignments.get(course_id, ()):
                     counts[assignment.date] += 1
 
             # Save the date counts we calculated for this program.
@@ -69,7 +72,7 @@ class ElectiveConflictCapChecker(IConflictChecker):
         self._index_cache = {id(schedule): (schedule, schedule.version, index)}
         return index
 
-    def prepare(self, courses: list, selected_programs: list = None, slots: list = None) -> None:
+    def prepare(self, courses: list, selected_programs: list = None, slots: list = None, selected_index=None) -> None:
         """
         Builds lookup tables before the search starts.
 
@@ -77,18 +80,13 @@ class ElectiveConflictCapChecker(IConflictChecker):
         lookups instead of scanning all courses every time.
         """
 
-        # Convert to set for fast lookups. If no programs are given, check all programs. 
-        selected = set(selected_programs) if selected_programs else None
+        selected_index = selected_index or SelectedProgramIndex(courses, selected_programs)
 
         program_elective_sets: Dict[str, Set[str]] = {}
         course_programs: Dict[str, List[str]] = {}
 
         for course in courses:
-            for entry in course.programEntries:
-                # Ignore programs that are not part of this run.
-                if selected and entry.programId not in selected:
-                    continue
-
+            for entry in selected_index.entries_for_course(course.courseId):
                 # Ignore courses that are not elective course.
                 if entry.requirement is not Requirement.ELECTIVE:
                     continue
@@ -150,22 +148,10 @@ class ElectiveConflictCapChecker(IConflictChecker):
         If the list is empty, this check did not find a problem
         """
 
-        # take the programs that the user selected
-        selected = context.selected_set
-
         # dict for the elective courses in the program
-        by_program: Dict[str, Set] = defaultdict(set)
-
-        # Go over all exams that need to be scheduled.
-        for slot in context.slots:
-            for entry in slot.course.programEntries:
-                # Filter the programs that not selected
-                if selected and entry.programId not in selected:
-                    continue
-
-                # Take only the elective courses
-                if entry.requirement is Requirement.ELECTIVE:
-                    by_program[entry.programId].add(slot)
+        by_program: Dict[str, Set] = context.selected_index.slots_by_program(
+            requirement=Requirement.ELECTIVE
+        )
 
         # Save the messege if we get impossible assigmnet
         errors = []

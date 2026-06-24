@@ -5,6 +5,7 @@ from datetime import date
 from typing import Dict, List, Optional, Set, Tuple
 
 from src.logic.SlotBuilder import Slot
+from src.logic.checkers.config.ConstraintRuleDefinitions import mandatory_gap_value
 from src.logic.feasibility.FeasibilityContext import FeasibilityContext
 from src.logic.feasibility.FeasibilityRule import FeasibilityRule
 from src.logic.feasibility.helpers import enum_name
@@ -106,14 +107,7 @@ class MandatorySpanGapRule(FeasibilityRule):
         both rules, so we use the larger value.
         """
 
-        # Take only gap values that really exist.
-        gaps = [
-            value for value in (config.min_gap_obligatory, config.min_gap_any)
-            if value is not None
-        ]
-
-        # Return the strictest gap, or None if there is no gap rule.
-        return max(gaps) if gaps else None
+        return mandatory_gap_value(config)
 
     def _mandatory_groups(
         self, context: FeasibilityContext
@@ -126,29 +120,12 @@ class MandatorySpanGapRule(FeasibilityRule):
         that exact academic group.
         """
 
-        # Take the programs that the user selected.
-        selected = context.selected_set
-
         # Dict that groups mandatory slots by program/year/semester/moed.
-        groups: Dict[Tuple[str, int, object, object], Set[Slot]] = defaultdict(set)
-
-        # Go over all slots that can be scheduled.
-        for slot in context.slots:
-            for entry in slot.course.programEntries:
-                # Ignore programs that are not selected.
-                if selected and entry.programId not in selected:
-                    continue
-
-                # Take only obligatory courses.
-                if entry.requirement is not Requirement.OBLIGATORY:
-                    continue
-
-                # The entry must match the semester of the slot.
-                if entry.semester != slot.semester:
-                    continue
-
-                # Add this slot to the relevant group.
-                groups[(entry.programId, entry.year, slot.semester, slot.moed)].add(slot)
+        groups: Dict[Tuple[str, int, object, object], Set[Slot]] = (
+            context.selected_index.slots_by_program_year_semester_moed(
+                requirement=Requirement.OBLIGATORY
+            )
+        )
 
         return groups
 

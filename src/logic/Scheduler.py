@@ -96,7 +96,12 @@ class Scheduler:
             for d in candidate_dates:
                 probe.date = d
                 # If no checker rejects this date, keep it.
-                if not any(checker.check(probe, schedule) for checker in checkers):
+                rejected = False
+                for checker in checkers:
+                    if checker.check(probe, schedule):
+                        rejected = True
+                        break
+                if not rejected:
                     surviving.append(d)
 
 

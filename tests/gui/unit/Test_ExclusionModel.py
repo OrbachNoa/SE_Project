@@ -1,5 +1,6 @@
 import pytest
 from src.gui.common.components.ExclusionModel import ExclusionModel
+from src.gui.common.helpers import dates_between
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
 # ===========================================================================
@@ -170,7 +171,7 @@ def test_exclusion_model_navigation_previous_saves_state():
 # ===========================================================================
 def test_exclusion_model_dates_between_range():
     # Act
-    dates = ExclusionModel.dates_between("2026-06-01", "2026-06-03")
+    dates = dates_between("2026-06-01", "2026-06-03")
     
     # Assert
     assert dates == ["2026-06-01", "2026-06-02", "2026-06-03"]
@@ -180,7 +181,7 @@ def test_exclusion_model_dates_between_range():
 # ===========================================================================
 def test_exclusion_model_dates_between_single():
     # Act
-    dates = ExclusionModel.dates_between("2026-06-01", "2026-06-01")
+    dates = dates_between("2026-06-01", "2026-06-01")
     
     # Assert
     assert dates == ["2026-06-01"]
@@ -190,7 +191,7 @@ def test_exclusion_model_dates_between_single():
 # ===========================================================================
 def test_exclusion_model_dates_between_invalid():
     # Act
-    dates = ExclusionModel.dates_between("2026-06-03", "2026-06-01")
+    dates = dates_between("2026-06-03", "2026-06-01")
     
     # Assert
     assert dates == []

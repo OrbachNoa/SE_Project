@@ -1,8 +1,9 @@
-from typing import List, Set, Tuple
+from typing import List, Set
 from datetime import date
 from src.models.Enums import Moed, Requirement
 from src.models.Course import Course
 from src.models.ExamPeriod import ExamPeriod
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 
 
 class Slot:
@@ -27,18 +28,18 @@ class SlotBuilder:
 
     def build(self, courses: List[Course]) -> List[Slot]:
         """Builds and sorts slots for the scheduler."""
-        slots = self._buildRaw(courses)
-        slots.sort(key=lambda s: (-self._score(s), len(s.candidateDates)))
+        selected_index = SelectedProgramIndex(courses, self._selected_set)
+        slots = self._buildRaw(courses, selected_index)
+        slots.sort(key=lambda s: (-self._score(s, selected_index), len(s.candidateDates)))
         return slots
 
-    def _buildRaw(self, courses: List[Course]) -> List[Slot]:
+    def _buildRaw(self, courses: List[Course], selected_index: SelectedProgramIndex) -> List[Slot]:
         """Creates one slot for each course, semester, and moed."""
         slots: List[Slot] = []
 
-        for course in self._filterRelevantCourses(courses):
+        for course in self._filterRelevantCourses(courses, selected_index):
             semesters = {
-                program_entry.semester for program_entry in course.programEntries
-                if not self._selected_set or program_entry.programId in self._selected_set
+                program_entry.semester for program_entry in selected_index.entries_for_course(course.courseId)
             }
             for sem in semesters:
                 periods_for_sem = [(one_moed, self._period_map[(sem, one_moed)])
@@ -60,24 +61,20 @@ class SlotBuilder:
                     ))
         return slots
 
-    def _filterRelevantCourses(self, courses: List[Course]) -> List[Course]:
+    def _filterRelevantCourses(self, courses: List[Course], selected_index: SelectedProgramIndex) -> List[Course]:
         """Keeps courses that need exams for the selected programs."""
         return [
             course for course in courses
-            if course.hasExam() and (
-                not self._selected_set or
-                any(program_entry.programId in self._selected_set for program_entry in course.programEntries)
-            )
+            if course.hasExam() and selected_index.has_entries_for_course(course.courseId)
         ]
 
-    def _score(self, slot: Slot) -> int:
+    def _score(self, slot: Slot, selected_index: SelectedProgramIndex) -> int:
         """Scores a slot, so harder slots are scheduled earlier."""
         score = 0
-        for program_entry in slot.course.programEntries:
-            if not self._selected_set or program_entry.programId in self._selected_set:
-                score += 1
-                if program_entry.requirement == Requirement.OBLIGATORY:
-                    score += 2
+        for program_entry in selected_index.entries_for_course(slot.course.courseId):
+            score += 1
+            if program_entry.requirement == Requirement.OBLIGATORY:
+                score += 2
         return score
 
     def _ordered_candidates(self, moed: Moed, dates: List[date]) -> List[date]:

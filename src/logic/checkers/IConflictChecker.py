@@ -30,7 +30,7 @@ class IConflictChecker(ABC):
         """
         pass
 
-    def prepare(self, courses: list, selected_programs: list = None, slots: list = None) -> None:
+    def prepare(self, courses: list, selected_programs: list = None, slots: list = None, selected_index=None) -> None:
         """
         Optional setup before the search starts.
 

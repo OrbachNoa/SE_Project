@@ -11,8 +11,7 @@ from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.application.dto.PackedScheduleCodec import row_to_dto
 from src.application.state.ScheduleResultState import ScheduleResultState
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
-
-WINDOW_SIZE = 10_000
+from src.config import WINDOW_SIZE, SCHEDULE_DTO_CACHE_SIZE
 
 
 class HybridScheduleResultState(ScheduleResultState):
@@ -112,8 +111,7 @@ class HybridScheduleResultState(ScheduleResultState):
         else:
             dto = row_to_dto(raw, self._slots_ref, score)
 
-        _CACHE_MAX = 32
-        if len(self._dto_cache) >= _CACHE_MAX:
+        if len(self._dto_cache) >= SCHEDULE_DTO_CACHE_SIZE:
             self._dto_cache.pop(next(iter(self._dto_cache)))
         self._dto_cache[index] = dto
         return dto

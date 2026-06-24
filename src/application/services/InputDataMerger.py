@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Tuple
+from typing import List
 from src.application.state.InputDataState import InputDataState
 from src.application.ImportBoundary import ImportMode
 
@@ -8,10 +8,6 @@ class InputDataMerger:
 
     def __init__(self, state: InputDataState) -> None:
         self._state = state
-        self._handlers: Dict[ImportMode, Callable[[list, str], None]] = {
-            ImportMode.REPLACE: self._merge_replace,
-            ImportMode.UPDATE:  self._merge_update,
-        }
 
     def merge(self, data: list, mode: ImportMode, file_type: str) -> None:
         """Merge parsed data into state.
@@ -20,24 +16,20 @@ class InputDataMerger:
         the merger never has to inspect the data itself to decide which state
         field to update — eliminating the fragile hasattr guard.
         """
-        handler = self._handlers.get(mode)
-        if handler is None:
+        if mode == ImportMode.REPLACE:
+            if file_type == "periods":
+                self._state.replace_periods(data)
+            else:
+                self._state.replace_courses(data)
+        elif mode == ImportMode.UPDATE:
+            if file_type == "periods":
+                merged = _merge_periods(self._state.get_periods(), data)
+                self._state.replace_periods(merged)
+            else:
+                merged = _merge_courses(self._state.get_courses(), data)
+                self._state.replace_courses(merged)
+        else:
             raise ValueError(f"unsupported import mode: {mode}")
-        handler(data, file_type)
-
-    def _merge_replace(self, data: list, file_type: str) -> None:
-        if file_type == "periods":
-            self._state.replace_periods(data)
-        else:
-            self._state.replace_courses(data)
-
-    def _merge_update(self, data: list, file_type: str) -> None:
-        if file_type == "periods":
-            merged = _merge_periods(self._state.get_periods(), data)
-            self._state.replace_periods(merged)
-        else:
-            merged = _merge_courses(self._state.get_courses(), data)
-            self._state.replace_courses(merged)
 
 
 def _merge_courses(existing: List, incoming: List) -> List:

@@ -30,7 +30,6 @@ from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteSched
 from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
 from src.infrastructure.cache.DataCache import DataCache
 from src.application.services.ViewModelMapper import ViewModelMapper
-from src.application.state.AppState import AppState
 # endregion
 
 
@@ -247,9 +246,3 @@ def mock_router():
 def viewmodel_mapper():
     """Provides a fresh ViewModelMapper instance."""
     return ViewModelMapper()
-
-
-@pytest.fixture
-def app_state():
-    """Provides a fresh AppState instance."""
-    return AppState()

@@ -16,20 +16,20 @@ from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleErro
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 from src.logic.checkers.config.CheckerFactory import build_checkers
 from src.logic.comparators.ScheduleScorer import ScheduleScorer
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.logic.parallel.SearchSpacePartitioner import SearchSpacePartitioner
 from src.infrastructure.concurrency.QueueWorkSource import QueueWorkSource
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.config import (
+    DEFAULT_MAX_RESULTS,
+    DEFAULT_BATCH_SIZE,
+    WORK_UNITS_PER_WORKER,
+    RESULT_QUEUE_BATCHES_PER_WORKER,
+)
 
 # Used only to read the physical core count.
 # This does not pin the processes to P-cores.
-try:
-    import psutil
-except ImportError:
-    # If psutil is not installed, we fall back to os.cpu_count.
-    psutil = None
-
-DEFAULT_MAX_RESULTS = 1000000
-DEFAULT_BATCH_SIZE = 1000
+import psutil
 
 
 def _default_num_processes() -> int:
@@ -41,12 +41,11 @@ def _default_num_processes() -> int:
     It does not choose P-cores for us.
     The OS still decides where each process actually runs.
     """
-    if psutil is not None:
-        # If psutil is installed, use logical = false to ask for real CPU cores, not the extra logical threads.
-        physical = psutil.cpu_count(logical=False)
-        # If the OS returned a valid physical core count, use it as the worker count.
-        if physical:
-            return max(1, physical)
+    # Use logical = false to ask for real CPU cores, not the extra logical threads.
+    physical = psutil.cpu_count(logical=False)
+    # If the OS returned a valid physical core count, use it as the worker count.
+    if physical:
+        return max(1, physical)
     # os.cpu_count gives logical CPUs, so we use half as a safer number.
     return max(1, (os.cpu_count() or 2) // 2)
 
@@ -58,9 +57,12 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
     """
     try:
         # Build the checkers so we do not create WorkUnits from invalid starting points.
-        partition_checkers = build_checkers(config, courses, selected_programs, slots)
+        selected_index = SelectedProgramIndex(courses, selected_programs, slots)
+        partition_checkers = build_checkers(config, courses, selected_programs, slots, selected_index)
+        # Create several work units per worker so fast workers can grab more work.
+        desired_units = max(1, num_processes * WORK_UNITS_PER_WORKER)
         # Slice the problem into smaller work units.
-        work_units = SearchSpacePartitioner(partition_checkers).partition(slots, num_processes)
+        work_units = SearchSpacePartitioner(partition_checkers).partition(slots, desired_units)
         # Feed these units into the queue one by one.
         for unit in work_units:
             # If the user clicked 'Cancel', stop feeding work immediately.
@@ -98,8 +100,9 @@ def _run_scheduler_process(slots,
     try:
         # Build local copies of the rules (checkers) and the scoring system.
         # We do this here inside the worker to avoid passing heavy objects between processes.
-        checkers = build_checkers(config, courses, selected_programs, slots)
-        scorer = ScheduleScorer(courses, selected_programs)
+        selected_index = SelectedProgramIndex(courses, selected_programs, slots)
+        checkers = build_checkers(config, courses, selected_programs, slots, selected_index)
+        scorer = ScheduleScorer(courses, selected_programs, selected_index)
 
         # Start the runner. It will automatically ask the 'work_source' for units of work,
         # find schedules, and push the results into the 'queue'.
@@ -171,8 +174,9 @@ class SchedulingService:
         # "q" means the value is big number
         result_counter = Value("q", 0)
 
-        # Workers send found schedules here; maxsize keeps pending batches from using too much RAM.
-        queue: Queue = Queue(maxsize=50)
+        # Workers send found schedules here.
+        # maxsize counts pending result batches, not individual schedules.
+        queue: Queue = Queue(maxsize=max(1, num_processes * RESULT_QUEUE_BATCHES_PER_WORKER))
         # 'work_queue' is where workers go to pick up their next assignment.
         work_queue: Queue = Queue()
         work_source = QueueWorkSource(work_queue, cancel_event=cancel_event)

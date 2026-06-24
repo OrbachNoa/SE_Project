@@ -15,6 +15,7 @@ class MaxExamsPerDayChecker(IConflictChecker):
     """
 
     def __init__(self, k: int):
+        self._k = k
         self._max_exams_per_day = k
 
     def check(self, assignment, schedule) -> bool:
@@ -30,7 +31,8 @@ class MaxExamsPerDayChecker(IConflictChecker):
 
         # Count how many exams already exist on this date.
         # Add 1 for the new assignment that we want to place.
-        return len(schedule.course_ids_on_date(assignment.date)) + 1 > self._max_exams_per_day
+        courses_on_date = schedule.date_course_ids_index().get(assignment.date)
+        return (len(courses_on_date) if courses_on_date else 0) + 1 > self._max_exams_per_day
 
     def feasibility_bound(self, context) -> List[str]:
         """
