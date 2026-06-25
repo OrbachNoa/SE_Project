@@ -20,6 +20,7 @@ from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.logic.parallel.SearchSpacePartitioner import SearchSpacePartitioner
 from src.infrastructure.concurrency.QueueWorkSource import QueueWorkSource
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.application.errors.ExceptionMapper import build_process_error_payload
 from src.config import (
     DEFAULT_MAX_RESULTS,
     DEFAULT_BATCH_SIZE,
@@ -71,7 +72,7 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
             work_queue.put(unit)
     except Exception as e:
         # If something breaks while slicing the problem, let the main system know.
-        result_queue.put(("ERROR", f"Fatal partitioning error: {type(e).__name__}: {str(e)}"))
+        result_queue.put(("ERROR", build_process_error_payload(e, "work partitioning")))
     finally:
         # We put one 'None' into the queue for every worker process.
         # When a worker pulls a 'None', it knows there is no more work left and it can shut down.
@@ -121,7 +122,7 @@ def _run_scheduler_process(slots,
     except Exception as e:
         # If the worker crashes, send an error message back to the main app.
         if queue is not None:
-            queue.put(("ERROR", f"Fatal scheduling error: {type(e).__name__}: {str(e)}"))
+            queue.put(("ERROR", build_process_error_payload(e, "scheduling")))
 
 
 class SchedulingService:

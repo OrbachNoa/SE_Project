@@ -7,6 +7,12 @@ from typing import List
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.application.errors.ErrorModel import (
+    AppErrorInfo,
+    ErrorCategory,
+    ErrorSeverity,
+)
+from src.application.errors.ExceptionMapper import default_registry
 
 
 class SchedulerWorker(QThread):
@@ -49,6 +55,14 @@ class SchedulerWorker(QThread):
         self._expected_finishes = len(processes)
         self._finished_count = 0
 
+        # The structured form of the last failure (code/category/severity).
+        # error_occurred stays a str signal for the GUI, but callers/tests that
+        # want the full record can read this after a failure.
+        self.last_error: AppErrorInfo = None
+        # Maps an unexpected IPC-read exception to a safe AppErrorInfo instead
+        # of leaking its raw str() into the user-facing message.
+        self._errors = default_registry()
+
         # Maps each queue message type to the method that handles it.
         self._dispatch = {
             "SCHEDULE_BATCH": self._handle_schedule_batch,
@@ -83,8 +97,19 @@ class SchedulerWorker(QThread):
                     # The queue was probably closed while this worker was waiting.
                     break
                 except Exception as e:
-                    # Report unexpected queue/IPC errors instead of leaving the GUI waiting forever.
-                    self.error_occurred.emit(f"IPC communication error with the scheduling engine: {str(e)}")
+                    # Report unexpected queue/IPC errors instead of leaving the GUI waiting
+                    # forever. Routed through the same mapper registry as every other
+                    # boundary so the user never sees a raw str(e); the unknown-fallback
+                    # context keeps the historical CRITICAL/non-recoverable/IPC code for
+                    # whatever this exception turns out to be.
+                    info = self._errors.map(e, {
+                        "category": ErrorCategory.INFRASTRUCTURE,
+                        "severity": ErrorSeverity.CRITICAL,
+                        "recoverable": False,
+                        "fallback_code": "SCHEDULER_IPC_ERROR",
+                        "stage": "ipc_read",
+                    })
+                    self._emit_error(info)
                     break
 
                 # Choose the correct handler according to the message type.
@@ -104,9 +129,16 @@ class SchedulerWorker(QThread):
         """
         crashed = [p for p in self._processes if p.exitcode not in (0, None)]
         if crashed:
-            self.error_occurred.emit(
-                f"The scheduling engine crashed unexpectedly (Exit code: {crashed[0].exitcode})"
-            )
+            exit_code = crashed[0].exitcode
+            self._emit_error(AppErrorInfo(
+                code="SCHEDULER_PROCESS_CRASHED",
+                category=ErrorCategory.INFRASTRUCTURE,
+                severity=ErrorSeverity.CRITICAL,
+                user_message=f"The scheduling engine crashed unexpectedly (Exit code: {exit_code})",
+                technical_message=f"Worker process exited with code {exit_code}",
+                recoverable=False,
+                context={"exit_code": exit_code},
+            ))
         else:
             self.search_finished.emit()
 
@@ -188,9 +220,28 @@ class SchedulerWorker(QThread):
         return True
 
     def _handle_error(self, payload) -> bool:
-        """Reports an error to the GUI and stops the worker loop."""
-        self.error_occurred.emit(payload)
+        """Reports an error to the GUI and stops the worker loop.
+
+        ``payload`` from a worker process is a user-facing string today, but may
+        also be an AppErrorInfo serialised dict; both are normalised to a clean
+        string for the GUI while keeping the structured record in last_error.
+        """
+        if isinstance(payload, dict):
+            self._emit_error(AppErrorInfo.from_payload(payload))
+        else:
+            self.last_error = AppErrorInfo(
+                code="SCHEDULER_PROCESS_ERROR",
+                category=ErrorCategory.SCHEDULING,
+                severity=ErrorSeverity.ERROR,
+                user_message=str(payload),
+            )
+            self.error_occurred.emit(str(payload))
         return False
+
+    def _emit_error(self, info: AppErrorInfo) -> None:
+        """Store the structured error and emit its clean user message."""
+        self.last_error = info
+        self.error_occurred.emit(info.user_message)
 
     def _handle_finished(self, payload) -> bool:
         """ Handles a FINISHED message from one scheduler process.

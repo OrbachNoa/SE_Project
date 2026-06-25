@@ -72,13 +72,17 @@ class InputScreenPresenter:
 
         self._courses_loaded = True
         self._view.mark_courses_loaded(result.loaded_count)
-        self.refresh_generate_button()
 
-        # After loading, get the data and tell the UI to render the course list
+        # After loading, narrow the selectable programs to those in the file,
+        # then render the course list, before refreshing the generate button -
+        # the button's validation depends on the now-updated program selection.
         courses = self._controller.get_loaded_courses()
         mapper = self._controller.get_mapper()
         if courses and mapper is not None:
+            self._view.set_available_programs(mapper.to_program_vms(courses))
             self._view.render_courses(mapper.to_program_courses_vm(courses))
+
+        self.refresh_generate_button()
 
     # Handles the actual file loading process for periods
     def on_load_periods(self, mode: ImportMode) -> None:
@@ -108,6 +112,9 @@ class InputScreenPresenter:
     # Starts the scheduling process in the background controller
     def on_generate_clicked(self) -> None:
         if not self.validate_programs():
+            self._view.show_program_selection_error(
+                "Please select at least one study program before generating a schedule."
+            )
             return
 
         self._already_navigated = False
@@ -220,7 +227,12 @@ class InputScreenPresenter:
         try:
             info = self._controller.get_page_info()
             return int(info.get("total_count", 0))
-        except Exception:
+        except Exception as error:
+            # A transient read glitch during polling shouldn't interrupt an
+            # active generation run, so we keep showing the last known count —
+            # but still log the technical detail (via the same mapper as every
+            # other failure) so a systematic problem isn't entirely silent.
+            self._controller.map_error(error, {"operation": "poll_progress", "screen": "input"})
             return self._last_count
 
     # Handles and displays errors that happen during file import

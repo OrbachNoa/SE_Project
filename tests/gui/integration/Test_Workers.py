@@ -79,6 +79,77 @@ def test_worker_process_crash_drainage_path():
     assert error_msg is not None
     assert "crashed unexpectedly" in error_msg
     assert "137" in error_msg
+    # The structured record is available for triage with a stable code.
+    assert worker.last_error is not None
+    assert worker.last_error.code == "SCHEDULER_PROCESS_CRASHED"
+    assert worker.last_error.recoverable is False
+
+
+# ===========================================================================
+# TC-SCHED-WORK-002b: a serialised AppErrorInfo ERROR payload from a worker
+# process is unpacked into a clean message + structured record.
+# ===========================================================================
+def test_worker_handles_structured_error_payload():
+    # Arrange
+    from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory, ErrorSeverity
+
+    info = AppErrorInfo(
+        code="RESOURCE_MEMORY_EXHAUSTED",
+        category=ErrorCategory.RESOURCE,
+        severity=ErrorSeverity.CRITICAL,
+        user_message="The scheduler ran out of memory.",
+        technical_message="MemoryError during scheduling",
+        recoverable=False,
+    )
+
+    mock_queue = MagicMock()
+    mock_process = MagicMock()
+    mock_cancel_event = MagicMock()
+    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
+    mock_queue.get.side_effect = [("ERROR", info.to_payload())]
+
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
+    messages = []
+    worker.error_occurred.connect(messages.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert messages == ["The scheduler ran out of memory."]
+    assert worker.last_error.code == "RESOURCE_MEMORY_EXHAUSTED"
+
+
+# ===========================================================================
+# TC-SCHED-WORK-002c: an unexpected IPC/queue read failure (anything other
+# than queue.Empty or the "queue closed" ValueError) is routed through the
+# mapper registry instead of building user_message with str(e) directly —
+# the raw exception text must never reach the GUI-facing message.
+# ===========================================================================
+def test_worker_unexpected_queue_read_error_is_mapped_not_raw():
+    # Arrange
+    mock_queue = MagicMock()
+    mock_process = MagicMock()
+    mock_cancel_event = MagicMock()
+    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
+
+    mock_queue.get.side_effect = RuntimeError("pipe broke unexpectedly")
+
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
+    messages = []
+    worker.error_occurred.connect(messages.append)
+
+    # Act
+    worker.run()
+
+    # Assert — clean, generic message; the raw exception text/type never leaks.
+    assert len(messages) == 1
+    assert "pipe broke unexpectedly" not in messages[0]
+    assert "RuntimeError" not in messages[0]
+    assert worker.last_error is not None
+    assert worker.last_error.code == "SCHEDULER_IPC_ERROR"
+    assert worker.last_error.recoverable is False
+    assert "pipe broke unexpectedly" in worker.last_error.technical_message
 
 
 # ===========================================================================
@@ -171,8 +242,66 @@ def test_process_runner_error_handling(mock_obs_cls, mock_sched_cls):
     # Act
     runner.run()
 
-    # Assert
+    # Assert — on_error receives a structured AppErrorInfo payload (a dict),
+    # not str(e): the raw exception text only reaches the technical_message,
+    # never something that could be shown to the user as-is.
     assert mock_scheduler.generateSchedules.call_count == 1
     assert mock_observer.on_error.call_count == 1
-    error_msg = mock_observer.on_error.call_args[0][0]
-    assert "backtracking error" in error_msg
+    payload = mock_observer.on_error.call_args[0][0]
+    assert isinstance(payload, dict)
+    assert payload["category"] == "INFRASTRUCTURE"
+    assert "backtracking error" in payload["technical_message"]
+    assert "backtracking error" not in payload["user_message"]
+
+
+# ===========================================================================
+# TC-SCHED-WORK-006: a MemoryError raised mid-search keeps its RESOURCE
+# category through SchedulerProcessRunner, instead of becoming a generic
+# scheduling/infrastructure failure.
+# ===========================================================================
+@patch("src.infrastructure.concurrency.SchedulerProcessRunner.Scheduler")
+@patch("src.infrastructure.concurrency.SchedulerProcessRunner.QueueScheduleObserver")
+def test_process_runner_memory_error_maps_to_resource(mock_obs_cls, mock_sched_cls):
+    # Arrange
+    mock_scheduler = MagicMock()
+    mock_sched_cls.return_value = mock_scheduler
+    mock_scheduler.generateSchedules.side_effect = MemoryError("oom")
+
+    mock_observer = MagicMock()
+    mock_obs_cls.return_value = mock_observer
+
+    queue = MagicMock()
+    cancel_event = MagicMock()
+    work_source = MagicMock()
+    work_source.get_next.side_effect = [WorkUnit(seed_dates=[]), None]
+
+    runner = SchedulerProcessRunner(
+        [], [], queue, cancel_event, max_results=10, batch_size=1000, work_source=work_source
+    )
+
+    # Act
+    runner.run()
+
+    # Assert
+    payload = mock_observer.on_error.call_args[0][0]
+    assert payload["code"] == "RESOURCE_MEMORY_EXHAUSTED"
+    assert payload["category"] == "RESOURCE"
+    assert payload["recoverable"] is False
+
+    # And the full pipeline: SchedulerWorker rebuilds the same record from the
+    # payload it receives over the queue, with last_error reflecting it.
+    from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
+    from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+
+    worker_queue = MagicMock()
+    worker_queue.get.side_effect = [("ERROR", payload)]
+    worker_process = MagicMock()
+    worker_repository = MagicMock(spec=SQLiteScheduleRepository)
+    worker = SchedulerWorker(worker_queue, MagicMock(), [worker_process], worker_repository)
+    messages = []
+    worker.error_occurred.connect(messages.append)
+
+    worker.run()
+
+    assert worker.last_error.code == "RESOURCE_MEMORY_EXHAUSTED"
+    assert messages == [payload["user_message"]]

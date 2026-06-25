@@ -45,3 +45,26 @@ def test_sort_worker_handles_an_empty_priority_list(qtbot):
     # Assert
     controller.compute_sort_data.assert_called_once_with([])
     assert blocker.args == [{}]
+
+
+# ===========================================================================
+# TC-SW-003: a failure during the background sort is reported through `failed`
+# as a clean message, and the structured record is recorded with a stable code.
+# ===========================================================================
+def test_sort_worker_reports_failure_with_structured_error():
+    # Arrange
+    controller = MagicMock()
+    controller.compute_sort_data.side_effect = MemoryError("oom while sorting")
+    worker = SortWorker(controller, ["MANDATORY_SPAN"])
+    messages = []
+    worker.failed.connect(messages.append)
+
+    # Act — run synchronously so the test does not depend on pytest-qt.
+    worker.run()
+
+    # Assert — user message is clean (no raw exception text), record is typed.
+    assert len(messages) == 1
+    assert "memory" in messages[0].lower()
+    assert "MemoryError" not in messages[0]
+    assert worker.last_error is not None
+    assert worker.last_error.code == "RESOURCE_MEMORY_EXHAUSTED"

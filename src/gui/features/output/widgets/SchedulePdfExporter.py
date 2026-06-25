@@ -6,6 +6,7 @@ from __future__ import annotations
 import html
 import os
 import re
+from typing import Callable, Optional
 
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from PyQt6.QtGui import QTextDocument, QFont
@@ -14,9 +15,16 @@ from PyQt6.QtGui import QPageSize
 
 from gui.core.styles.Palette import COLOR_PRIMARY, COLOR_GOLD, COLOR_TEXT, COLOR_BG, COLOR_MUTED
 
+# (exception, path) -> a clean, user-facing message. Callers pass
+# presenter.map_export_error so a PermissionError/OSError here is mapped the
+# same way as every other export failure, instead of showing raw exception text.
+OnPdfError = Callable[[Exception, str], str]
+
 
 # The main entry point that coordinates asking the user for a path and triggering the export
-def export_schedule_pdf(view, current_index: int, parent) -> None:
+def export_schedule_pdf(
+    view, current_index: int, parent, on_error: Optional[OnPdfError] = None
+) -> None:
     """
     Run the full PDF export flow for the schedule currently on screen.
     """
@@ -37,8 +45,11 @@ def export_schedule_pdf(view, current_index: int, parent) -> None:
         document_html = _build_schedule_html(view)
         _write_html_to_pdf(document_html, path)
     except Exception as error:
-        # Show an error alert if something goes wrong during the saving process.
-        QMessageBox.critical(parent, "Export error", f"Failed to create the PDF:\n{error}")
+        # Map through the caller's mapper when given (it logs the technical
+        # detail too); otherwise fall back to a safe message that never
+        # repeats raw exception text.
+        message = on_error(error, path) if on_error else "Failed to create the PDF. Please try again."
+        QMessageBox.critical(parent, "Export error", message)
         return
 
     # Let the user know the process was successful.
