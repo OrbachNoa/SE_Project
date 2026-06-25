@@ -159,7 +159,8 @@ class SQLiteScheduleRepository:
         if not gidxs:
             return {}
 
-        cols = ", ".join(_SCORE_COLS[cid] for cid in ALL_CRITERIA)
+        _col_map = {**_SCORE_COLS, **_EXT_FEATURE_COLS}
+        cols = ", ".join(_col_map[cid] for cid in _ALL_SCORE_CRITERIA)
         rows = []
 
         with self._lock:
@@ -178,7 +179,7 @@ class SQLiteScheduleRepository:
 
         # Convert SQLite rows into {schedule_id: {criterion: score}}.
         return {
-            row[0]: {cid: row[i + 1] for i, cid in enumerate(ALL_CRITERIA)}
+            row[0]: {cid: row[i + 1] for i, cid in enumerate(_ALL_SCORE_CRITERIA)}
             for row in rows
         }
 

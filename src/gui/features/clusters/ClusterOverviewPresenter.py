@@ -99,14 +99,21 @@ class ClusterOverviewPresenter:
         self._view.render_cards(cards)
         self._view.set_compare_enabled(False)
 
-        self._warn_capped_k(k, active_k, custom_warn if custom_warn else None)
+        # Determine the requested/wanted K
+        current_k = self._view.get_k_value()
+        coordinator = self._controller.get_cluster_coordinator()
+        config_k = coordinator.config.k if (coordinator and coordinator.config and coordinator.config.k_mode == "fixed") else None
+        wanted_k = config_k if config_k is not None else current_k
+
+        if active_k < wanted_k or active_k < current_k:
+            # Silence the warning, just keep the new K
+            pass
+        else:
+            self._warn_capped_k(wanted_k, active_k, custom_warn if custom_warn else None)
 
         # Save state on success
         self._last_request_text = text
-        if k is not None:
-            self._last_k = k
-        else:
-            self._last_k = None
+        self._last_k = active_k
 
     def on_open_cluster(self, cluster_id: int) -> None:
         self._detail.enter_cluster(cluster_id)

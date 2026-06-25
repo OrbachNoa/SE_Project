@@ -108,7 +108,7 @@ class ViewModelMapper:
 
         items = [self._item_from_assignment(a, effective_programs) for a in dto.assignments]
         items.sort(key=lambda item: item.date)  # ISO dates sort correctly as text
-        return ScheduleViewModel(items=items, current_index=current_index, total=total)
+        return ScheduleViewModel(items=items, current_index=current_index, total=total, scores=dto.scores)
 
     def to_calendar_vm(self, dto: ScheduleDTO) -> CalendarViewModel:
         """Map a schedule DTO to year-calendar cells (one per exam day, date-sorted)."""
@@ -251,6 +251,7 @@ class ViewModelMapper:
                  CriterionDisplay.display_value(name, cluster.summary.get(name, 0.0)))
                 for name in criteria
             ]
+            
             cards.append(
                 ClusterCardViewModel(
                     cluster_id=cluster.cluster_id,

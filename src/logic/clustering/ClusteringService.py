@@ -126,6 +126,28 @@ class ClusteringService:
         """Fit on a list of schedules, extracting their score vectors."""
         if not schedules:
             raise ValueError("cannot cluster an empty set of schedules")
+
+        # Dynamically adjust criteria to only use scores present on the schedules
+        first_schedule_scores = schedules[0].scores or {}
+        actual_criteria = [c for c in self._config.criteria if c in first_schedule_scores]
+        if not actual_criteria:
+            actual_criteria = list(self._config.criteria)
+
+        if len(actual_criteria) != len(self._config.criteria):
+            try:
+                self._config.criteria = tuple(actual_criteria)
+            except AttributeError:
+                pass
+            self._extractor = ScoreFeatureExtractor(self._config.criteria)
+            self._metric = self._build_metric(self._config)
+            if not _SKLEARN_AVAILABLE:
+                self._strategy = KMeansClusteringStrategy(
+                    metric=self._metric, seed=self._config.seed
+                )
+            self._auto_k = AutoKSelector(
+                strategy=self._strategy, metric=self._metric, seed=self._config.seed
+            )
+
         raw = self._extractor.extract_many(list(schedules))
         return self.fit_vectors(raw, population_size=population_size or len(schedules))
 

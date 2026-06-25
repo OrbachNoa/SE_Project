@@ -14,13 +14,15 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from src.application.viewmodels.ClusterViewModel import ClusterCardViewModel
+from src.gui.features.clusters.widgets.AllMetricsDialog import AllMetricsDialog
+from src.gui.features.clusters.widgets.MetricWidgetFactory import create_metric_widgets
+
 
 
 class ClusterCardWidget(QFrame):
@@ -72,20 +74,19 @@ class ClusterCardWidget(QFrame):
             for tag in tags:
                 if not tag:
                     continue
-                tag_cap = tag[0].upper() + tag[1:]
                 
                 # Determine colors based on semantic meaning of tag description
                 tag_lower = tag.lower()
-                if any(word in tag_lower for word in ["breathing room", "spread out", "few", "light busiest-day", "optimal"]):
+                if any(word in tag_lower for word in ["breathing room", "spread out", "few", "light busiest-day", "low rate", "grading gaps"]):
                     tag_type = "positive"
-                elif any(word in tag_lower for word in ["packed close", "bunched closely", "clashes", "clash", "more elective", "heavy busiest-day", "heavy load"]):
+                elif any(word in tag_lower for word in ["packed close", "bunched closely", "clashes", "clash", "heavy busiest-day", "heavy load", "unevenly", "high rate"]):
                     tag_type = "negative"
-                elif any(word in tag_lower for word in ["wide window", "short window", "span"]):
+                elif any(word in tag_lower for word in ["window", "span", "max rest"]):
                     tag_type = "span"
                 else:
                     tag_type = "neutral"
 
-                pill = QLabel(tag_cap)
+                pill = QLabel(tag)
                 pill.setObjectName(f"pill-{tag_type}")
                 pills_layout.addWidget(pill, alignment=Qt.AlignmentFlag.AlignLeft)
             layout.addWidget(pills_widget)
@@ -97,94 +98,45 @@ class ClusterCardWidget(QFrame):
         grid.setVerticalSpacing(6)
         grid.setColumnStretch(0, 1)  # Metric label stretches
 
-        from src.logic.comparators.ScheduleScorer import (
-            AVG_ALL_COURSES_GAP,
-            ELECTIVE_CONFLICTS,
-            MANDATORY_SPAN,
-            MAX_EXAMS_PER_DAY,
-            MIN_MANDATORY_GAP,
+        # Store full summary for popup dialog
+        self._card_title_text = card.title
+        self._full_summary = card.summary
+        self._min_max = card.min_max
+        self._defining_criterion = card.defining_criterion
+
+        # Sort all summary items by their goodness percentage and display the top 5
+        from src.gui.features.clusters.widgets.MetricWidgetFactory import display_value_to_percentage
+        sorted_summary = sorted(
+            card.summary,
+            key=lambda item: display_value_to_percentage(item[0], item[2]),
+            reverse=True
         )
+        summary_to_show = sorted_summary[:5]
+        has_extra = len(card.summary) > 5
 
-        for row, (crit_key, label, value) in enumerate(card.summary):
-            name = QLabel(label)
-            val = QLabel(value)
-            val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
+        for row, (crit_key, label, value) in enumerate(summary_to_show):
             is_defining = (crit_key == card.defining_criterion)
-
-            # Create visual indicator for Column 1
-            indicator = QWidget()
-            indicator.setObjectName("profile-indicator-container")
-            indicator_layout = QHBoxLayout(indicator)
-            indicator_layout.setContentsMargins(0, 0, 0, 0)
-            indicator_layout.setSpacing(0)
-            indicator_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            try:
-                num_val = float(value)
-            except ValueError:
-                num_val = 0.0
-
-            # Range tooltip details
-            min_val, max_val_val = card.min_max.get(crit_key, (value, value))
-            tooltip_txt = f"Average: {value}\nFamily range: {min_val} to {max_val_val}"
-            name.setToolTip(tooltip_txt)
-            val.setToolTip(tooltip_txt)
-            indicator.setToolTip(tooltip_txt)
-
-            def add_status_label(text: str, object_name: str) -> None:
-                lbl = QLabel(text)
-                lbl.setToolTip(tooltip_txt)
-                lbl.setObjectName(object_name)
-                indicator_layout.addWidget(lbl)
-
-            if crit_key in (AVG_ALL_COURSES_GAP, MIN_MANDATORY_GAP, MANDATORY_SPAN):
-                bar = QProgressBar()
-                bar.setTextVisible(False)
-                bar.setFixedHeight(5)
-                bar.setFixedWidth(55)
-                bar.setToolTip(tooltip_txt)
-
-                # Determine max scale
-                if crit_key == AVG_ALL_COURSES_GAP:
-                    max_scale = 10.0
-                elif crit_key == MIN_MANDATORY_GAP:
-                    max_scale = 5.0
-                else:  # MANDATORY_SPAN
-                    max_scale = 14.0
-
-                pct = min(100, max(0, int((num_val / max_scale) * 100)))
-                bar.setValue(pct)
-
-                bar.setObjectName("profile-progress")
-                bar.setProperty("defining", is_defining)
-                indicator_layout.addWidget(bar)
-
-            elif crit_key == ELECTIVE_CONFLICTS:
-                if num_val <= 0.05:
-                    add_status_label("✔", "profile-status-check")
-                else:
-                    add_status_label("⚠", "profile-status-warning")
-
-            elif crit_key == MAX_EXAMS_PER_DAY:
-                if num_val <= 1.05:
-                    add_status_label("✔", "profile-status-check")
-                elif num_val >= 2.0:
-                    add_status_label("⚠", "profile-status-danger")
-                else:
-                    add_status_label("⚠", "profile-status-warning")
-
-            # Apply row styles depending on whether it is defining
-            name.setObjectName("profile-metric-name")
-            val.setObjectName("profile-metric-value")
-            name.setProperty("defining", is_defining)
-            val.setProperty("defining", is_defining)
-
+            name, indicator, val = create_metric_widgets(
+                crit_key=crit_key,
+                label_txt=label,
+                value=value,
+                min_max=card.min_max,
+                is_defining=is_defining,
+                bar_width=55,
+                bar_height=5,
+            )
             grid.addWidget(name, row, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             grid.addWidget(indicator, row, 1, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             grid.addWidget(val, row, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         layout.addWidget(profile)
+
+        if has_extra:
+            more_btn = QPushButton("Show All Metrics...")
+            more_btn.setObjectName("more-metrics-btn")
+            more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            more_btn.clicked.connect(self._show_all_metrics)
+            layout.addWidget(more_btn)
 
         # Actions.
         actions = QHBoxLayout()
@@ -226,3 +178,13 @@ class ClusterCardWidget(QFrame):
         self._compare_btn.setChecked(checked)
         self._compare_btn.blockSignals(False)
         self._update_selection_state(checked)
+
+    def _show_all_metrics(self) -> None:
+        dialog = AllMetricsDialog(
+            title=self._card_title_text,
+            summary=self._full_summary,
+            min_max=self._min_max,
+            defining_criterion=self._defining_criterion,
+            parent=self.window()
+        )
+        dialog.exec()

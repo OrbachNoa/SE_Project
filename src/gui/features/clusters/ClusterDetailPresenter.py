@@ -155,3 +155,41 @@ class ClusterDetailPresenter:
         if mapper and periods:
             return mapper.to_period_edit_vms(periods)
         return []
+
+    def on_show_metrics(self) -> None:
+        if self._size == 0:
+            return
+        try:
+            schedule_vm = self._controller.get_cluster_schedule_view(self._cluster_id, self._index)
+        except Exception as error:
+            message = self._controller.map_error(
+                error, {"operation": "read_schedule", "screen": "cluster_detail"}
+            )
+            self._view.show_message(f"Could not load schedule metrics: {message}")
+            return
+
+        if not schedule_vm or not schedule_vm.scores:
+            self._view.show_message("No metrics available for this schedule.")
+            return
+
+        from src.logic.clustering import CriterionDisplay
+        from src.logic.clustering.ClusteringScorer import EXTENDED_CRITERIA
+
+        summary = []
+        for name in EXTENDED_CRITERIA:
+            val = schedule_vm.scores.get(name, 0.0)
+            summary.append((
+                name,
+                CriterionDisplay.label(name),
+                CriterionDisplay.display_value(name, val)
+            ))
+
+        from gui.features.clusters.widgets.AllMetricsDialog import AllMetricsDialog
+        dialog = AllMetricsDialog(
+            title=f"Schedule {self._index + 1}",
+            summary=summary,
+            min_max={},
+            defining_criterion="",
+            parent=self._view.window()
+        )
+        dialog.exec()

@@ -146,6 +146,18 @@ QFrame#card QPushButton#btn-ghost:checked {{
 QFrame#card QPushButton#btn-ghost:checked:hover {{
     background-color: {COLOR_PRIMARY_HOVER};
 }}
+QFrame#card QPushButton#more-metrics-btn {{
+    font-size: 11px;
+    color: #0f766e;
+    text-align: left;
+    padding-left: 0px;
+    background: transparent;
+    border: none;
+}}
+QFrame#card QPushButton#more-metrics-btn:hover {{
+    text-decoration: underline;
+    color: #0d5c56;
+}}
 QFrame#card QToolTip {{
     background-color: #F5F5F4;
     color: #3E352F;
@@ -250,5 +262,58 @@ QFrame#card QLabel#profile-metric-value {{
 QFrame#card QLabel#profile-metric-value[defining="true"] {{
     color: #0f766e;
     font-weight: bold;
+}}
+QFrame#composite-container {{
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}}
+QLabel#composite-label-name {{
+    color: #475569;
+    font-size: 11px;
+    font-weight: bold;
+    background: transparent;
+}}
+QLabel#composite-label-value {{
+    font-size: 12px;
+    font-weight: bold;
+    background: transparent;
+}}
+QLabel#composite-label-value[rating="high"] {{
+    color: #16A34A;
+}}
+QLabel#composite-label-value[rating="low"] {{
+    color: #DC2626;
+}}
+QLabel#composite-label-value[rating="medium"] {{
+    color: #D97706;
+}}
+QLabel#composite-label-value[rating="wide"] {{
+    color: #16A34A;
+}}
+QLabel#composite-label-value[rating="tight"] {{
+    color: #DC2626;
+}}
+
+/* ── All Metrics Dialog ─────────────────────────────────────────── */
+QDialog#all-metrics-dialog {{
+    background-color: #FFFFFF;
+    border-radius: 8px;
+}}
+QLabel#all-metrics-header {{
+    color: #0f766e;
+    font-size: 16px;
+    margin-bottom: 8px;
+}}
+QScrollArea#all-metrics-scroll {{
+    background-color: transparent;
+    border: none;
+}}
+QDialog#all-metrics-dialog QFrame#card {{
+    background-color: transparent;
+    border: none;
 }}
 """

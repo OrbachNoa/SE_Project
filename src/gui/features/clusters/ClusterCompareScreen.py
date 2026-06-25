@@ -88,21 +88,74 @@ class ClusterCompareScreen(Screen):
         row.addWidget(left_wrap, stretch=1)
         row.addWidget(right_wrap, stretch=1)
         root.addLayout(row, stretch=1)
-
     def _wrap_with_caption(self, view: QWidget, side: str) -> QWidget:
         wrap = QWidget()
         layout = QVBoxLayout(wrap)
         layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(6)
+
         caption = QLabel("")
         caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        caption.setStyleSheet("font-weight: 700; color: #0f766e;")
+        caption.setStyleSheet("font-weight: 700; color: #0f766e; font-size: 14px;")
         layout.addWidget(caption)
+
+        # Composite widget placeholder container
+        composite_container = QWidget()
+        composite_container_layout = QVBoxLayout(composite_container)
+        composite_container_layout.setContentsMargins(0, 0, 0, 0)
+        composite_container_layout.setSpacing(0)
+        layout.addWidget(composite_container)
+
         layout.addWidget(view, stretch=1)
+
         if side == "left":
             self._left_caption = caption
+            self._left_comp_container = composite_container
         else:
             self._right_caption = caption
+            self._right_comp_container = composite_container
         return wrap
+
+    def _build_composite_widget(self, container: QWidget, comfort: str, admin: str, faculty: str, spread: str) -> None:
+        # Clear existing layout
+        layout = container.layout()
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+
+        # Composite labels container
+        composite_widget = QFrame()
+        composite_widget.setObjectName("composite-container")
+        composite_layout = QGridLayout(composite_widget)
+        composite_layout.setContentsMargins(10, 10, 10, 10)
+        composite_layout.setHorizontalSpacing(12)
+        composite_layout.setVerticalSpacing(8)
+
+        labels_data = [
+            ("Student Comfort", comfort),
+            ("Admin Load", admin),
+            ("Faculty Impact", faculty),
+            ("Schedule Spread", spread),
+        ]
+
+        for idx, (label_name, label_val) in enumerate(labels_data):
+            row = idx // 2
+            col = (idx % 2) * 2
+
+            name_lbl = QLabel(f"<b>{label_name}:</b>")
+            name_lbl.setObjectName("composite-label-name")
+            val_lbl = QLabel(label_val)
+            val_lbl.setObjectName("composite-label-value")
+
+            val_lower = label_val.lower()
+            val_lbl.setProperty("rating", val_lower)
+
+            composite_layout.addWidget(name_lbl, row, col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            composite_layout.addWidget(val_lbl, row, col + 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        layout.addWidget(composite_widget)
 
     # ── view API used by the presenter ───────────────────────────────────────
 
@@ -113,6 +166,22 @@ class ClusterCompareScreen(Screen):
     def render_comparison(self, comparison) -> None:
         self._left_caption.setText(comparison.left_title)
         self._right_caption.setText(comparison.right_title)
+
+        # Build composite ratings widgets
+        self._build_composite_widget(
+            self._left_comp_container,
+            comparison.left_student_comfort,
+            comparison.left_admin_load,
+            comparison.left_faculty_impact,
+            comparison.left_schedule_spread
+        )
+        self._build_composite_widget(
+            self._right_comp_container,
+            comparison.right_student_comfort,
+            comparison.right_admin_load,
+            comparison.right_faculty_impact,
+            comparison.right_schedule_spread
+        )
 
         # Rebuild the feature comparison table.
         while self._table.count():
@@ -128,7 +197,22 @@ class ClusterCompareScreen(Screen):
             lbl.setStyleSheet("font-weight: 700;")
             self._table.addWidget(lbl, 0, col)
 
-        for row, (label, left_val, right_val, differs) in enumerate(comparison.feature_rows, start=1):
+        # Combine composite rows and feature rows
+        composite_rows = [
+            ("Student Comfort", comparison.left_student_comfort, comparison.right_student_comfort),
+            ("Admin Load", comparison.left_admin_load, comparison.right_admin_load),
+            ("Faculty Impact", comparison.left_faculty_impact, comparison.right_faculty_impact),
+            ("Schedule Spread", comparison.left_schedule_spread, comparison.right_schedule_spread),
+        ]
+
+        table_rows = []
+        for label, lv, rv in composite_rows:
+            table_rows.append((f"★ {label}", lv, rv, lv != rv))
+
+        for label, lv, rv, differs in comparison.feature_rows:
+            table_rows.append((label, lv, rv, differs))
+
+        for row, (label, left_val, right_val, differs) in enumerate(table_rows, start=1):
             style = _DIFF_STYLE if differs else _SAME_STYLE
             name = QLabel(label)
             name.setStyleSheet(style)

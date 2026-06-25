@@ -21,8 +21,8 @@ from typing import Dict, Optional, Tuple
 
 from src.logic.clustering.ClusterConfig import ClusterConfig, K_MODE_AUTO, K_MODE_FIXED
 from src.logic.clustering.ExtendedFeatureComputer import (
-    AVG_MOED_GAP, MIN_MOED_GAP, GAP_STD_DEV, AVG_PREP_DAYS,
-    DOUBLE_EXAM_DAYS, BUSIEST_WEEK_COUNT, MAX_REST_DAYS, MANDATORY_CONSEC,
+    GAP_STD_DEV, AVG_PREP_DAYS, MAX_REST_DAYS,
+    B2B_EXAM_INCIDENCE, DEPT_EXAM_CONCURRENCY, INSTRUCTOR_EXAM_GAP,
     ALL_EXTENDED_FEATURES,
 )
 from src.logic.clustering.llm.HeuristicRequestParser import HeuristicRequestParser
@@ -74,13 +74,13 @@ Output: {"topics": ["consecutive", "rest"], "k_mode": "auto", "explanation": "Gr
 _USER_TEMPLATE = "Request:\n{request}\n\nReturn the JSON configuration."
 
 _TOPIC_CRITERIA: Dict[str, Tuple[list, dict]] = {
-    "retake_time":  ([AVG_MOED_GAP, MIN_MOED_GAP], {AVG_MOED_GAP: 2.0}),
+    "retake_time":  ([MIN_MANDATORY_GAP], {MIN_MANDATORY_GAP: 2.0}),
     "study_prep":   ([AVG_PREP_DAYS, MIN_MANDATORY_GAP], {AVG_PREP_DAYS: 3.0}),
-    "daily_load":   ([MAX_EXAMS_PER_DAY, DOUBLE_EXAM_DAYS, BUSIEST_WEEK_COUNT], {MAX_EXAMS_PER_DAY: 2.0}),
-    "weekly_load":  ([BUSIEST_WEEK_COUNT, MAX_EXAMS_PER_DAY], {BUSIEST_WEEK_COUNT: 2.0}),
+    "daily_load":   ([MAX_EXAMS_PER_DAY], {MAX_EXAMS_PER_DAY: 2.0}),
+    "weekly_load":  ([MAX_EXAMS_PER_DAY], {MAX_EXAMS_PER_DAY: 1.5}),
     "rest":         ([MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP, MAX_REST_DAYS], {}),
     "consistency":  ([GAP_STD_DEV, AVG_ALL_COURSES_GAP], {GAP_STD_DEV: 2.0}),
-    "consecutive":  ([MANDATORY_CONSEC, MIN_MANDATORY_GAP], {MANDATORY_CONSEC: 3.0}),
+    "consecutive":  ([B2B_EXAM_INCIDENCE, MIN_MANDATORY_GAP], {B2B_EXAM_INCIDENCE: 3.0}),
     "span":         ([MANDATORY_SPAN, AVG_ALL_COURSES_GAP], {}),
     "conflicts":    ([ELECTIVE_CONFLICTS, MAX_EXAMS_PER_DAY], {}),
     "general":      (list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES), {}),

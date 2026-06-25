@@ -62,6 +62,13 @@ class ClusterDetailScreen(Screen):
         self._export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self._export_btn)
 
+        self._metrics_btn = QPushButton("Metrics")
+        self._metrics_btn.setObjectName("btn-ghost")
+        self._metrics_btn.setToolTip("View detailed metrics for this specific schedule")
+        self._metrics_btn.setFixedHeight(36)
+        self._metrics_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout.addWidget(self._metrics_btn)
+
         layout.addStretch()
 
         self._prev_btn = QPushButton("◀ Prev")
@@ -92,6 +99,7 @@ class ClusterDetailScreen(Screen):
 
         self._prev_btn.clicked.connect(self._presenter.on_prev)
         self._next_btn.clicked.connect(self._presenter.on_next)
+        self._metrics_btn.clicked.connect(self._presenter.on_show_metrics)
 
     # ── API called by the overview screen ────────────────────────────────────
 

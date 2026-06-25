@@ -29,6 +29,8 @@ class ClusterCardViewModel:
     description: str = ""
     # Pre-formatted (criterion_key, label, value) rows summarizing the family's average profile.
     summary: List[Tuple[str, str, str]] = field(default_factory=list)
+    # The top 5 sorted metrics by goodness score for display on the card.
+    best_summary: List[Tuple[str, str, str]] = field(default_factory=list)
     # The key of the defining criterion (the one that stands out the most)
     defining_criterion: str = ""
     # Formatted range bounds: criterion_key -> (min_val_str, max_val_str)
@@ -45,3 +47,9 @@ class ClusterComparisonViewModel:
     right_schedule: ScheduleViewModel
     # (label, left_value, right_value, differs) rows for the feature comparison.
     feature_rows: List[Tuple[str, str, str, bool]] = field(default_factory=list)
+    # Composite labels mapping cluster performance into human-readable ratings
+    left_student_comfort: str = ""
+    left_admin_load: str = ""
+    left_faculty_impact: str = ""
+    left_schedule_spread: str = ""
+

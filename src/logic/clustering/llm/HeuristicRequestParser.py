@@ -20,6 +20,14 @@ from src.logic.comparators.ScheduleScorer import (
     MAX_EXAMS_PER_DAY,
     MIN_MANDATORY_GAP,
 )
+from src.logic.clustering.ExtendedFeatureComputer import (
+    GAP_STD_DEV,
+    AVG_PREP_DAYS,
+    MAX_REST_DAYS,
+    B2B_EXAM_INCIDENCE,
+    DEPT_EXAM_CONCURRENCY,
+    INSTRUCTOR_EXAM_GAP,
+)
 
 # Substrings (lower-cased) that point at each criterion, English + Hebrew.
 _CRITERION_KEYWORDS: Dict[str, List[str]] = {
@@ -43,6 +51,30 @@ _CRITERION_KEYWORDS: Dict[str, List[str]] = {
         "per day", "same day", "one day", "busy day", "load", "exams a day",
         "exam day", "exam days", "exams per day", "lightest day", "light day", "heavy day",
         "ביום", "באותו יום", "עומס", "ביום אחד", "מבחנים ביום", "בחינות ביום",
+    ],
+    GAP_STD_DEV: [
+        "gap stddev", "gap variance", "gap uniformity", "uniform gaps",
+        "סטיית תקן של רווחים", "אחידות",
+    ],
+    AVG_PREP_DAYS: [
+        "prep", "preparation", "study time", "days to study",
+        "הכנה", "זמן הכנה", "ללמוד",
+    ],
+    MAX_REST_DAYS: [
+        "max rest", "max gap", "maximum spacing",
+        "מרווח מקסימלי", "הכי הרבה מנוחה",
+    ],
+    B2B_EXAM_INCIDENCE: [
+        "back to back", "back-to-back", "consecutive", "b2b",
+        "עוקבים", "ימים עוקבים", "גב אל גב",
+    ],
+    DEPT_EXAM_CONCURRENCY: [
+        "departmental concurrency", "department concurrency", "dept concurrency",
+        "חפיפה מחלקתית", "מחלקה",
+    ],
+    INSTRUCTOR_EXAM_GAP: [
+        "instructor gap", "professor gap", "lecturer gap", "faculty spacing",
+        "מרווח מרצים", "מרצה", "פרופסור",
     ],
 }
 
@@ -136,9 +168,9 @@ class HeuristicRequestParser:
     # ── interpretation text ──────────────────────────────────────────────────
 
     def _interpretation(self, config: ClusterConfig, emphasised, k) -> str:
-        from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
+        from src.logic.clustering.ClusteringScorer import EXTENDED_CRITERIA
 
-        if tuple(config.criteria) == tuple(ALL_CRITERIA) and not config.weights:
+        if tuple(config.criteria) == tuple(EXTENDED_CRITERIA) and not config.weights:
             base = "Grouping by all criteria"
         else:
             if emphasised is not None:

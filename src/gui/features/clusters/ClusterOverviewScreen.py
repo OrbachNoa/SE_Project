@@ -193,6 +193,9 @@ class ClusterOverviewScreen(Screen):
         self._k_spin.setValue(k)
         self._k_spin.blockSignals(False)
 
+    def get_k_value(self) -> int:
+        return self._k_spin.value()
+
     def set_summary(self, text: str) -> None:
         self._summary_label.setText(text)
 

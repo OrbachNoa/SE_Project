@@ -107,7 +107,9 @@ class QueueScheduleObserver(IScheduleObserver):
 
     def on_scored_schedule_found(self, schedule: Any, scores: dict) -> None:
         # Used when the scheduler already calculated the scores.
-        self._record_schedule(schedule, scores)
+        ext = ExtendedFeatureComputer.compute(self._to_schedule_dto(schedule))
+        merged = {**scores, **ext}
+        self._record_schedule(schedule, merged)
 
     def _record_schedule(self, schedule: Any, scores: "dict | None") -> None:
         """Store one found schedule in the local batch buffer."""

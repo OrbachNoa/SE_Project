@@ -41,10 +41,9 @@ class ClusterConfig:
     every score criterion participates equally and K is chosen automatically.
     """
 
-    # Which of the five score criteria take part in the feature vector. The
-    # default is all of them, in their canonical order. The future custom UI /
-    # LLM will narrow this (e.g. only MANDATORY_SPAN + MAX_EXAMS_PER_DAY).
-    criteria: Tuple[str, ...] = tuple(ALL_CRITERIA)
+    # Which of the score criteria take part in the feature vector. The
+    # default is all of them, in their canonical order.
+    criteria: Tuple[str, ...] = tuple(list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES))
 
     # Optional per-criterion weight (criterion_id -> weight). Empty means every
     # selected criterion is weighted 1.0. Lets a future request say "group mostly
