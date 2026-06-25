@@ -44,6 +44,8 @@ Choose from these topics ONLY (use exact names):
 - "consecutive"   : user wants to avoid back-to-back mandatory exam days
 - "span"          : user wants to control how concentrated or spread out mandatory exams are — compact or wide window
 - "conflicts"     : user wants fewer elective exam clashes
+- "balance"       : user wants an even, balanced distribution of exams
+                    across the period — equal weeks, no overloaded periods
 - "general"       : general or unclear request — use all criteria
 
 When the request contains multiple conditions joined by AND / ו / גם / and also,
@@ -176,7 +178,13 @@ Request: "תן לי קבוצות עם החלונות הכי טובים בין ה
 Output: {"topics": ["rest"], "k_mode": "auto", "explanation": "קיבוץ לפי רווח המנוחה בין בחינות"}
 
 Request: "תן לי קבוצות עם חלון הכנה טוב לפני כל בחינת חובה"
-Output: {"topics": ["study_prep"], "k_mode": "auto", "explanation": "קיבוץ לפי זמן הכנה לפני בחינות חובה"}"""
+Output: {"topics": ["study_prep"], "k_mode": "auto", "explanation": "קיבוץ לפי זמן הכנה לפני בחינות חובה"}
+
+Request: "אני רוצה שכל השבועות שווים"
+Output: {"topics": ["balance"], "k_mode": "auto", "explanation": "קיבוץ לפי איזון עומס הבחינות לאורך התקופה"}
+
+Request: "give me a balanced schedule with even exam distribution"
+Output: {"topics": ["balance"], "k_mode": "auto", "explanation": "Grouping by balanced exam distribution"}"""
 
 _USER_TEMPLATE = "Request:\n{request}\n\nReturn the JSON configuration."
 
@@ -190,7 +198,41 @@ _TOPIC_CRITERIA: Dict[str, Tuple[list, dict]] = {
     "consecutive":  ([MANDATORY_CONSEC, MIN_MANDATORY_GAP], {MANDATORY_CONSEC: 3.0}),
     "span":         ([MANDATORY_SPAN, AVG_ALL_COURSES_GAP], {}),
     "conflicts":    ([ELECTIVE_CONFLICTS, MAX_EXAMS_PER_DAY], {}),
+    "balance":      ([BUSIEST_WEEK_COUNT, GAP_STD_DEV, AVG_ALL_COURSES_GAP],
+                     {BUSIEST_WEEK_COUNT: 1.5, GAP_STD_DEV: 1.5}),
     "general":      (list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES), {}),
+}
+
+_FUZZY_TOPIC_MAP: Dict[str, str] = {
+    "load":             "daily_load",
+    "daily":            "daily_load",
+    "cramming":         "daily_load",
+    "cramped":          "daily_load",
+    "weekly":           "weekly_load",
+    "heavy":            "weekly_load",
+    "light":            "weekly_load",
+    "retake":           "retake_time",
+    "retake_gap":       "retake_time",
+    "moed":             "retake_time",
+    "prep":             "study_prep",
+    "preparation":      "study_prep",
+    "study":            "study_prep",
+    "revision":         "study_prep",
+    "gap":              "rest",
+    "gaps":             "rest",
+    "rest_time":        "rest",
+    "spacing":          "consistency",
+    "spread":           "span",
+    "compact":          "span",
+    "concentrated":     "span",
+    "distribution":     "balance",
+    "even":             "balance",
+    "balanced":         "balance",
+    "uniform":          "balance",
+    "back_to_back":     "consecutive",
+    "backtoback":       "consecutive",
+    "back2back":        "consecutive",
+    "consecutive_days": "consecutive",
 }
 
 
@@ -229,8 +271,6 @@ class ClusterRequestTranslator:
         if self._llm is not None and self._llm.is_available():
             try:
                 raw = self._llm.complete(_SYSTEM_PROMPT, _USER_TEMPLATE.format(request=request))
-                # DEBUG
-                print(f"[LLM] source=llm | topics={...} | request='{request[:50]}'")
                 config, interpretation = self._config_from_llm(raw)
                 config.validate()
                 result = TranslationResult(config, interpretation, "llm")
@@ -241,16 +281,12 @@ class ClusterRequestTranslator:
                 self._cache[request] = result
                 return result
             except Exception as exc:
-                # DEBUG
-                print(f"[LLM FAIL] failed: {exc} | '{request[:40]}'")
                 warnings.warn(
                     f"LLM clustering request failed: {exc}", RuntimeWarning, stacklevel=2
                 )  # fall through to the keyword parser
 
         # 2. Keyword parser (always available).
         config, interpretation = self._parser.parse(request)
-        # DEBUG
-        print(f"[HEURISTIC] k={config.k_mode}:{config.k} | criteria={config.criteria[:2]}... | '{request[:40]}'")
         result = TranslationResult(config, interpretation, "heuristic")
         if len(self._cache) >= 20:
             self._cache.pop(next(iter(self._cache)))
@@ -264,26 +300,32 @@ class ClusterRequestTranslator:
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
         data = self._extract_json(raw)
 
-        topics = data.get("topics") or ["general"]
+        raw_topics = data.get("topics") or ["general"]
+        topics = []
+        for t in raw_topics:
+            normalized = _FUZZY_TOPIC_MAP.get(t, t)
+            if normalized not in _TOPIC_CRITERIA:
+                continue
+            topics.append(normalized)
         thresholds: dict = data.get("thresholds") or {}
 
         merged_criteria: list = []
         merged_weights: dict = {}
         _DECAY = [1.0, 0.8, 0.6]
         for rank, topic in enumerate(topics):
-            if topic in _TOPIC_CRITERIA:
-                decay = _DECAY[min(rank, len(_DECAY) - 1)]
-                crit, weights = _TOPIC_CRITERIA[topic]
-                for c in crit:
-                    if c not in merged_criteria:
-                        merged_criteria.append(c)
-                for k, v in weights.items():
-                    merged_weights[k] = max(merged_weights.get(k, 1.0), v * decay)
+            decay = _DECAY[min(rank, len(_DECAY) - 1)]
+            crit, weights = _TOPIC_CRITERIA[topic]
+            for c in crit:
+                if c not in merged_criteria:
+                    merged_criteria.append(c)
+            for k, v in weights.items():
+                merged_weights[k] = max(merged_weights.get(k, 1.0), v * decay)
 
         # Apply threshold-based weight boosts: threshold N → multiplier (1 + N/5).
         for topic, threshold in thresholds.items():
-            if topic in _TOPIC_CRITERIA:
-                crit, _ = _TOPIC_CRITERIA[topic]
+            normalized_t = _FUZZY_TOPIC_MAP.get(topic, topic)
+            if normalized_t in _TOPIC_CRITERIA:
+                crit, _ = _TOPIC_CRITERIA[normalized_t]
                 multiplier = 1.0 + float(threshold) / 5.0
                 for c in crit:
                     base = merged_weights.get(c, 1.0)

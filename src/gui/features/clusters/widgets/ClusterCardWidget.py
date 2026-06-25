@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.application.viewmodels.ClusterViewModel import ClusterCardViewModel
+from src.logic.clustering.CriterionDisplay import display_value, label
 
 
 class ClusterCardWidget(QFrame):
@@ -61,10 +62,11 @@ class ClusterCardWidget(QFrame):
         grid.setContentsMargins(0, 4, 0, 4)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(3)
-        for row, (label, value) in enumerate(card.summary):
-            name = QLabel(label)
+        for row, criterion_id in enumerate(card.criteria):
+            raw = card.summary.get(criterion_id, 0.0)
+            name = QLabel(label(criterion_id))
             name.setStyleSheet("color: #555;")
-            val = QLabel(value)
+            val = QLabel(display_value(criterion_id, raw))
             val.setAlignment(Qt.AlignmentFlag.AlignRight)
             val.setStyleSheet("font-weight: 600;")
             grid.addWidget(name, row, 0)
