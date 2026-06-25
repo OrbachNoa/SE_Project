@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -82,8 +83,14 @@ class OpenAICompatibleLLMClient(ILLMClient):
             },
         )
 
-        with urllib.request.urlopen(request, timeout=self._timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-
-        # Standard OpenAI-compatible shape: choices[0].message.content.
-        return payload["choices"][0]["message"]["content"]
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                # Standard OpenAI-compatible shape: choices[0].message.content.
+                return payload["choices"][0]["message"]["content"]
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt == 0:
+                    time.sleep(1.5)
+                    continue
+                raise

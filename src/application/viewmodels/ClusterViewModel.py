@@ -6,7 +6,7 @@ by the cluster overview, detail, and comparison screens.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
 
@@ -27,8 +27,10 @@ class ClusterCardViewModel:
     sampled: bool
     # One-line human description of the family's character.
     description: str = ""
-    # Pre-formatted (label, value) rows summarizing the family's average profile.
-    summary: List[Tuple[str, str]] = field(default_factory=list)
+    # Raw criterion ids for this clustering run (drives the display loop).
+    criteria: tuple = field(default_factory=tuple)
+    # Raw average feature values: criterion_id -> float.
+    summary: Dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

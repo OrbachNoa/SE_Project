@@ -211,14 +211,8 @@ class ViewModelMapper:
 
     def to_cluster_cards(self, result) -> List[ClusterCardViewModel]:
         """Map a ClusterResult into overview cards (one per family)."""
-        criteria = result.criteria
         cards: List[ClusterCardViewModel] = []
         for cluster in result.clusters:
-            summary = [
-                (CriterionDisplay.label(name),
-                 CriterionDisplay.display_value(name, cluster.summary.get(name, 0.0)))
-                for name in criteria
-            ]
             cards.append(
                 ClusterCardViewModel(
                     cluster_id=cluster.cluster_id,
@@ -227,7 +221,8 @@ class ViewModelMapper:
                     estimated_population_size=cluster.estimated_population_size,
                     sampled=result.sampled,
                     description=cluster.description or "",
-                    summary=summary,
+                    criteria=tuple(result.criteria),
+                    summary=cluster.summary,
                 )
             )
         return cards
