@@ -284,3 +284,58 @@ def test_os_error_without_context_defaults_to_persistence(registry):
     info = registry.map(OSError("disk error"))
     assert info.category == ErrorCategory.PERSISTENCE
     assert info.code == "IO_FAILED"
+
+
+# ===========================================================================
+# TC-ERR-022: an OSError's user_message is worded for the operation it
+# happened during (import/export/persistence), not one generic sentence —
+# a disk fault while importing should read like a read problem, and one
+# while exporting should read like a write problem.
+# ===========================================================================
+def test_os_error_message_differs_by_context_category(registry):
+    import_info = registry.map(OSError("disk error"), {"category": ErrorCategory.INPUT_FILE})
+    export_info = registry.map(OSError("disk error"), {"category": ErrorCategory.EXPORT})
+    persistence_info = registry.map(OSError("disk error"))
+
+    assert "read" in import_info.user_message.lower()
+    assert "export" in export_info.user_message.lower()
+    assert import_info.user_message != export_info.user_message
+    assert import_info.user_message != persistence_info.user_message
+    assert "disk error" not in import_info.user_message
+    assert "disk error" not in export_info.user_message
+
+
+# ===========================================================================
+# TC-ERR-023: FileNotFoundError's message tells the user what to do next,
+# not just what happened.
+# ===========================================================================
+def test_file_not_found_message_includes_actionable_suggestion(registry):
+    info = registry.map(FileNotFoundError(2, "No such file", "courses.txt"))
+    assert "could not be found" in info.user_message
+    assert "choose the file again" in info.user_message.lower()
+
+
+# ===========================================================================
+# TC-ERR-024: a non-recoverable unknown failure tells the user to restart
+# instead of just "try again", which is misleading when retrying the same
+# action can't possibly help.
+# ===========================================================================
+def test_unknown_non_recoverable_failure_suggests_restart(registry):
+    info = registry.map(
+        RuntimeError("worker died"),
+        {"category": ErrorCategory.INFRASTRUCTURE, "recoverable": False},
+    )
+    assert info.recoverable is False
+    assert "restart" in info.user_message.lower()
+    assert "worker died" not in info.user_message
+
+
+# ===========================================================================
+# TC-ERR-025: a recoverable unknown failure keeps the plain "try again"
+# wording — no restart suggestion when retrying is actually reasonable.
+# ===========================================================================
+def test_unknown_recoverable_failure_keeps_try_again_wording(registry):
+    info = registry.map(RuntimeError("transient glitch"), {"category": ErrorCategory.PERSISTENCE})
+    assert info.recoverable is True
+    assert "restart" not in info.user_message.lower()
+    assert "try again" in info.user_message.lower()

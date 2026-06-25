@@ -169,3 +169,5 @@ class ClusterOverviewPresenter:
         self._view.render_cards([])
         self._view.set_summary("")
         self._view.show_message(f"Could not compute clusters: {message}")
+        if self._worker is not None:
+            self._controller.log_worker_error(self._worker.last_error)

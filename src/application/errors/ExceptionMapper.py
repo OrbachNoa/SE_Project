@@ -173,7 +173,7 @@ class FileNotFoundMapper:
             code="INPUT_FILE_NOT_FOUND",
             category=ErrorCategory.INPUT_FILE,
             severity=ErrorSeverity.ERROR,
-            user_message=f"The file{where} could not be found.",
+            user_message=f"The file{where} could not be found. Please choose the file again.",
             technical_message=_tech(exc),
             recoverable=True,
             context=dict(context),
@@ -199,7 +199,11 @@ class OSErrorMapper:
             code=code,
             category=category,
             severity=ErrorSeverity.ERROR,
-            user_message="A file or disk operation failed. Please try again.",
+            # Same per-category wording as the unknown-exception fallback, so a
+            # disk fault during an import reads like a read problem and one
+            # during an export reads like a write problem, instead of one
+            # generic sentence regardless of what the user was doing.
+            user_message=_GENERIC_MESSAGE_BY_CATEGORY[category],
             technical_message=_tech(exc),
             recoverable=True,
             context=_strip_control_keys(context),
@@ -273,11 +277,19 @@ class ExceptionMapperRegistry:
             else f"{category.value}_UNEXPECTED_ERROR"
         )
         code = context.get("fallback_code") or default_code
+        user_message = _GENERIC_MESSAGE_BY_CATEGORY[category]
+        if not recoverable:
+            # "Try again" is misleading for a failure the operation can't
+            # recover from on its own (e.g. a crashed worker process) — point
+            # the user at restarting instead.
+            user_message = user_message.replace(
+                "Please try again.", "Please restart and try again."
+            )
         return AppErrorInfo(
             code=code,
             category=category,
             severity=severity,
-            user_message=_GENERIC_MESSAGE_BY_CATEGORY[category],
+            user_message=user_message,
             technical_message=_tech(exc),
             recoverable=recoverable,
             context=_strip_control_keys(context),

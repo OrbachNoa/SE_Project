@@ -12,6 +12,7 @@ from src.application.errors.ErrorModel import (
     ErrorCategory,
     ErrorSeverity,
 )
+from src.application.errors.ExceptionMapper import default_registry
 
 
 class SchedulerWorker(QThread):
@@ -58,6 +59,9 @@ class SchedulerWorker(QThread):
         # error_occurred stays a str signal for the GUI, but callers/tests that
         # want the full record can read this after a failure.
         self.last_error: AppErrorInfo = None
+        # Maps an unexpected IPC-read exception to a safe AppErrorInfo instead
+        # of leaking its raw str() into the user-facing message.
+        self._errors = default_registry()
 
         # Maps each queue message type to the method that handles it.
         self._dispatch = {
@@ -93,15 +97,19 @@ class SchedulerWorker(QThread):
                     # The queue was probably closed while this worker was waiting.
                     break
                 except Exception as e:
-                    # Report unexpected queue/IPC errors instead of leaving the GUI waiting forever.
-                    self._emit_error(AppErrorInfo(
-                        code="SCHEDULER_IPC_ERROR",
-                        category=ErrorCategory.INFRASTRUCTURE,
-                        severity=ErrorSeverity.CRITICAL,
-                        user_message=f"IPC communication error with the scheduling engine: {str(e)}",
-                        technical_message=f"{type(e).__name__}: {e}",
-                        recoverable=False,
-                    ))
+                    # Report unexpected queue/IPC errors instead of leaving the GUI waiting
+                    # forever. Routed through the same mapper registry as every other
+                    # boundary so the user never sees a raw str(e); the unknown-fallback
+                    # context keeps the historical CRITICAL/non-recoverable/IPC code for
+                    # whatever this exception turns out to be.
+                    info = self._errors.map(e, {
+                        "category": ErrorCategory.INFRASTRUCTURE,
+                        "severity": ErrorSeverity.CRITICAL,
+                        "recoverable": False,
+                        "fallback_code": "SCHEDULER_IPC_ERROR",
+                        "stage": "ipc_read",
+                    })
+                    self._emit_error(info)
                     break
 
                 # Choose the correct handler according to the message type.

@@ -93,6 +93,25 @@ def test_successful_load_has_no_error_details(service, tmp_path):
 
 
 # ===========================================================================
+# TC-FIS-008: a load failure that goes through `_failure()` (missing file,
+# bad format, parser error, ...) must reach the technical log too, not just
+# populate error_details — otherwise these failures are silent to developers.
+# ===========================================================================
+def test_missing_file_failure_is_logged(service, tmp_path):
+    missing = tmp_path / "does_not_exist.txt"
+    logged = []
+    service._error_logger.log = lambda info, cause=None: logged.append((info, cause))
+
+    result = service.load_file(str(missing), "courses", ImportMode.REPLACE)
+
+    assert result.success is False
+    assert len(logged) == 1
+    info, cause = logged[0]
+    assert info is result.error_details[0]
+    assert isinstance(cause, FileNotFoundError)
+
+
+# ===========================================================================
 # TC-FIS-005: a cache-write failure (OSError from persist) must not discard
 # data already merged into state — the load still reports success, the
 # failure is only logged (graceful degradation, like a broken cache file).

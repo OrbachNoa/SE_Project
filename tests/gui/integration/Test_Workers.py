@@ -121,6 +121,38 @@ def test_worker_handles_structured_error_payload():
 
 
 # ===========================================================================
+# TC-SCHED-WORK-002c: an unexpected IPC/queue read failure (anything other
+# than queue.Empty or the "queue closed" ValueError) is routed through the
+# mapper registry instead of building user_message with str(e) directly —
+# the raw exception text must never reach the GUI-facing message.
+# ===========================================================================
+def test_worker_unexpected_queue_read_error_is_mapped_not_raw():
+    # Arrange
+    mock_queue = MagicMock()
+    mock_process = MagicMock()
+    mock_cancel_event = MagicMock()
+    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
+
+    mock_queue.get.side_effect = RuntimeError("pipe broke unexpectedly")
+
+    worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
+    messages = []
+    worker.error_occurred.connect(messages.append)
+
+    # Act
+    worker.run()
+
+    # Assert — clean, generic message; the raw exception text/type never leaks.
+    assert len(messages) == 1
+    assert "pipe broke unexpectedly" not in messages[0]
+    assert "RuntimeError" not in messages[0]
+    assert worker.last_error is not None
+    assert worker.last_error.code == "SCHEDULER_IPC_ERROR"
+    assert worker.last_error.recoverable is False
+    assert "pipe broke unexpectedly" in worker.last_error.technical_message
+
+
+# ===========================================================================
 # TC-SCHED-WORK-003: Test that cancel flow sets event, drains queue, and terminates process if needed.
 # ===========================================================================
 def test_worker_cancel_graceful_and_terminate():

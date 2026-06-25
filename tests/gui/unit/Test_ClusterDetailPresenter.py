@@ -56,3 +56,74 @@ def test_on_export_excel_failure_uses_mapped_message():
     message = view.show_message.call_args[0][0]
     assert "The file could not be written. Please close it and try again." in message
     assert "PermissionError" not in message
+    # "Export failed." not "Could not save Excel schedule:" — the mapped
+    # message already says the file could not be written, so a "save"
+    # prefix would just restate that.
+    assert "Could not save" not in message
+    assert message.startswith("Export failed.")
+
+
+# ===========================================================================
+# TC-CDP-003: on_enter recovers when get_cluster_size raises (e.g. a stale
+# cluster_id after the underlying clustering run changed) — the screen shows
+# a mapped message and clears itself instead of letting the exception
+# propagate up to the global sys.excepthook.
+# ===========================================================================
+def test_on_enter_recovers_when_get_cluster_size_fails():
+    presenter, view, controller = _presenter()
+    error = IndexError("cluster 3 does not exist (have 2)")
+    controller.get_cluster_size.side_effect = error
+    controller.map_error.return_value = "Could not open this family. Please try again."
+
+    presenter.on_enter()
+
+    assert controller.map_error.call_count == 1
+    assert controller.map_error.call_args[0][0] is error
+    message = view.show_message.call_args[0][0]
+    assert "Could not open this family. Please try again." in message
+    assert "IndexError" not in message
+    view.clear_calendar.assert_called_once()
+    view.set_nav_state.assert_called_once_with(False, False)
+
+
+# ===========================================================================
+# TC-CDP-004: _show_current recovers when get_cluster_schedule_view raises
+# (e.g. a storage read failure) — the screen shows a mapped message and
+# stays navigable instead of crashing.
+# ===========================================================================
+def test_show_current_recovers_when_read_schedule_fails():
+    presenter, view, controller = _presenter()
+    presenter._size = 3
+    presenter._index = 1
+    error = RuntimeError("sqlite read failure")
+    controller.get_cluster_schedule_view.side_effect = error
+    controller.map_error.return_value = "Could not load the schedule. Please try again."
+
+    presenter._show_current()
+
+    assert controller.map_error.call_count == 1
+    assert controller.map_error.call_args[0][0] is error
+    message = view.show_message.call_args[0][0]
+    assert "Could not load the schedule. Please try again." in message
+    assert "RuntimeError" not in message
+    view.clear_calendar.assert_called_once()
+    view.set_nav_state.assert_called_once_with(True, True)
+    view.show_schedule.assert_not_called()
+
+
+# ===========================================================================
+# TC-CDP-005: on_next still routes through the same recoverable path —
+# navigating forward into a schedule that fails to load does not crash.
+# ===========================================================================
+def test_on_next_recovers_when_read_schedule_fails():
+    presenter, view, controller = _presenter()
+    presenter._size = 3
+    presenter._index = 0
+    controller.get_cluster_schedule_view.side_effect = RuntimeError("sqlite read failure")
+    controller.map_error.return_value = "Could not load the schedule. Please try again."
+
+    presenter.on_next()
+
+    assert presenter._index == 1
+    assert controller.map_error.call_count == 1
+    assert view.show_message.call_count == 1

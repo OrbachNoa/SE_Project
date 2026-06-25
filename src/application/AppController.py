@@ -614,3 +614,16 @@ class AppController(QObject):
         """Log the technical detail and emit only the clean user message."""
         self._error_logger.log(info, cause=cause)
         self.error_occurred.emit(info.user_message)
+
+    def log_worker_error(self, info: Optional[AppErrorInfo]) -> None:
+        """Log a structured error a background worker already mapped itself.
+
+        SortWorker and ClusterWorker own their own registry and emit only the
+        clean ``user_message`` on ``failed`` (their presenter shows that message
+        directly, unlike SchedulerWorker which routes through error_occurred).
+        This lets those presenters still get the structured record — code,
+        category, technical detail — into the same technical log as every
+        other boundary, without re-emitting ``error_occurred``.
+        """
+        if info is not None:
+            self._error_logger.log(info)

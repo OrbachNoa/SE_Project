@@ -106,6 +106,7 @@ class FileImportService:
             exc,
             {"path": path, "file_type": file_type, "category": ErrorCategory.INPUT_FILE},
         )
+        self._error_logger.log(info, cause=exc)
         return ImportResult.failure(info)
 
     def _loaded_count(self, file_type: str) -> int:

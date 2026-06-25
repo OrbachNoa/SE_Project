@@ -526,26 +526,6 @@ High-level code depends on abstractions:
 
 This makes tests and future extensions easier.
 
-## 12. Performance Considerations
-
-The error layer should not meaningfully affect happy-path performance.
-
-Reasons:
-
-- `AppErrorInfo` is mostly created only on failure.
-- `registry.map` is called at exception boundaries, not inside scheduler recursion.
-- `ErrorLogger.log` runs on failure or degraded cache paths.
-- Process payload creation runs only on worker/process failure.
-
-The layer is not used inside:
-
-- Scheduler recursion.
-- Per-schedule scoring.
-- Normal batch insert loops.
-- Normal clustering loops.
-
-The normal overhead is mostly additional `try/except` boundaries. In Python, a `try` block without an exception is cheap relative to the scheduling work.
-
 ## 13. Flow Examples
 
 ### 13.1 Invalid Courses File

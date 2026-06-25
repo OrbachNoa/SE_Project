@@ -207,10 +207,13 @@ class OutputScreenPresenter:
             self._controller.save_schedule(self._current_index, path)
             self._view.show_message(f"Saved to:\n{path}")
         except Exception as error:
+            # No extra "Could not save:" prefix — the mapped message (e.g. a
+            # permission failure) already says the file could not be written,
+            # and the dialog title already says "Export error".
             message = self._controller.map_error(
                 error, {"operation": "save_schedule", "screen": "output", "export_format": "txt", "path": path}
             )
-            self._view.show_export_error(f"Could not save schedule:\n{message}")
+            self._view.show_export_error(message)
 
     # Initiates the Excel export process for the current schedule
     def on_export_excel(self) -> None:
@@ -245,7 +248,7 @@ class OutputScreenPresenter:
             message = self._controller.map_error(
                 error, {"operation": "save_schedule", "screen": "output", "export_format": "excel", "path": path}
             )
-            self._view.show_export_error(f"Could not save Excel schedule:\n{message}")
+            self._view.show_export_error(message)
 
     # Navigation helpers for period blocks and solution indices
     def on_prev_period(self) -> None:
@@ -369,6 +372,8 @@ class OutputScreenPresenter:
             self._view.set_sorting_busy(False)
         if hasattr(self._view, "show_error"):
             self._view.show_error(f"Sorting failed: {message}")
+        if self._sort_worker is not None:
+            self._controller.log_worker_error(self._sort_worker.last_error)
 
     def on_search_finished(self) -> None:
         """Refresh the UI when schedule generation is finished.
