@@ -17,7 +17,6 @@ from gui.features.input.widgets.ProgramSelectorCardWidget import ProgramSelector
 from src.application.ImportBoundary import ImportMode
 from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 from src.config import MAX_PROGRAMS
-from data.programs import programs_data
 
 
 SCREEN_OUTPUT = "output"
@@ -32,12 +31,9 @@ class InputScreen(Screen):
 
         # Setup main components like the editor, program selector, and layouts
         self._editor_widget: CalendarEditorWidget | None = None
-        # Load up all the possible study programs from our data file
-        program_view_models = [
-            ProgramViewModel(program_id=p_id, display_name=p_name, course_count=0)
-            for p_id, p_name in programs_data.items()
-        ]
-        self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, program_view_models, self)
+        # Programs are populated once a courses file is loaded (see set_available_programs),
+        # since the screen shouldn't know about every program the system knows about.
+        self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, [], self)
 
         # Create the main vertical layout that stacks everything from top to bottom
         root = QVBoxLayout(self)
@@ -310,6 +306,10 @@ class InputScreen(Screen):
 
     def render_courses(self, programs_vm) -> None:
         self._course_list_widget.render(programs_vm)
+
+    # Replaces the choosable programs with only those present in the loaded courses file.
+    def set_available_programs(self, programs_vm: List[ProgramViewModel]) -> None:
+        self.program_selector_card.set_program_view_models(programs_vm)
 
     # Swaps the placeholder with the actual calendar editor widget
     def show_period_editor(self, period_vms: list) -> None:

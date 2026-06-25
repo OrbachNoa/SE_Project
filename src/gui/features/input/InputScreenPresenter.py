@@ -72,13 +72,17 @@ class InputScreenPresenter:
 
         self._courses_loaded = True
         self._view.mark_courses_loaded(result.loaded_count)
-        self.refresh_generate_button()
 
-        # After loading, get the data and tell the UI to render the course list
+        # After loading, narrow the selectable programs to those in the file,
+        # then render the course list, before refreshing the generate button -
+        # the button's validation depends on the now-updated program selection.
         courses = self._controller.get_loaded_courses()
         mapper = self._controller.get_mapper()
         if courses and mapper is not None:
+            self._view.set_available_programs(mapper.to_program_vms(courses))
             self._view.render_courses(mapper.to_program_courses_vm(courses))
+
+        self.refresh_generate_button()
 
     # Handles the actual file loading process for periods
     def on_load_periods(self, mode: ImportMode) -> None:
