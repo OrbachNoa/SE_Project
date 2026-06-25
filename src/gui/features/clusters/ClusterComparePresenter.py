@@ -22,7 +22,10 @@ class ClusterComparePresenter:
                 self._cluster_a, self._cluster_b
             )
         except Exception as error:
-            self._view.show_message(f"Could not compare clusters: {error}")
+            message = self._controller.map_error(
+                error, {"operation": "compare_clusters", "screen": "cluster_compare"}
+            )
+            self._view.show_message(f"Could not compare clusters: {message}")
             return
 
         periods = self._available_periods()

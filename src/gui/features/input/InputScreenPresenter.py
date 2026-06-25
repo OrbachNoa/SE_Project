@@ -220,7 +220,12 @@ class InputScreenPresenter:
         try:
             info = self._controller.get_page_info()
             return int(info.get("total_count", 0))
-        except Exception:
+        except Exception as error:
+            # A transient read glitch during polling shouldn't interrupt an
+            # active generation run, so we keep showing the last known count —
+            # but still log the technical detail (via the same mapper as every
+            # other failure) so a systematic problem isn't entirely silent.
+            self._controller.map_error(error, {"operation": "poll_progress", "screen": "input"})
             return self._last_count
 
     # Handles and displays errors that happen during file import

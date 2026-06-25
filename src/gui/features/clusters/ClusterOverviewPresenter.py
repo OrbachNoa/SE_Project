@@ -60,11 +60,14 @@ class ClusterOverviewPresenter:
             cards = self._controller.cluster_from_request(text, k)
             interpretation = self._controller.get_cluster_interpretation()
         except Exception as error:
+            message = self._controller.map_error(
+                error, {"operation": "cluster_from_request", "screen": "clusters"}
+            )
             self._view.set_busy(False)
             self._view.render_cards([])
             self._view.set_summary("")
             self._view.set_interpretation("")
-            self._view.show_message(f"Could not apply request: {error}")
+            self._view.show_message(f"Could not apply request: {message}")
             return
 
         self._view.set_busy(False)
@@ -140,9 +143,12 @@ class ClusterOverviewPresenter:
             # convert to card view models — both are cheap, GUI thread is fine.
             cards = self._controller.cards_from_run(run)
         except Exception as error:
+            message = self._controller.map_error(
+                error, {"operation": "render_cluster_cards", "screen": "clusters"}
+            )
             self._view.render_cards([])
             self._view.set_summary("")
-            self._view.show_message(f"Could not render clusters: {error}")
+            self._view.show_message(f"Could not render clusters: {message}")
             return
 
         if not cards:

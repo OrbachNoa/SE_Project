@@ -197,18 +197,24 @@ def test_presenter_show_current_handles_exception():
     view = MagicMock()
     controller = MagicMock()
     router = MagicMock()
-    
-    controller.get_schedule_view.side_effect = Exception("Database read failure")
-    
+
+    error = Exception("Database read failure")
+    controller.get_schedule_view.side_effect = error
+    controller.map_error.return_value = "Could not read the schedule. Please try again."
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 1
-    
+
     # Act
     presenter.show_current()
-    
-    # Assert
+
+    # Assert — the presenter delegates mapping to the controller (no raw
+    # f"{error}" formatting) and shows whatever message map_error returns.
+    assert controller.map_error.call_count == 1
+    assert controller.map_error.call_args[0][0] is error
+    assert controller.map_error.call_args[0][1]["operation"] == "render_calendar"
     assert view.show_display_error.call_count == 1
-    assert "Database read failure" in view.show_display_error.call_args[0][0]
+    assert "Could not read the schedule. Please try again." in view.show_display_error.call_args[0][0]
     assert view.set_screen_updates.call_count == 2
     assert view.set_screen_updates.call_args_list[0][0] == (False,)
     assert view.set_screen_updates.call_args_list[1][0] == (True,)
@@ -262,18 +268,23 @@ def test_presenter_export_pdf_handles_exception():
     view = MagicMock()
     controller = MagicMock()
     router = MagicMock()
-    
-    controller.get_schedule_view.side_effect = Exception("Export retrieval failure")
-    
+
+    error = Exception("Export retrieval failure")
+    controller.get_schedule_view.side_effect = error
+    controller.map_error.return_value = "Could not read the schedule. Please try again."
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 1
-    
+
     # Act
     presenter.on_export_pdf()
-    
+
     # Assert
+    assert controller.map_error.call_count == 1
+    assert controller.map_error.call_args[0][0] is error
+    assert controller.map_error.call_args[0][1]["export_format"] == "pdf"
     assert view.show_export_error.call_count == 1
-    assert "Export retrieval failure" in view.show_export_error.call_args[0][0]
+    assert "Could not read the schedule. Please try again." in view.show_export_error.call_args[0][0]
 
 # ===========================================================================
 # TC-OSP-012: test export pdf executes successfully on valid schedule.
@@ -361,7 +372,34 @@ def test_presenter_on_export_txt_guard_total_zero():
     
     # Act
     presenter.on_export_txt()
-    
+
     # Assert
     assert view.show_nothing_to_export.call_count == 1
     assert controller.save_schedule.call_count == 0
+
+# ===========================================================================
+# TC-OSP-016: map_export_error delegates to controller.map_error with the
+# PDF export operation/path context — this is what SchedulePdfExporter calls
+# when the HTML/Qt-printing step fails outside any presenter try/except.
+# ===========================================================================
+def test_presenter_map_export_error_delegates_to_controller():
+    # Arrange
+    view = MagicMock()
+    controller = MagicMock()
+    router = MagicMock()
+    controller.map_error.return_value = "The file could not be written. Please try again."
+
+    presenter = OutputScreenPresenter(view, controller, router)
+    error = PermissionError("denied")
+
+    # Act
+    message = presenter.map_export_error(error, "out.pdf")
+
+    # Assert
+    assert message == "The file could not be written. Please try again."
+    assert controller.map_error.call_count == 1
+    call_error, context = controller.map_error.call_args[0]
+    assert call_error is error
+    assert context["operation"] == "export_pdf"
+    assert context["screen"] == "output"
+    assert context["path"] == "out.pdf"

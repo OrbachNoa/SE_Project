@@ -48,7 +48,22 @@ class ClusterDetailPresenter:
             schedule_vm = self._controller.get_cluster_schedule_view(self._cluster_id, self._index)
             self._view.export_schedule_pdf(schedule_vm, self._index)
         except Exception as error:
-            self._view.show_message(f"Could not read schedule: {error}")
+            message = self._controller.map_error(
+                error, {"operation": "read_schedule", "screen": "cluster_detail", "export_format": "pdf"}
+            )
+            self._view.show_message(f"Could not read schedule: {message}")
+
+    def map_export_error(self, error: Exception, path: str) -> str:
+        """Map a PDF-writing failure (called by SchedulePdfExporter) to a clean message.
+
+        The HTML/Qt-printing step happens inside the view-layer PDF exporter,
+        outside any try/except this presenter runs — this gives it a way back
+        to the same controller.map_error used by every other export path.
+        """
+        return self._controller.map_error(
+            error,
+            {"operation": "export_pdf", "screen": "cluster_detail", "export_format": "pdf", "path": path},
+        )
 
     def on_export_txt(self) -> None:
         if self._size == 0:
@@ -63,7 +78,11 @@ class ClusterDetailPresenter:
             self._controller.save_cluster_schedule(self._cluster_id, self._index, path)
             self._view.show_message(f"Saved to:\n{path}")
         except Exception as error:
-            self._view.show_message(f"Could not save: {error}")
+            message = self._controller.map_error(
+                error,
+                {"operation": "save_schedule", "screen": "cluster_detail", "export_format": "txt", "path": path},
+            )
+            self._view.show_message(f"Could not save: {message}")
 
     # Initiates the Excel export process for the current cluster schedule
     def on_export_excel(self) -> None:
@@ -83,10 +102,15 @@ class ClusterDetailPresenter:
             # Call the controller to handle the saving logic
             self._controller.save_cluster_schedule_excel(self._cluster_id, self._index, path)
             self._view.show_message(f"Saved to:\n{path}")
-        except PermissionError:
-            self._view.show_message("Could not save because the file is open in Excel. Please close it and try again.")
         except Exception as error:
-            self._view.show_message(f"Could not save Excel schedule: {error}")
+            # PermissionErrorMapper already produces a friendly "file is open
+            # elsewhere" message, so there is no separate `except
+            # PermissionError` here — one path covers every failure.
+            message = self._controller.map_error(
+                error,
+                {"operation": "save_schedule", "screen": "cluster_detail", "export_format": "excel", "path": path},
+            )
+            self._view.show_message(f"Could not save Excel schedule: {message}")
 
     # ── helpers ──────────────────────────────────────────────────────────────
 

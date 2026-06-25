@@ -19,6 +19,16 @@ from src.application.services.ViewModelMapper import ViewModelMapper
 
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
 from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
+from src.application.errors.ErrorModel import (
+    AppErrorInfo,
+    ErrorCategory,
+    ErrorSeverity,
+)
+from src.application.errors.ExceptionMapper import (
+    ExceptionMapperRegistry,
+    default_registry,
+)
+from src.application.errors.ErrorLogger import ErrorLogger
 from src.logic.clustering.llm import (
     ClusterRequestTranslator,
     OpenAICompatibleLLMClient,
@@ -60,12 +70,20 @@ class AppController(QObject):
         mapper: ViewModelMapper,
         input_state: Optional[InputDataState] = None,
         schedule_state: Optional[ScheduleResultState] = None,
+        error_registry: Optional[ExceptionMapperRegistry] = None,
+        error_logger: Optional[ErrorLogger] = None,
     ) -> None:
         super().__init__()
         self._importer = importer
         self._scheduler = scheduler
         self._exporter = exporter
         self._mapper = mapper
+        # Central translation of any raw exception into a presentation-ready
+        # AppErrorInfo, plus a logger for the technical detail. The controller
+        # works with AppErrorInfo internally and emits only the user message,
+        # so error_occurred can stay a str signal for existing GUI consumers.
+        self._errors = error_registry or default_registry()
+        self._error_logger = error_logger or ErrorLogger()
         # Holds loaded courses and exam periods.
         self._input_state = input_state if input_state is not None else InputDataState()
         # Use the injected state if provided, otherwise default to in-memory only.
@@ -119,8 +137,13 @@ class AppController(QObject):
         bleeding across multiple runs.
         """
         if not program_ids:
-            self.error_occurred.emit(
-                "Please select at least one program before running the scheduler."
+            self._emit_error(
+                AppErrorInfo(
+                    code="VALIDATION_NO_PROGRAM_SELECTED",
+                    category=ErrorCategory.VALIDATION,
+                    severity=ErrorSeverity.WARNING,
+                    user_message="Please select at least one program before running the scheduler.",
+                )
             )
             return
 
@@ -149,8 +172,12 @@ class AppController(QObject):
                 program_ids, self._input_state.get_courses(), self._input_state.get_periods(),
                 config=config
             )
-        except InfeasibleScheduleError as exc:
-            self.error_occurred.emit(str(exc))
+        except (InfeasibleScheduleError, MemoryError, Exception) as exc:
+            # Infeasible input is a clean, recoverable message; MemoryError maps
+            # to a resource problem; anything else falls back to a safe generic.
+            # All three are routed through the same central mapper so the GUI
+            # only ever sees a user message, never a raw traceback.
+            self._emit_error(self._errors.map(exc, {"program_ids": program_ids}), cause=exc)
             return
 
         # Establish concurrent execution pipeline routing mappings
@@ -537,7 +564,53 @@ class AppController(QObject):
         self._invalidate_clustering()
         self.search_finished.emit()
 
-    def _handle_error_occurred(self, message: str) -> None:
-        """Routes pipeline validation crashes up into interface message dialog display handlers."""
+    def _handle_error_occurred(self, error) -> None:
+        """Routes background-worker failures up to the GUI as a clean message.
+
+        Workers may report a serialised AppErrorInfo payload (dict), an
+        AppErrorInfo directly, or a plain legacy string. For the string case,
+        every current worker error path already stores the same failure as
+        structured data on ``self._worker.last_error`` before emitting the
+        signal — so we prefer that record (full category/severity/log detail)
+        over the bare string. Only a string with no such record behind it
+        (e.g. no worker reference at all) falls back to mapping, since
+        forwarding an unmapped string straight to the GUI is exactly what
+        this whole error layer exists to avoid.
+        """
         self._stop_progress_timer()
-        self.error_occurred.emit(message)
+        if isinstance(error, dict):
+            info = AppErrorInfo.from_payload(error)
+            self._emit_error(info)
+        elif isinstance(error, AppErrorInfo):
+            self._emit_error(error)
+        else:
+            last_error = getattr(self._worker, "last_error", None)
+            if last_error is not None:
+                self._emit_error(last_error)
+            else:
+                info = self._errors.map(
+                    RuntimeError(str(error)), {"category": ErrorCategory.INFRASTRUCTURE}
+                )
+                self._emit_error(info)
+
+    # ------------------------------------------------------------------
+    # Error presentation — used by presenters so they never format f"{error}"
+    # ------------------------------------------------------------------
+
+    def map_error(self, exc: BaseException, context: Optional[dict] = None) -> str:
+        """Map a raw exception to a clean, user-facing message.
+
+        Presenters call this instead of building their own ``f"...{error}"``
+        string, so every screen shows a consistent, safe message and the
+        technical detail still reaches the log via this same call. Pass a
+        ``context`` dict with keys like ``operation``/``screen``/``path`` so
+        the log entry says where the failure happened.
+        """
+        info = self._errors.map(exc, context or {})
+        self._error_logger.log(info, cause=exc)
+        return info.user_message
+
+    def _emit_error(self, info: AppErrorInfo, cause: Optional[BaseException] = None) -> None:
+        """Log the technical detail and emit only the clean user message."""
+        self._error_logger.log(info, cause=cause)
+        self.error_occurred.emit(info.user_message)

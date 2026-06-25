@@ -16,6 +16,9 @@ from typing import List
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory
+from src.application.errors.ExceptionMapper import default_registry
+
 
 class SortWorker(QThread):
     """Computes sort data in the background; emits the result for the GUI thread."""
@@ -27,6 +30,9 @@ class SortWorker(QThread):
         super().__init__()
         self._controller = controller
         self._priority = list(priority)
+        self._errors = default_registry()
+        # Structured form of the last failure; failed stays a str signal.
+        self.last_error: AppErrorInfo = None
 
     def run(self) -> None:
         try:
@@ -34,4 +40,9 @@ class SortWorker(QThread):
             data = self._controller.compute_sort_data(self._priority)
             self.ready.emit(data)
         except Exception as e:
-            self.failed.emit(f"{type(e).__name__}: {e}")
+            info = self._errors.map(e, {
+                "category": ErrorCategory.PERSISTENCE,
+                "operation": "sort",
+            })
+            self.last_error = info
+            self.failed.emit(info.user_message)

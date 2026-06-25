@@ -10,8 +10,12 @@ for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
 #endregion
 
 #region Imports
-from PyQt6.QtWidgets import QApplication
+import logging
+
+from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QFont
+from src.application.errors.ExceptionMapper import default_registry
+from src.application.errors.ErrorLogger import ErrorLogger, configure_default_logging
 from src.application.state.InputDataState import InputDataState
 from src.application.services.FileImportService import FileImportService
 from src.application.services.InputCacheService import InputCacheService
@@ -28,6 +32,31 @@ from gui.core.app import App
 from src.application.AppController import AppController
 from src.file_io.writers.TextFileWriter import TextFileWriter
 #endregion
+
+
+def install_global_excepthook() -> None:
+    """Route otherwise-uncaught GUI exceptions through the central error model.
+
+    Without this, an exception escaping a Qt slot prints a traceback to the
+    console and (on some platforms) silently aborts the event loop. Here we map
+    it to an AppErrorInfo, log the technical detail, and show the user a clean
+    dialog instead of a crash.
+    """
+    registry = default_registry()
+    error_logger = ErrorLogger()
+
+    def _hook(exc_type, exc_value, exc_tb):
+        # Let Ctrl-C behave normally rather than popping a dialog.
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        info = registry.map(exc_value, {"source": "gui"})
+        error_logger.log(info, cause=exc_value)
+        app = QApplication.instance()
+        if app is not None:
+            QMessageBox.critical(None, "Unexpected Error", info.user_message)
+
+    sys.excepthook = _hook
 
 
 def build_controller() -> AppController:
@@ -72,6 +101,8 @@ if __name__ == "__main__":
     This function is the main entry point for the application.
     It creates all the necessary services and wires them together to form the AppController.
     """
+    configure_default_logging(level=logging.INFO)
+    install_global_excepthook()
     app = QApplication(sys.argv)
     app.setFont(QFont("Segoe UI", 10))
     controller = build_controller()
