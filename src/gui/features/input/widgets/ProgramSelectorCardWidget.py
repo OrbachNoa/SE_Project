@@ -8,29 +8,6 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from gui.features.input.widgets.ProgramSelectorDialog import ProgramSelectorDialog
 from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 from gui.common.helpers import create_scaled_pixmap
-from data.programs import programs_data
-
-
-# This is a behind-the-scenes helper class. It is responsible for popping open the dialog box 
-# where the user actually checks off the programs they want.
-class _ProgramSelectionController:
-    """Owns the modal selection flow for the program selector card."""
-
-    def __init__(self, program_view_models: List[ProgramViewModel]) -> None:
-        self._program_view_models = program_view_models
-
-    # Opens the pop-up window and returns a list of the chosen programs if the user clicks "Save"
-    def choose_program_ids(self, parent: QWidget, current_ids: List[str]) -> List[str] | None:
-        dialog = ProgramSelectorDialog(
-            self._program_view_models,
-            preselected_ids=current_ids,
-            parent=parent,
-        )
-        # If the user clicks "OK" or "Save" (exec returns True), give back what they selected
-        if dialog.exec():
-            return dialog.selected_ids()
-        # If they hit "Cancel", return None so we don't change anything
-        return None
 
 
 # This is the main white box (card) you see on the screen that says "Study Programs"
@@ -39,18 +16,17 @@ class ProgramSelectorCardWidget(QFrame):
     # This signal is like an alarm that goes off whenever the user changes their selected programs.
     # Other parts of the app listen to this alarm so they can update themselves.
     selection_changed = pyqtSignal()
-    
-    def __init__(self, max_programs: int = 5, parent: QWidget | None = None) -> None:
+
+    def __init__(
+        self,
+        max_programs: int,
+        program_view_models: List[ProgramViewModel],
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.max_programs = max_programs
         self._selected_program_ids: List[str] = []
-
-        # Load up all the possible study programs from our data file
-        self._program_view_models = [
-            ProgramViewModel(program_id=p_id, display_name=p_name, course_count=0)
-            for p_id, p_name in programs_data.items()
-        ]
-        self._selection_controller = _ProgramSelectionController(self._program_view_models)
+        self._program_view_models = program_view_models
 
         # Give the card a specific name for styling, and change the mouse to a pointing hand
         # so the user knows they can click on this whole box.
@@ -108,14 +84,17 @@ class ProgramSelectorCardWidget(QFrame):
     # Opens the dialog. If the user picks new programs, it saves them and updates the screen.
     def _open_program_dialog(self) -> None:
         """Show the modal popup and commit the new selection only on accept."""
-        selected_ids = self._selection_controller.choose_program_ids(
-            self,
-            self._selected_program_ids,
+        dialog = ProgramSelectorDialog(
+            self._program_view_models,
+            preselected_ids=self._selected_program_ids,
+            parent=self,
         )
-        if selected_ids is None:
+        # If the user clicks "OK" or "Save" (exec returns True), keep what they selected
+        if not dialog.exec():
+            # If they hit "Cancel", change nothing
             return
 
-        self._selected_program_ids = selected_ids
+        self._selected_program_ids = dialog.selected_ids()
         self._refresh_program_summary()
         self.selection_changed.emit()
 

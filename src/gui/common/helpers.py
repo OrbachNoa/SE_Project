@@ -1,6 +1,8 @@
 """Common layout widgets and functional helper wrappers for PySide/PyQt views."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from PyQt6.QtWidgets import QFrame, QFileDialog, QWidget
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
@@ -58,3 +60,18 @@ def prompt_save_file(parent: QWidget, title: str, default_name: str, file_filter
     """Open a standard OS file dialog to select a save destination path."""
     path, _ = QFileDialog.getSaveFileName(parent, title, default_name, file_filter)
     return path
+
+
+# A helper to calculate every day between two given dates.
+def dates_between(start_date: str, end_date: str) -> list[str]:
+    """Return every date from start_date to end_date inclusive, as 'YYYY-MM-DD' strings."""
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    if end < start:
+        return []
+
+    # Create a range of days and format them back into strings
+    return [
+        (start + timedelta(days=offset)).strftime("%Y-%m-%d")
+        for offset in range((end - start).days + 1)
+    ]

@@ -12,8 +12,7 @@ for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
 #region Imports
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QFont
-from src.application.state.AppState import AppState
-from src.application.ApplicationFacade import ApplicationFacade
+from src.application.state.InputDataState import InputDataState
 from src.application.services.FileImportService import FileImportService
 from src.application.services.InputCacheService import InputCacheService
 from src.application.services.InputDataMerger import InputDataMerger
@@ -40,9 +39,8 @@ def build_controller() -> AppController:
     """
     schedule_repository = SQLiteScheduleRepository()
     hybrid_state = HybridScheduleResultState(repository=schedule_repository)
-    state = AppState(schedule_state=hybrid_state)
+    input_state = InputDataState()
 
-    input_state      = state.get_input_state()
     cache_repository = DiskCacheRepository()
     cache_detector   = FileChangeDetector()
 
@@ -57,15 +55,14 @@ def build_controller() -> AppController:
     exporter  = ScheduleExportService(writer=TextFileWriter())
     mapper    = ViewModelMapper()
 
-    facade = ApplicationFacade(
-        state=state,
+    return AppController(
         importer=importer,
         scheduler=scheduler,
         exporter=exporter,
         mapper=mapper,
+        input_state=input_state,
+        schedule_state=hybrid_state,
     )
-
-    return AppController(facade)
 
 
 if __name__ == "__main__":

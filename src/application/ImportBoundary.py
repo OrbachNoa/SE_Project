@@ -11,14 +11,6 @@ class ImportMode(Enum):
     UPDATE = "UPDATE"
 
 @dataclass
-class ImportRequest:
-    """Bundles the inputs the facade needs to import one file."""
-
-    path: str
-    file_type: str
-    mode: ImportMode
-
-@dataclass
 class ImportResult:
     """Outcome of importing one file: success flag, count, and any errors."""
 

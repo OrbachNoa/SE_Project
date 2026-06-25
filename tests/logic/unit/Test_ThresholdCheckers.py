@@ -337,6 +337,72 @@ def test_elective_cap_checker_ignores_obligatory_courses(
     assert result is False
 
 
+# ===========================================================================
+# TC-CHK-021b: the cap counts pair-conflicts across the WHOLE schedule for a
+# program, not just on the candidate's own day. With k=1, a conflict already
+# committed on one day (A & B on June 1) plus a second, separate conflict
+# being completed on another day (C already on June 2, D about to join it)
+# pushes the running total to 2, which must be rejected even though neither
+# day individually exceeds the per-day cap.
+# ===========================================================================
+def test_elective_cap_checker_totals_conflicts_across_separate_days(
+    make_course, make_program_entry, make_assignment
+):
+    # Arrange — four elective courses in the same program.
+    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
+    course_a = make_course(course_id="A", program_entries=[pe])
+    course_b = make_course(course_id="B", program_entries=[pe])
+    course_c = make_course(course_id="C", program_entries=[pe])
+    course_d = make_course(course_id="D", program_entries=[pe])
+
+    # June 1 already holds one committed conflict (A & B).
+    # June 2 holds a single, conflict-free exam (C) so far.
+    schedule = ExamSchedule()
+    schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
+    schedule.addAssignment(make_assignment(course=course_b, exam_date=date(2026, 6, 1)))
+    schedule.addAssignment(make_assignment(course=course_c, exam_date=date(2026, 6, 2)))
+
+    # Placing D on June 2 creates a second, separate conflict. The running
+    # total across the schedule becomes 2, which exceeds k=1.
+    candidate = make_assignment(course=course_d, exam_date=date(2026, 6, 2))
+    checker = _make_elective_cap_checker(k=1, courses=[course_a, course_b, course_c, course_d])
+
+    # Act
+    result = checker.check(candidate, schedule)
+
+    # Assert — total of 2 pair-conflicts across the schedule > k=1, rejected.
+    assert result is True
+
+
+# ===========================================================================
+# TC-CHK-021c: a single conflict elsewhere in the schedule must not block an
+# unrelated, conflict-free placement. With k=1, the committed conflict on
+# June 1 (A & B) leaves room for one exam (E) to be placed alone on June 3.
+# ===========================================================================
+def test_elective_cap_checker_allows_unrelated_conflict_free_placement(
+    make_course, make_program_entry, make_assignment
+):
+    # Arrange
+    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
+    course_a = make_course(course_id="A", program_entries=[pe])
+    course_b = make_course(course_id="B", program_entries=[pe])
+    course_e = make_course(course_id="E", program_entries=[pe])
+
+    schedule = ExamSchedule()
+    schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
+    schedule.addAssignment(make_assignment(course=course_b, exam_date=date(2026, 6, 1)))
+
+    # E lands alone on a brand-new day: it adds zero new pairs.
+    candidate = make_assignment(course=course_e, exam_date=date(2026, 6, 3))
+    checker = _make_elective_cap_checker(k=1, courses=[course_a, course_b, course_e])
+
+    # Act
+    result = checker.check(candidate, schedule)
+
+    # Assert — total stays at 1 (the existing A/B pair), still within k=1.
+    assert result is False
+
+
 # ---------------------------------------------------------------------------
 # ExamSpanChecker  TC-CHK-022..025
 #
@@ -481,6 +547,49 @@ def test_exam_span_checker_accepts_single_course_group(
     result = checker.check(candidate, schedule)
 
     # Assert — a group of one has no span to check, so no conflict.
+    assert result is False
+
+
+# ===========================================================================
+# TC-CHK-025b: groups are scoped per semester, not just per (program, year,
+# moed). Two obligatory courses share a program/year/moed but belong to
+# different semesters (FALL vs SPRING), which are unrelated exam periods that
+# can be months apart. Each forms its own group of size 1, so neither can
+# ever violate the span rule, even when scheduled one day apart.
+# ===========================================================================
+def test_exam_span_checker_keeps_different_semesters_in_separate_groups(
+    make_course, make_assignment, make_program_entry
+):
+    # Arrange — same program/year/moed, but course A is a FALL obligation and
+    # course B is a SPRING obligation.
+    pe_fall = make_program_entry(
+        program_id="83101", year=2, semester=Semester.FALL, requirement=Requirement.OBLIGATORY
+    )
+    pe_spring = make_program_entry(
+        program_id="83101", year=2, semester=Semester.SPRI, requirement=Requirement.OBLIGATORY
+    )
+    course_a = make_course(course_id="A", program_entries=[pe_fall])
+    course_b = make_course(course_id="B", program_entries=[pe_spring])
+    slot_a = Slot(course=course_a, semester=Semester.FALL, moed=Moed.ALEPH,
+                  candidateDates=[date(2026, 1, 1)])
+    slot_b = Slot(course=course_b, semester=Semester.SPRI, moed=Moed.ALEPH,
+                  candidateDates=[date(2026, 6, 1)])
+
+    schedule = ExamSchedule()
+    schedule.addAssignment(
+        make_assignment(course=course_a, exam_date=date(2026, 1, 1), moed=Moed.ALEPH)
+    )
+
+    # Placing B one day after A would be a 1-day span — a violation if the two
+    # semesters were wrongly merged into one group, given a strict k=10.
+    candidate = make_assignment(course=course_b, exam_date=date(2026, 1, 2), moed=Moed.ALEPH)
+    checker = _make_span_checker(k=10, courses=[course_a, course_b], slots=[slot_a, slot_b])
+
+    # Act
+    result = checker.check(candidate, schedule)
+
+    # Assert — each semester's group has only one member, so no span is ever
+    # measured and the placement is accepted.
     assert result is False
 
 

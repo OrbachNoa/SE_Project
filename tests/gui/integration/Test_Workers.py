@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch, ANY
 from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
 from src.infrastructure.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.logic.parallel.WorkUnit import WorkUnit
 
 pytestmark = pytest.mark.usefixtures("qapp")
 
@@ -121,12 +122,17 @@ def test_process_runner_success(mock_obs_cls, mock_sched_cls):
     cancel_event = MagicMock()
     slots = []
     checkers = []
-    
-    runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results=10, batch_size=1000)
-    
+
+    work_source = MagicMock()
+    work_source.get_next.side_effect = [WorkUnit(seed_dates=[]), None]
+
+    runner = SchedulerProcessRunner(
+        slots, checkers, queue, cancel_event, max_results=10, batch_size=1000, work_source=work_source
+    )
+
     # Act
     runner.run()
-    
+
     # Assert
     assert mock_scheduler.generateSchedules.call_count == 1
     call_args = mock_scheduler.generateSchedules.call_args[0]
@@ -154,13 +160,19 @@ def test_process_runner_error_handling(mock_obs_cls, mock_sched_cls):
     cancel_event = MagicMock()
     slots = []
     checkers = []
-    
-    runner = SchedulerProcessRunner(slots, checkers, queue, cancel_event, max_results=10, batch_size=1000)
-    
+
+    work_source = MagicMock()
+    work_source.get_next.side_effect = [WorkUnit(seed_dates=[]), None]
+
+    runner = SchedulerProcessRunner(
+        slots, checkers, queue, cancel_event, max_results=10, batch_size=1000, work_source=work_source
+    )
+
     # Act
     runner.run()
-    
+
     # Assert
+    assert mock_scheduler.generateSchedules.call_count == 1
     assert mock_observer.on_error.call_count == 1
     error_msg = mock_observer.on_error.call_args[0][0]
     assert "backtracking error" in error_msg

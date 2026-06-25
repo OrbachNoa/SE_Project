@@ -2,20 +2,8 @@ import pytest
 from datetime import date
 from src.models.Enums import EvalType, Semester, Moed, Requirement
 from src.infrastructure.cache.DataCache import DataCache
-from src.application.state.AppState import AppState
 from src.application.state.InputDataState import InputDataState
 from src.application.state.ScheduleResultState import ScheduleResultState
-
-# ===========================================================================
-# TC-AS-001: Verify that AppState sets up InputDataState and ScheduleResultState.
-# ===========================================================================
-def test_app_state_initialization():
-    # Arrange & Act
-    state = AppState()
-    
-    # Assert
-    assert isinstance(state.get_input_state(), InputDataState)
-    assert isinstance(state.get_schedule_state(), ScheduleResultState)
 
 # ===========================================================================
 # TC-AS-002: Test that InputDataState mutators replace and retrieve courses and periods.

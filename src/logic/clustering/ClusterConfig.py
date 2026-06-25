@@ -23,6 +23,7 @@ from src.logic.comparators.ScheduleScorer import (
     AVG_ALL_COURSES_GAP,
     MIN_MANDATORY_GAP,
 )
+from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 
 
 # How K is decided for a run.
@@ -86,14 +87,15 @@ class ClusterConfig:
         if not self.criteria:
             raise ValueError("at least one criterion must be selected")
 
-        unknown = [c for c in self.criteria if c not in ALL_CRITERIA]
+        _known = set(ALL_CRITERIA) | set(ALL_EXTENDED_FEATURES)
+        unknown = [c for c in self.criteria if c not in _known]
         if unknown:
             raise ValueError(f"unknown criteria: {unknown}")
 
         if len(set(self.criteria)) != len(self.criteria):
             raise ValueError("criteria must not contain duplicates")
 
-        bad_weights = [c for c in self.weights if c not in ALL_CRITERIA]
+        bad_weights = [c for c in self.weights if c not in _known]
         if bad_weights:
             raise ValueError(f"weights reference unknown criteria: {bad_weights}")
         if any(w < 0 for w in self.weights.values()):
