@@ -134,10 +134,21 @@ class HeuristicRequestParser:
             value = int(digit)
             if 2 <= value <= 20:
                 return value
-        # Then a spelled-out number (English or Hebrew).
-        for word, value in {**_EN_NUMBERS, **_HE_NUMBERS}.items():
-            if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", low):
-                return value
+        # Spelled-out number word followed by a group word within 3 tokens.
+        # Hebrew tokens may carry single-letter prefixes (ל ,כ ,ב ,מ …) so we
+        # accept the number word as a suffix of the token; English requires
+        # exact match to avoid false positives ("stone" ending in "one" etc.).
+        tokens = low.split()
+        for i, token in enumerate(tokens):
+            window = tokens[i + 1 : i + 4]
+            for word, value in _EN_NUMBERS.items():
+                if token == word and any(gw in t for gw in _GROUP_WORDS for t in window):
+                    return value
+            for word, value in _HE_NUMBERS.items():
+                if (token == word or token.endswith(word)) and any(
+                    gw in t for gw in _GROUP_WORDS for t in window
+                ):
+                    return value
         return None
 
     # ── interpretation text ──────────────────────────────────────────────────

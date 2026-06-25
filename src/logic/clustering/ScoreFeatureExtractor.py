@@ -21,7 +21,10 @@ import numpy as np
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.logic.clustering.IFeatureExtractor import IFeatureExtractor
+from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
+
+_VALID_CRITERIA = set(ALL_CRITERIA) | set(ALL_EXTENDED_FEATURES)
 
 
 class ScoreFeatureExtractor(IFeatureExtractor):
@@ -30,7 +33,7 @@ class ScoreFeatureExtractor(IFeatureExtractor):
     def __init__(self, criteria: Sequence[str] | None = None) -> None:
         # Default to every criterion, in canonical order.
         self._criteria = tuple(criteria) if criteria else tuple(ALL_CRITERIA)
-        unknown = [c for c in self._criteria if c not in ALL_CRITERIA]
+        unknown = [c for c in self._criteria if c not in _VALID_CRITERIA]
         if unknown:
             raise ValueError(f"unknown criteria: {unknown}")
 

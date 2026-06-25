@@ -9,6 +9,9 @@ for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
         sys.path.insert(0, path)
 #endregion
 
+from dotenv import load_dotenv
+load_dotenv()
+
 #region Imports
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QFont

@@ -42,34 +42,55 @@ Choose from these topics ONLY (use exact names):
 - "rest"          : user wants more rest/spacing between exams generally
 - "consistency"   : user wants evenly spaced exams (consistent gaps)
 - "consecutive"   : user wants to avoid back-to-back mandatory exam days
-- "span"          : user wants mandatory exams spread over a wide window
+- "span"          : user wants to control how concentrated or spread out mandatory exams are — compact or wide window
 - "conflicts"     : user wants fewer elective exam clashes
 - "general"       : general or unclear request — use all criteria
 
 When the request contains multiple conditions joined by AND / ו / גם / and also,
 identify a separate topic for EACH condition.
+Exception: if both conditions map to the same topic, merge them into one topic with the higher threshold.
 
 Output ONLY valid JSON, no prose, no code fences, no <think> tags:
 {
   "topics": [<one or more topic names from the list above>],
+  "thresholds": {"<topic>": <number>},
+  "directions": {"span": "compact" | "spread"},
   "k_mode": "auto" | "fixed",
   "k": <integer 2-20, only when k_mode is "fixed">,
   "explanation": "<one sentence in the same language as the request>"
 }
+"thresholds" is optional — omit it entirely when no numeric bound is mentioned.
+"directions" is optional — omit it entirely unless the span topic is present and direction is clear.
 
 IMPORTANT RULES:
-- The request may be written casually, formally, or as a system description. 
+- The request may be written casually, formally, or as a system description.
   Treat all of them as the student's intent.
   "user wants X" and "give me X" and "תקבץ לפי X" all mean the same thing.
-- Any mention of Moed A, Moed B, מועד א, מועד ב, retake, fix grade, improve score, 
+- Any mention of Moed A, Moed B, מועד א, מועד ב, retake, fix grade, improve score,
   second chance → ALWAYS use ["retake_time"]. Never map this to "general".
 - Use "general" ONLY when the request is completely unrelated to exam scheduling
-  or contains no recognizable intent (e.g. "!@#$%", "hello").
+  or contains no recognizable intent (e.g. "!@#$%", "hello", "תן לי לוחות טובים").
   When in doubt, pick the closest topic — do NOT default to "general".
 - The value for 'k' must come ONLY from explicit grouping phrases:
-  'into X groups', 'X families', 'X קבוצות', 'divided into X'.
+  'into X groups', 'X families', 'X קבוצות', 'divided into X', 'X clusters'.
   Numbers that describe characteristics (e.g. '7 days', '3 exams', '14 days apart')
   are NOT the number of groups — ignore them when setting k.
+- Word numbers ("four", "ארבע", "חמש", "three", "שלוש") adjacent to group words
+  ("groups", "families", "קבוצות", "משפחות") ARE valid k values — treat them as digits.
+- When the request contains a number describing a minimum or maximum
+  (e.g. 'at least 4 days', 'no more than 2 exams', 'minimum 7 days'),
+  extract it as a threshold for the relevant topic.
+  Thresholds are hints for emphasis — not hard filters.
+- Negative phrasing ('I don't want X', 'לא רוצה X', 'no X', 'בלי X') means
+  the user wants to MINIMIZE X — map to the relevant topic with high weight.
+- 'מרוכז'/'compact'/'concentrated' → span topic, compact direction.
+  'מפוזר'/'spread out'/'distributed'/'פזור' → span topic, wide direction.
+- When span direction matters, add:
+  "directions": {"span": "compact"} for concentrated/מרוכז requests,
+  "directions": {"span": "spread"} for spread-out/מפוזר requests.
+- For load requests: prefer "daily_load" when the user mentions per-day load,
+  prefer "weekly_load" when the user mentions per-week load.
+  Use both when the request is general about load.
 
 Examples:
 
@@ -98,7 +119,7 @@ Request: "I want schedules where mandatory exams don't stack up week after week"
 Output: {"topics": ["weekly_load", "consecutive"], "k_mode": "auto", "explanation": "Grouping by weekly exam load and consecutive mandatory days"}
 
 Request: "group by how spread out the mandatory exams are across the semester"
-Output: {"topics": ["span", "rest"], "k_mode": "auto", "explanation": "Grouping by mandatory exam span across the period"}
+Output: {"topics": ["span"], "k_mode": "auto", "explanation": "Grouping by mandatory exam span across the period"}
 
 Request: "אני רוצה שיהיו כמה שפחות התנגשויות בין קורסי בחירה"
 Output: {"topics": ["conflicts"], "k_mode": "auto", "explanation": "קיבוץ לפי מספר ההתנגשויות בין קורסי בחירה"}
@@ -110,7 +131,46 @@ Request: "I want lighter weeks with fewer exams per day, into 4 groups"
 Output: {"topics": ["weekly_load", "daily_load"], "k_mode": "fixed", "k": 4, "explanation": "Grouping by weekly and daily exam load, 4 families"}
 
 Request: "give me schedules with more time between Moed A and Moed B retake"
-Output: {"topics": ["retake_time"], "k_mode": "auto", "explanation": "Grouping by time between Moed A and Moed B"}"""
+Output: {"topics": ["retake_time"], "k_mode": "auto", "explanation": "Grouping by time between Moed A and Moed B"}
+
+Request: "לא רוצה שתי בחינות באותו יום"
+Output: {"topics": ["daily_load"], "k_mode": "auto", "explanation": "קיבוץ לפי ימים עם שתי בחינות או יותר"}
+
+Request: "לפחות 4 ימים בין כל מבחן"
+Output: {"topics": ["rest"], "thresholds": {"rest": 4}, "k_mode": "auto", "explanation": "קיבוץ לפי רווח בין בחינות, לפחות 4 ימים"}
+
+Request: "שיהיה לי זמן לנשום בין הבחינות"
+Output: {"topics": ["rest", "consistency"], "k_mode": "auto", "explanation": "קיבוץ לפי מרחק ועקביות הרווחים בין בחינות"}
+
+Request: "I want schedules where exams are concentrated early in the period"
+Output: {"topics": ["span"], "k_mode": "auto", "explanation": "Grouping by exam concentration at start of period"}
+
+Request: "minimum 7 days between Moed A and Moed B, into 3 groups"
+Output: {"topics": ["retake_time"], "thresholds": {"retake_time": 7}, "k_mode": "fixed", "k": 3, "explanation": "Grouping by retake gap, minimum 7 days, 3 families"}
+
+Request: "שלא יהיה שבוע עם יותר מ-3 בחינות"
+Output: {"topics": ["weekly_load"], "thresholds": {"weekly_load": 3}, "k_mode": "auto", "explanation": "קיבוץ לפי עומס שבועי, לא יותר מ-3 בחינות בשבוע"}
+
+Request: "I want free time before my mandatory exams, at least 5 days"
+Output: {"topics": ["study_prep"], "thresholds": {"study_prep": 5}, "k_mode": "auto", "explanation": "Grouping by preparation time before mandatory exams"}
+
+Request: "תן לי מבחנים עם לפחות יומיים הפרש בארבע קבוצות"
+Output: {"topics": ["rest"], "thresholds": {"rest": 2}, "k_mode": "fixed", "k": 4, "explanation": "קיבוץ לפי רווח בין בחינות, לפחות יומיים, ארבע קבוצות"}
+
+Request: "לא רוצה ימים רצופים עם בחינות חובה"
+Output: {"topics": ["consecutive"], "k_mode": "auto", "explanation": "קיבוץ לפי ימים רצופים עם בחינות חובה"}
+
+Request: "תן לי לוחות טובים"
+Output: {"topics": ["general"], "k_mode": "auto", "explanation": "קיבוץ לפי כל הקריטריונים"}
+
+Request: "three groups by retake time"
+Output: {"topics": ["retake_time"], "k_mode": "fixed", "k": 3, "explanation": "Grouping by retake time, 3 families"}
+
+Request: "אני רוצה שהבחינות יהיו מרוכזות בתחילת התקופה"
+Output: {"topics": ["span"], "directions": {"span": "compact"}, "k_mode": "auto", "explanation": "קיבוץ לפי ריכוז בחינות בתחילת התקופה"}
+
+Request: "I want exams spread out across the full semester"
+Output: {"topics": ["span"], "directions": {"span": "spread"}, "k_mode": "auto", "explanation": "Grouping by exam spread across the semester"}"""
 
 _USER_TEMPLATE = "Request:\n{request}\n\nReturn the JSON configuration."
 
@@ -159,16 +219,25 @@ class ClusterRequestTranslator:
         if self._llm is not None and self._llm.is_available():
             try:
                 raw = self._llm.complete(_SYSTEM_PROMPT, _USER_TEMPLATE.format(request=request))
+                # DEBUG
+                print(f"[LLM] source=llm | topics={...} | request='{request[:50]}'")
                 config, interpretation = self._config_from_llm(raw)
                 config.validate()
-                return TranslationResult(config, interpretation, "llm")
+                result = TranslationResult(config, interpretation, "llm")
+                # DEBUG
+                print(f"[LLM OK] k={config.k_mode}:{config.k} | criteria={config.criteria[:2]}... | '{request[:40]}'")
+                return result
             except Exception as exc:
+                # DEBUG
+                print(f"[LLM FAIL] failed: {exc} | '{request[:40]}'")
                 warnings.warn(
                     f"LLM clustering request failed: {exc}", RuntimeWarning, stacklevel=2
                 )  # fall through to the keyword parser
 
         # 2. Keyword parser (always available).
         config, interpretation = self._parser.parse(request)
+        # DEBUG
+        print(f"[HEURISTIC] k={config.k_mode}:{config.k} | criteria={config.criteria[:2]}... | '{request[:40]}'")
         return TranslationResult(config, interpretation, "heuristic")
 
     # ── LLM JSON handling ────────────────────────────────────────────────────
@@ -179,17 +248,38 @@ class ClusterRequestTranslator:
         data = self._extract_json(raw)
 
         topics = data.get("topics") or ["general"]
+        thresholds: dict = data.get("thresholds") or {}
 
         merged_criteria: list = []
         merged_weights: dict = {}
-        for topic in topics:
+        _DECAY = [1.0, 0.8, 0.6]
+        for rank, topic in enumerate(topics):
             if topic in _TOPIC_CRITERIA:
+                decay = _DECAY[min(rank, len(_DECAY) - 1)]
                 crit, weights = _TOPIC_CRITERIA[topic]
                 for c in crit:
                     if c not in merged_criteria:
                         merged_criteria.append(c)
                 for k, v in weights.items():
-                    merged_weights[k] = max(merged_weights.get(k, 1.0), v)
+                    merged_weights[k] = max(merged_weights.get(k, 1.0), v * decay)
+
+        # Apply threshold-based weight boosts: threshold N → multiplier (1 + N/5).
+        for topic, threshold in thresholds.items():
+            if topic in _TOPIC_CRITERIA:
+                crit, _ = _TOPIC_CRITERIA[topic]
+                multiplier = 1.0 + float(threshold) / 5.0
+                for c in crit:
+                    base = merged_weights.get(c, 1.0)
+                    merged_weights[c] = min(base * multiplier, 5.0)
+
+        # Apply span direction: compact → de-emphasize MANDATORY_SPAN (0.5),
+        # spread → emphasize (2.0).
+        directions: dict = data.get("directions") or {}
+        span_dir = directions.get("span")
+        if span_dir == "compact":
+            merged_weights[MANDATORY_SPAN] = 0.5
+        elif span_dir == "spread":
+            merged_weights[MANDATORY_SPAN] = 2.0
 
         if not merged_criteria:
             merged_criteria = list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES)
