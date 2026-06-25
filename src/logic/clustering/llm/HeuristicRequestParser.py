@@ -122,9 +122,16 @@ class HeuristicRequestParser:
     def _match_k(self, low: str):
         if not any(w in low for w in _GROUP_WORDS):
             return None
-        # Prefer an explicit digit.
-        for token in re.findall(r"\d+", low):
-            value = int(token)
+        # Only accept a digit that directly signals the number of groups.
+        # Valid patterns: "into N", "divided into N", "N groups", "N families", etc.
+        for m in re.finditer(
+            r"(?:divided\s+into|into)\s+(\d+)"
+            r"|(\d+)\s*(?:groups?|families|family|clusters?"
+            r"|קבוצות|קבוצ\w*|משפחות|משפח\w*|אשכולות|אשכול\w*)",
+            low,
+        ):
+            digit = next(g for g in m.groups() if g is not None)
+            value = int(digit)
             if 2 <= value <= 20:
                 return value
         # Then a spelled-out number (English or Hebrew).

@@ -57,6 +57,20 @@ Output ONLY valid JSON, no prose, no code fences, no <think> tags:
   "explanation": "<one sentence in the same language as the request>"
 }
 
+IMPORTANT RULES:
+- The request may be written casually, formally, or as a system description. 
+  Treat all of them as the student's intent.
+  "user wants X" and "give me X" and "תקבץ לפי X" all mean the same thing.
+- Any mention of Moed A, Moed B, מועד א, מועד ב, retake, fix grade, improve score, 
+  second chance → ALWAYS use ["retake_time"]. Never map this to "general".
+- Use "general" ONLY when the request is completely unrelated to exam scheduling
+  or contains no recognizable intent (e.g. "!@#$%", "hello").
+  When in doubt, pick the closest topic — do NOT default to "general".
+- The value for 'k' must come ONLY from explicit grouping phrases:
+  'into X groups', 'X families', 'X קבוצות', 'divided into X'.
+  Numbers that describe characteristics (e.g. '7 days', '3 exams', '14 days apart')
+  are NOT the number of groups — ignore them when setting k.
+
 Examples:
 
 Request: "תקבץ לי לפי לוחות שנותנים הכי הרבה זמן לתקן מבחן"
@@ -75,7 +89,28 @@ Request: "I want no back-to-back mandatory exams"
 Output: {"topics": ["consecutive", "rest"], "k_mode": "auto", "explanation": "Grouping by consecutive mandatory exam days"}
 
 Request: "I want schedules with good preparation time before mandatory exams and easy days"
-Output: {"topics": ["study_prep", "daily_load"], "k_mode": "auto", "explanation": "Grouping by preparation time and daily exam load"}"""
+Output: {"topics": ["study_prep", "daily_load"], "k_mode": "auto", "explanation": "Grouping by preparation time and daily exam load"}
+
+Request: "תקבץ לפי לוחות שבהם הבחינות מפוזרות בצורה אחידה"
+Output: {"topics": ["consistency"], "k_mode": "auto", "explanation": "קיבוץ לפי אחידות הרווחים בין בחינות"}
+
+Request: "I want schedules where mandatory exams don't stack up week after week"
+Output: {"topics": ["weekly_load", "consecutive"], "k_mode": "auto", "explanation": "Grouping by weekly exam load and consecutive mandatory days"}
+
+Request: "group by how spread out the mandatory exams are across the semester"
+Output: {"topics": ["span", "rest"], "k_mode": "auto", "explanation": "Grouping by mandatory exam span across the period"}
+
+Request: "אני רוצה שיהיו כמה שפחות התנגשויות בין קורסי בחירה"
+Output: {"topics": ["conflicts"], "k_mode": "auto", "explanation": "קיבוץ לפי מספר ההתנגשויות בין קורסי בחירה"}
+
+Request: "תן לי 3 קבוצות שלא יהיו ימים רצופים עם בחינות חובה"
+Output: {"topics": ["consecutive", "rest"], "k_mode": "fixed", "k": 3, "explanation": "3 קבוצות לפי ימים רצופים עם בחינות חובה"}
+
+Request: "I want lighter weeks with fewer exams per day, into 4 groups"
+Output: {"topics": ["weekly_load", "daily_load"], "k_mode": "fixed", "k": 4, "explanation": "Grouping by weekly and daily exam load, 4 families"}
+
+Request: "give me schedules with more time between Moed A and Moed B retake"
+Output: {"topics": ["retake_time"], "k_mode": "auto", "explanation": "Grouping by time between Moed A and Moed B"}"""
 
 _USER_TEMPLATE = "Request:\n{request}\n\nReturn the JSON configuration."
 
@@ -139,6 +174,7 @@ class ClusterRequestTranslator:
     # ── LLM JSON handling ────────────────────────────────────────────────────
 
     def _config_from_llm(self, raw: str) -> Tuple[ClusterConfig, str]:
+        print(raw)
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
         data = self._extract_json(raw)
 
