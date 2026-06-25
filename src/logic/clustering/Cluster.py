@@ -64,6 +64,11 @@ class ClusterResult:
     # was used to stay responsive).
     sampled: bool = False
 
+    # The K that was requested before empty-cluster pruning. Set when the caller
+    # asked for a specific K; None for auto mode. Differs from k when some
+    # requested clusters collapsed to empty after partitioning.
+    requested_k: Optional[int] = None
+
     def get_cluster(self, cluster_id: int) -> Cluster:
         for cluster in self.clusters:
             if cluster.cluster_id == cluster_id:

@@ -140,7 +140,8 @@ class ClusteringService:
         if not self._fitted or self._matrix is None:
             raise RuntimeError("fit() must be called before cluster()")
 
-        k = self._resolve_k(k)
+        requested_k = self._resolve_k(k)
+        k = requested_k
 
         output = self._strategy.cluster(self._matrix, k)
         labels = output.labels
@@ -178,13 +179,15 @@ class ClusteringService:
         # Default, dependency-free descriptions.
         self._summarizer.describe_all(clusters)
 
+        active_k = len(clusters)
         return ClusterResult(
-            k=actual_k,
+            k=active_k,
             clusters=clusters,
             criteria=list(names),
             working_set_size=n,
             population_size=self._population_size,
             sampled=sampled,
+            requested_k=requested_k if requested_k != active_k else None,
         )
 
     def auto_cluster(self) -> ClusterResult:

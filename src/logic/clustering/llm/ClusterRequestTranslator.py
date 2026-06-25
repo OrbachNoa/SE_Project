@@ -170,7 +170,13 @@ Request: "אני רוצה שהבחינות יהיו מרוכזות בתחילת 
 Output: {"topics": ["span"], "directions": {"span": "compact"}, "k_mode": "auto", "explanation": "קיבוץ לפי ריכוז בחינות בתחילת התקופה"}
 
 Request: "I want exams spread out across the full semester"
-Output: {"topics": ["span"], "directions": {"span": "spread"}, "k_mode": "auto", "explanation": "Grouping by exam spread across the semester"}"""
+Output: {"topics": ["span"], "directions": {"span": "spread"}, "k_mode": "auto", "explanation": "Grouping by exam spread across the semester"}
+
+Request: "תן לי קבוצות עם החלונות הכי טובים בין הבחינות"
+Output: {"topics": ["rest"], "k_mode": "auto", "explanation": "קיבוץ לפי רווח המנוחה בין בחינות"}
+
+Request: "תן לי קבוצות עם חלון הכנה טוב לפני כל בחינת חובה"
+Output: {"topics": ["study_prep"], "k_mode": "auto", "explanation": "קיבוץ לפי זמן הכנה לפני בחינות חובה"}"""
 
 _USER_TEMPLATE = "Request:\n{request}\n\nReturn the JSON configuration."
 
@@ -207,6 +213,7 @@ class ClusterRequestTranslator:
     ) -> None:
         self._llm = llm_client
         self._parser = parser or HeuristicRequestParser()
+        self._cache: dict = {}
 
     def translate(self, text: str) -> TranslationResult:
         request = (text or "").strip()
@@ -214,6 +221,9 @@ class ClusterRequestTranslator:
             return TranslationResult(
                 ClusterConfig.default(), "Automatic grouping by all criteria.", "default"
             )
+
+        if request in self._cache:
+            return self._cache[request]
 
         # 1. LLM, when configured.
         if self._llm is not None and self._llm.is_available():
@@ -226,6 +236,9 @@ class ClusterRequestTranslator:
                 result = TranslationResult(config, interpretation, "llm")
                 # DEBUG
                 print(f"[LLM OK] k={config.k_mode}:{config.k} | criteria={config.criteria[:2]}... | '{request[:40]}'")
+                if len(self._cache) >= 20:
+                    self._cache.pop(next(iter(self._cache)))
+                self._cache[request] = result
                 return result
             except Exception as exc:
                 # DEBUG
@@ -238,7 +251,11 @@ class ClusterRequestTranslator:
         config, interpretation = self._parser.parse(request)
         # DEBUG
         print(f"[HEURISTIC] k={config.k_mode}:{config.k} | criteria={config.criteria[:2]}... | '{request[:40]}'")
-        return TranslationResult(config, interpretation, "heuristic")
+        result = TranslationResult(config, interpretation, "heuristic")
+        if len(self._cache) >= 20:
+            self._cache.pop(next(iter(self._cache)))
+        self._cache[request] = result
+        return result
 
     # ── LLM JSON handling ────────────────────────────────────────────────────
 
