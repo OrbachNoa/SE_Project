@@ -108,6 +108,9 @@ class InputScreenPresenter:
     # Starts the scheduling process in the background controller
     def on_generate_clicked(self) -> None:
         if not self.validate_programs():
+            self._view.show_program_selection_error(
+                "Please select at least one study program before generating a schedule."
+            )
             return
 
         self._already_navigated = False

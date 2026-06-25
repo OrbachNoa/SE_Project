@@ -333,6 +333,12 @@ class InputScreen(Screen):
     def show_scheduler_error(self, message: str) -> None:
         QMessageBox.critical(self, "Scheduler error", message)
 
+    # Shown when the user clicks Generate without selecting a study program.
+    # The red label alone was easy to miss, so this dialog makes it unmissable.
+    def show_program_selection_error(self, message: str) -> None:
+        QMessageBox.warning(self, "Program selection required", message)
+        self.program_selector_card.setFocus()
+
     # UI helper: update text count for loaded files
     def _mark_file_loaded(self, row: dict, count: int, label: str) -> None:
         row["count_lbl"].setText(f"{count} {label}")

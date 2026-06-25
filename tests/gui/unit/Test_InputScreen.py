@@ -79,23 +79,31 @@ def test_generate_schedules_button_clicks(mock_controller, mock_router):
 def test_generate_schedules_rejected_if_no_programs_selected(mock_controller, mock_router):
     # Arrange
     screen = InputScreen(mock_controller, mock_router)
-    
+
     # Enable generate button but keep programs list empty
     screen._presenter._courses_loaded = True
     screen._presenter._periods_loaded = True
     screen.action_bar.generate_btn.setEnabled(True)
     screen._selected_program_ids = []
     screen._refresh_program_summary()
-    
-    # Act
-    screen.action_bar.generate_btn.click()
-    
-    # Assert
-    # 1. Controller should NOT have been called
-    assert mock_controller.generate_schedules.call_count == 0
-    # 2. Error label should be visible and show error message
-    assert not screen.program_error_label.isHidden()
-    assert screen.program_error_label.text() == "Please select at least one study program."
+
+    # Mock warning box
+    with patch("src.gui.features.input.InputScreen.QMessageBox.warning") as mock_warning:
+        # Act
+        screen.action_bar.generate_btn.click()
+
+        # Assert
+        # 1. Controller should NOT have been called
+        assert mock_controller.generate_schedules.call_count == 0
+        # 2. Error label should be visible and show error message
+        assert not screen.program_error_label.isHidden()
+        assert screen.program_error_label.text() == "Please select at least one study program."
+        # 3. A blocking dialog should make the missing selection unmissable
+        assert mock_warning.call_count == 1
+        assert mock_warning.call_args[0][1] == "Program selection required"
+        assert mock_warning.call_args[0][2] == (
+            "Please select at least one study program before generating a schedule."
+        )
 
 # ===========================================================================
 # TC-IN-UI-007: test that failing file import shows a critical message box.

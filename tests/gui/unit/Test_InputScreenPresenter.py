@@ -90,6 +90,28 @@ def test_presenter_validate_programs_success(mock_controller, mock_router):
     assert view.set_program_error.call_args[0] == ("",)
 
 # ===========================================================================
+# TC-ISP-006b: test generate clicked shows a dialog and does not start
+# generation when no study program is selected.
+# ===========================================================================
+def test_presenter_on_generate_clicked_no_programs(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    view.selected_program_ids.return_value = []
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_generate_clicked()
+
+    # Assert
+    assert view.set_program_error.call_args[0] == ("Please select at least one study program.",)
+    assert view.show_program_selection_error.call_count == 1
+    assert view.show_program_selection_error.call_args[0] == (
+        "Please select at least one study program before generating a schedule.",
+    )
+    assert mock_controller.generate_schedules.call_count == 0
+    assert view.set_running_mode.call_count == 0
+
+# ===========================================================================
 # TC-ISP-006: test generate clicked starts schedule generation.
 # ===========================================================================
 def test_presenter_on_generate_clicked(mock_controller, mock_router):
