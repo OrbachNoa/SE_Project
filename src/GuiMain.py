@@ -10,8 +10,13 @@ for path in (str(SRC_ROOT), str(PROJECT_ROOT)):
 #endregion
 
 #region Imports
-from PyQt6.QtWidgets import QApplication
+import logging
+
+from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QFont
+from PyQt6.QtCore import qInstallMessageHandler
+from src.application.errors.ExceptionMapper import default_registry
+from src.application.errors.ErrorLogger import ErrorLogger, configure_default_logging
 from src.application.state.InputDataState import InputDataState
 from src.application.services.FileImportService import FileImportService
 from src.application.services.InputCacheService import InputCacheService
@@ -28,6 +33,51 @@ from gui.core.app import App
 from src.application.AppController import AppController
 from src.file_io.writers.TextFileWriter import TextFileWriter
 #endregion
+
+
+def install_global_excepthook() -> None:
+    """Route otherwise-uncaught GUI exceptions through the central error model.
+
+    Without this, an exception escaping a Qt slot prints a traceback to the
+    console and (on some platforms) silently aborts the event loop. Here we map
+    it to an AppErrorInfo, log the technical detail, and show the user a clean
+    dialog instead of a crash.
+    """
+    registry = default_registry()
+    error_logger = ErrorLogger()
+
+    def _hook(exc_type, exc_value, exc_tb):
+        # Let Ctrl-C behave normally rather than popping a dialog.
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        info = registry.map(exc_value, {"source": "gui"})
+        error_logger.log(info, cause=exc_value)
+        app = QApplication.instance()
+        if app is not None:
+            QMessageBox.critical(None, "Unexpected Error", info.user_message)
+
+    sys.excepthook = _hook
+
+
+# Substrings of known-cosmetic Qt warnings that carry no actionable information
+# and would otherwise print on every launch. Mixing pixel-based `font-size` in
+# our QSS with native Windows widget styling makes Qt's style engine read a
+# point size off a pixel-only font during the first style polish pass, which
+# is always -1 by Qt's own convention (point size is unset when pixel size is
+# used) — harmless, but noisy. Anything else still reaches stderr as usual.
+_SUPPRESSED_QT_WARNINGS = ("QFont::setPointSize",)
+
+
+def install_qt_message_filter() -> None:
+    """Drop known-cosmetic Qt log lines; pass every other message through."""
+
+    def _handler(_msg_type, _context, message: str) -> None:
+        if any(s in message for s in _SUPPRESSED_QT_WARNINGS):
+            return
+        print(message, file=sys.stderr)
+
+    qInstallMessageHandler(_handler)
 
 
 def build_controller() -> AppController:
@@ -72,6 +122,9 @@ if __name__ == "__main__":
     This function is the main entry point for the application.
     It creates all the necessary services and wires them together to form the AppController.
     """
+    configure_default_logging(level=logging.INFO)
+    install_global_excepthook()
+    install_qt_message_filter()
     app = QApplication(sys.argv)
     app.setFont(QFont("Segoe UI", 10))
     controller = build_controller()

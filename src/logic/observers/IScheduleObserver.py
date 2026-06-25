@@ -30,6 +30,11 @@ class IScheduleObserver(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def on_error(self, message: str) -> None:
-        """Called when a fatal error occurs because we want to prevent a silent crash."""
+    def on_error(self, message) -> None:
+        """Called when a fatal error occurs because we want to prevent a silent crash.
+
+        ``message`` is a plain user-facing string for simple observers (CLI),
+        or a serialised AppErrorInfo payload (dict) for observers that cross a
+        process boundary, so the structured error survives the trip.
+        """
         raise NotImplementedError

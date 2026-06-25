@@ -14,6 +14,7 @@ from src.logic.Scheduler import Scheduler
 from src.logic.checkers.IConflictChecker import IConflictChecker
 from src.logic.SlotBuilder import Slot
 from src.models.ExamSchedule import ExamAssignment
+from src.application.errors.ExceptionMapper import build_process_error_payload
 
 
 class SchedulerProcessRunner:
@@ -93,8 +94,11 @@ class SchedulerProcessRunner:
             observer.on_finished()
 
         except Exception as e:
-            # Report crashes so the main process can stop waiting.
-            observer.on_error(str(e))
+            # Report crashes so the main process can stop waiting. Sent as a
+            # structured AppErrorInfo payload (not str(e)) so MemoryError keeps
+            # its RESOURCE category and anything else is a clean INFRASTRUCTURE
+            # message — never a raw exception string reaching the GUI.
+            observer.on_error(build_process_error_payload(e, "scheduling"))
 
 
 

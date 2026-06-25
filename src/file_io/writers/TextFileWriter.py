@@ -1,4 +1,3 @@
-import sys
 import os
 from typing import List
 from .OutputWriter import OutputWriter
@@ -35,8 +34,11 @@ class TextFileWriter(OutputWriter):
                     f.write(f"=== Exam System Option {i} ===\n")
                     f.write(self.formatSchedule(schedule, date_cache, enum_name_cache))
                     f.write("\n\n")
-        except IOError as e:
-            print(f"Error: Unable to write to file at {path}. {e}", file=sys.stderr)
+        except IOError:
+            # Let the boundary that already maps every export failure
+            # (ExceptionMapperRegistry, via the calling presenter/service)
+            # report this — no local stderr print here to avoid a duplicate,
+            # unmapped report alongside the mapped one.
             raise
 
     def formatSchedule(self, schedule: ExamSchedule,

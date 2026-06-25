@@ -136,7 +136,10 @@ class OutputScreenPresenter:
                 filtered_items,
             )
         except Exception as error:
-            self._view.show_display_error(f"Failed to paint calendar: {error}")
+            message = self._controller.map_error(
+                error, {"operation": "render_calendar", "screen": "output"}
+            )
+            self._view.show_display_error(f"Failed to paint calendar: {message}")
         finally:
             self._view.set_screen_updates(True)
 
@@ -153,7 +156,10 @@ class OutputScreenPresenter:
         try:
             schedule_view = self._controller.get_schedule_view(self._current_index)
         except Exception as error:
-            self._view.show_export_error(f"Could not read the current schedule:\n{error}")
+            message = self._controller.map_error(
+                error, {"operation": "read_schedule", "screen": "output", "export_format": "pdf"}
+            )
+            self._view.show_export_error(f"Could not read the current schedule:\n{message}")
             return
 
         if schedule_view.is_empty():
@@ -161,6 +167,18 @@ class OutputScreenPresenter:
             return
 
         self._view.export_schedule_pdf(schedule_view, self._current_index)
+
+    def map_export_error(self, error: Exception, path: str) -> str:
+        """Map a PDF-writing failure (called by SchedulePdfExporter) to a clean message.
+
+        The actual HTML/Qt-printing step happens inside the view-layer PDF
+        exporter, outside any try/except this presenter runs — this gives it
+        a way back to the same controller.map_error used by every other
+        export path, instead of showing a raw exception in its own dialog.
+        """
+        return self._controller.map_error(
+            error, {"operation": "export_pdf", "screen": "output", "export_format": "pdf", "path": path}
+        )
 
     # Initiates the TXT export process for the current schedule
     def on_export_txt(self) -> None:
@@ -171,7 +189,10 @@ class OutputScreenPresenter:
         try:
             schedule_view = self._controller.get_schedule_view(self._current_index)
         except Exception as error:
-            self._view.show_export_error(f"Could not read the current schedule:\n{error}")
+            message = self._controller.map_error(
+                error, {"operation": "read_schedule", "screen": "output", "export_format": "txt"}
+            )
+            self._view.show_export_error(f"Could not read the current schedule:\n{message}")
             return
 
         if schedule_view.is_empty():
@@ -186,7 +207,13 @@ class OutputScreenPresenter:
             self._controller.save_schedule(self._current_index, path)
             self._view.show_message(f"Saved to:\n{path}")
         except Exception as error:
-            self._view.show_export_error(f"Could not save schedule:\n{error}")
+            # No extra "Could not save:" prefix — the mapped message (e.g. a
+            # permission failure) already says the file could not be written,
+            # and the dialog title already says "Export error".
+            message = self._controller.map_error(
+                error, {"operation": "save_schedule", "screen": "output", "export_format": "txt", "path": path}
+            )
+            self._view.show_export_error(message)
 
     # Initiates the Excel export process for the current schedule
     def on_export_excel(self) -> None:
@@ -197,7 +224,10 @@ class OutputScreenPresenter:
         try:
             schedule_view = self._controller.get_schedule_view(self._current_index)
         except Exception as error:
-            self._view.show_export_error(f"Could not read the current schedule:\n{error}")
+            message = self._controller.map_error(
+                error, {"operation": "read_schedule", "screen": "output", "export_format": "excel"}
+            )
+            self._view.show_export_error(f"Could not read the current schedule:\n{message}")
             return
 
         if schedule_view.is_empty():
@@ -211,10 +241,14 @@ class OutputScreenPresenter:
         try:
             self._controller.save_schedule_excel(self._current_index, path)
             self._view.show_message(f"Saved to:\n{path}")
-        except PermissionError:
-            self._view.show_export_error("Could not save because the file is open in Excel. Please close it and try again.")
         except Exception as error:
-            self._view.show_export_error(f"Could not save Excel schedule:\n{error}")
+            # PermissionErrorMapper already produces a friendly "file is open
+            # elsewhere" message, so there is no need for a separate
+            # `except PermissionError` here — one path covers every failure.
+            message = self._controller.map_error(
+                error, {"operation": "save_schedule", "screen": "output", "export_format": "excel", "path": path}
+            )
+            self._view.show_export_error(message)
 
     # Navigation helpers for period blocks and solution indices
     def on_prev_period(self) -> None:
@@ -338,6 +372,8 @@ class OutputScreenPresenter:
             self._view.set_sorting_busy(False)
         if hasattr(self._view, "show_error"):
             self._view.show_error(f"Sorting failed: {message}")
+        if self._sort_worker is not None:
+            self._controller.log_worker_error(self._sort_worker.last_error)
 
     def on_search_finished(self) -> None:
         """Refresh the UI when schedule generation is finished.

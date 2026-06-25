@@ -199,7 +199,9 @@ class OutputScreen(Screen):
 
     # Export functionality
     def export_schedule_pdf(self, schedule_view, current_index: int) -> None:
-        export_schedule_pdf(schedule_view, current_index, parent=self)
+        export_schedule_pdf(
+            schedule_view, current_index, parent=self, on_error=self._presenter.map_export_error
+        )
 
     # Helpers for UI focus and input
     def focus_back_button(self) -> None:

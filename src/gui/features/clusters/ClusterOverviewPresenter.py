@@ -75,11 +75,14 @@ class ClusterOverviewPresenter:
                 
                 custom_warn = "\n\n".join(list(dict.fromkeys([str(w.message) for w in caught if issubclass(w.category, ConvergenceWarning)])))
         except Exception as error:
+            message = self._controller.map_error(
+                error, {"operation": "cluster_from_request", "screen": "clusters"}
+            )
             self._view.set_busy(False)
             self._view.render_cards([])
             self._view.set_summary("")
             self._view.set_interpretation("")
-            self._view.show_message(f"Could not apply request: {error}")
+            self._view.show_message(f"Could not apply request: {message}")
             return
 
         self._view.set_busy(False)
@@ -162,9 +165,12 @@ class ClusterOverviewPresenter:
             # convert to card view models — both are cheap, GUI thread is fine.
             cards = self._controller.cards_from_run(run)
         except Exception as error:
+            message = self._controller.map_error(
+                error, {"operation": "render_cluster_cards", "screen": "clusters"}
+            )
             self._view.render_cards([])
             self._view.set_summary("")
-            self._view.show_message(f"Could not render clusters: {error}")
+            self._view.show_message(f"Could not render clusters: {message}")
             return
 
         if not cards:
@@ -188,6 +194,8 @@ class ClusterOverviewPresenter:
         self._view.render_cards([])
         self._view.set_summary("")
         self._view.show_message(f"Could not compute clusters: {message}")
+        if self._worker is not None:
+            self._controller.log_worker_error(self._worker.last_error)
 
     def _warn_capped_k(self, requested_k: Optional[int], active_k: int, custom_warning: Optional[str] = None) -> None:
         """Alerts the user if the requested cluster count was limited/capped or raised a warning."""
