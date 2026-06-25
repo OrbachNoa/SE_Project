@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import MagicMock
 from src.application.AppController import AppController
 from src.application.ImportBoundary import ImportMode, ImportResult
+from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory, ErrorSeverity
+from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
 
 pytestmark = pytest.mark.usefixtures("qapp")
 
@@ -99,6 +101,46 @@ def test_generate_schedules_starts_worker(mock_scheduler, controller):
     assert mock_worker.error_occurred.connect.call_count == 1
     assert controller._progress_timer is not None
     assert controller._progress_timer.isActive() is True
+
+# ===========================================================================
+# TC-AC-005b: infeasible input is shown as a clean message, not a traceback
+# ===========================================================================
+def test_generate_schedules_infeasible_emits_clean_message(mock_scheduler, controller):
+    # Arrange
+    mock_scheduler.generate_async.side_effect = InfeasibleScheduleError(
+        ["too many exams in June"]
+    )
+    error_slot = MagicMock()
+    controller.error_occurred.connect(error_slot)
+
+    # Act
+    controller.generate_schedules(["83101"])
+
+    # Assert — the user sees the reason, never a Python traceback.
+    assert error_slot.call_count == 1
+    message = error_slot.call_args[0][0]
+    assert "too many exams in June" in message
+    assert "Traceback" not in message
+
+
+# ===========================================================================
+# TC-AC-005c: a MemoryError from the scheduler is shown as a resource problem
+# ===========================================================================
+def test_generate_schedules_memory_error_shown_as_resource(mock_scheduler, controller):
+    # Arrange
+    mock_scheduler.generate_async.side_effect = MemoryError("out of memory")
+    error_slot = MagicMock()
+    controller.error_occurred.connect(error_slot)
+
+    # Act
+    controller.generate_schedules(["83101"])
+
+    # Assert — friendly resource message, no raw exception text.
+    assert error_slot.call_count == 1
+    message = error_slot.call_args[0][0]
+    assert "memory" in message.lower()
+    assert "MemoryError" not in message
+
 
 # ===========================================================================
 # TC-AC-006: test cancel_scheduling when worker is active and running
@@ -326,16 +368,129 @@ def test_handle_search_finished(controller):
     assert controller._early_nav_fired is False
 
 # ===========================================================================
-# TC-AC-019: test handle_error_occurred emits error_occurred signal
+# TC-AC-019: a bare legacy string with no structured record behind it (no
+# worker reference at all) is mapped to a safe message, never forwarded
+# verbatim — this is exactly what the error layer exists to prevent.
 # ===========================================================================
-def test_handle_error_occurred(controller):
+def test_handle_error_occurred_bare_string_without_worker_maps_safe(controller):
     # Arrange
     mock_slot = MagicMock()
     controller.error_occurred.connect(mock_slot)
+    assert controller._worker is None
 
     # Act
     controller._handle_error_occurred("Process died")
 
     # Assert
     assert mock_slot.call_count == 1
-    assert mock_slot.call_args[0][0] == "Process died"
+    message = mock_slot.call_args[0][0]
+    assert message != "Process died"
+    assert "Process died" not in message
+
+
+# ===========================================================================
+# TC-AC-019b: when the originating worker carries a structured last_error,
+# the legacy string signal is overridden by that record's clean message
+# (full category/severity reaches the log, the string itself is discarded).
+# ===========================================================================
+def test_handle_error_occurred_prefers_worker_last_error_over_string(controller):
+    # Arrange
+    mock_worker = MagicMock()
+    mock_worker.last_error = AppErrorInfo(
+        code="SCHEDULER_PROCESS_ERROR",
+        category=ErrorCategory.SCHEDULING,
+        severity=ErrorSeverity.ERROR,
+        user_message="The scheduler reported a problem during the search.",
+        technical_message="Process died",
+    )
+    controller._worker = mock_worker
+    mock_slot = MagicMock()
+    controller.error_occurred.connect(mock_slot)
+
+    # Act — the signal itself still only carries the bare legacy string.
+    controller._handle_error_occurred("Process died")
+
+    # Assert — the structured record's clean message wins.
+    assert mock_slot.call_count == 1
+    assert mock_slot.call_args[0][0] == "The scheduler reported a problem during the search."
+
+
+# ===========================================================================
+# TC-AC-020: a structured AppErrorInfo payload from a worker is unpacked and
+# only its clean user message reaches the GUI.
+# ===========================================================================
+def test_handle_error_occurred_unpacks_payload(controller):
+    # Arrange
+    info = AppErrorInfo(
+        code="SCHEDULER_PROCESS_CRASHED",
+        category=ErrorCategory.INFRASTRUCTURE,
+        severity=ErrorSeverity.CRITICAL,
+        user_message="The scheduling engine crashed unexpectedly.",
+        technical_message="exit code 137",
+    )
+    mock_slot = MagicMock()
+    controller.error_occurred.connect(mock_slot)
+
+    # Act
+    controller._handle_error_occurred(info.to_payload())
+
+    # Assert — the GUI gets the user message, never the technical detail.
+    assert mock_slot.call_count == 1
+    assert mock_slot.call_args[0][0] == "The scheduling engine crashed unexpectedly."
+
+
+# ===========================================================================
+# TC-AC-021: map_error gives presenters a friendly message for a file-locked
+# export (PermissionError), with no raw exception text or traceback leaking.
+# ===========================================================================
+def test_map_error_permission_denied_export_is_friendly(controller):
+    # Act
+    message = controller.map_error(
+        PermissionError(13, "denied", "report.xlsx"),
+        {"operation": "save_schedule", "screen": "output", "export_format": "excel"},
+    )
+
+    # Assert
+    assert "report.xlsx" in message
+    assert "Traceback" not in message
+    assert "PermissionError" not in message
+
+
+# ===========================================================================
+# TC-AC-022: map_error never leaks raw exception text for an unmapped error;
+# it shows a safe, category-appropriate generic message instead.
+# ===========================================================================
+def test_map_error_unknown_exception_is_safe_generic(controller):
+    # Act
+    message = controller.map_error(
+        Exception("some internal detail nobody should see"),
+        {"operation": "render_calendar", "screen": "output"},
+    )
+
+    # Assert
+    assert "some internal detail nobody should see" not in message
+    assert "Traceback" not in message
+    assert message  # always something to show
+
+
+# ===========================================================================
+# TC-AC-023: map_error logs the technical detail even though the returned
+# message is the clean one (verifies the log is not silently skipped).
+# ===========================================================================
+def test_map_error_logs_technical_detail(controller, monkeypatch):
+    # Arrange
+    logged = []
+    monkeypatch.setattr(
+        controller._error_logger, "log", lambda info, cause=None: logged.append((info, cause))
+    )
+    exc = ValueError("Row 3: invalid date")
+
+    # Act
+    message = controller.map_error(exc, {"operation": "load_file", "screen": "input"})
+
+    # Assert
+    assert message == "Row 3: invalid date"
+    assert len(logged) == 1
+    info, cause = logged[0]
+    assert info.technical_message == "ValueError: Row 3: invalid date"
+    assert cause is exc

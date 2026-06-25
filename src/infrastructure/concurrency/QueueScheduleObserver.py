@@ -185,8 +185,14 @@ class QueueScheduleObserver(IScheduleObserver):
         self._flush_buffer()
         self._queue.put(("FINISHED", None))
 
-    def on_error(self, message: str) -> None:
-        """Send an error message to the main process."""
+    def on_error(self, message) -> None:
+        """Send an error to the main process.
+
+        ``message`` may be a plain user-facing string (legacy callers) or a
+        serialised ``AppErrorInfo`` payload (a plain dict, built by
+        ``build_process_error_payload``) — either is just forwarded as-is;
+        ``SchedulerWorker`` on the receiving end knows how to unpack both.
+        """
         self._put_to_queue(("ERROR", message))
 
     def _to_schedule_dto(self, schedule: Any) -> ScheduleDTO:

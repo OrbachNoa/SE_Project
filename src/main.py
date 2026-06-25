@@ -1,9 +1,13 @@
 import argparse
+import logging
 import os
 import sys
 import time
 
 from data.programs import programs_data
+from src.application.errors.ErrorModel import AppErrorInfo, ErrorSeverity
+from src.application.errors.ExceptionMapper import default_registry
+from src.application.errors.ErrorLogger import ErrorLogger
 from src.file_io.validators.FileValidator import validate_all_files
 from src.file_io.parsers.ParserFactory import ParserFactory
 from src.logic.SlotBuilder import SlotBuilder
@@ -127,9 +131,31 @@ def _validate_constraints_config(config: ConstraintsConfig) -> None:
         raise ValueError("--elective-conflict-cap must be a non-negative integer")
 
 
+# Exit codes by severity, so callers/scripts can branch on the kind of failure.
+_EXIT_CODE_BY_SEVERITY = {
+    ErrorSeverity.INFO: 0,
+    ErrorSeverity.WARNING: 1,
+    ErrorSeverity.ERROR: 1,
+    ErrorSeverity.CRITICAL: 2,
+}
+
+
+def _report_and_exit(info: AppErrorInfo) -> None:
+    """Print the clean message (never a traceback) and exit with a coded status."""
+    print(f"Error: {info.user_message}", file=sys.stderr)
+    sys.exit(_EXIT_CODE_BY_SEVERITY.get(info.severity, 1))
+
+
 def main():
     """Main entry point for the CLI application."""
     args = _parse_args()
+    # Route every failure through the same mapper the GUI uses, so the CLI shows
+    # a clean message and a consistent exit code instead of a raw traceback.
+    # Technical detail goes to the log (a NullHandler keeps it off stderr unless
+    # the host configured logging), the user only sees user_message.
+    registry = default_registry()
+    error_logger = ErrorLogger()
+    logging.getLogger("se_project.errors").addHandler(logging.NullHandler())
     try:
         # Validate source files before starting the pipeline
         validate_all_files([args.courses, args.periods, args.programs])
@@ -178,9 +204,12 @@ def main():
 
         print(f"Total execution time: {total_time:.4f} seconds")
 
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    except Exception as exc:
+        # InfeasibleScheduleError, MemoryError, file/validation errors and any
+        # unexpected fault all funnel through the registry into one clean report.
+        info = registry.map(exc, {"argv": sys.argv})
+        error_logger.log(info, cause=exc)
+        _report_and_exit(info)
 
 
 if __name__ == "__main__":

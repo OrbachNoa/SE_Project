@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import List
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QWidget
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QMessageBox, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from gui.features.input.widgets.ProgramSelectorDialog import ProgramSelectorDialog
@@ -79,7 +79,29 @@ class ProgramSelectorCardWidget(QFrame):
     # This built-in function triggers whenever the user clicks anywhere inside this card.
     def mousePressEvent(self, event) -> None:
         """Open the program selection popup when the selector card is clicked."""
+        # No programs to choose from yet (no courses loaded) - tell the user why.
+        if not self._program_view_models:
+            QMessageBox.information(
+                self,
+                "No courses loaded",
+                "Please load a courses file before selecting study programs.",
+            )
+            return
         self._open_program_dialog()
+
+    # Replaces the set of choosable programs (e.g. after a courses file load).
+    # Selections that no longer exist in the new list are dropped automatically.
+    def set_program_view_models(self, program_view_models: List[ProgramViewModel]) -> None:
+        self._program_view_models = program_view_models
+        valid_ids = {vm.program_id for vm in program_view_models}
+        filtered_ids = [pid for pid in self._selected_program_ids if pid in valid_ids]
+
+        changed = filtered_ids != self._selected_program_ids
+        self._selected_program_ids = filtered_ids
+        self._refresh_program_summary()
+
+        if changed:
+            self.selection_changed.emit()
 
     # Opens the dialog. If the user picks new programs, it saves them and updates the screen.
     def _open_program_dialog(self) -> None:
@@ -114,7 +136,11 @@ class ProgramSelectorCardWidget(QFrame):
         
         # If nothing is selected, just show a gray placeholder text
         if count == 0:
-            placeholder = QLabel("Click to select programs")
+            if self._program_view_models:
+                placeholder_text = "Click to select programs"
+            else:
+                placeholder_text = "Load courses to select programs"
+            placeholder = QLabel(placeholder_text)
             placeholder.setObjectName("card-placeholder")
             self._summary_layout.addWidget(placeholder)
             return

@@ -21,6 +21,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from src.application.services.ClusteringCoordinator import ClusteringCoordinator, ClusteringRun
 from src.logic.clustering.ClusterConfig import ClusterConfig
+from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory
+from src.application.errors.ExceptionMapper import default_registry
 
 
 class ClusterWorker(QThread):
@@ -39,6 +41,9 @@ class ClusterWorker(QThread):
         self._coordinator = coordinator
         self._config = config
         self._k = k
+        self._errors = default_registry()
+        # The structured form of the last failure; failed stays a str signal.
+        self.last_error: AppErrorInfo = None
 
     def run(self) -> None:
         try:
@@ -47,4 +52,9 @@ class ClusterWorker(QThread):
             run = self._coordinator.cluster(self._k)
             self.finished.emit(run)
         except Exception as exc:
-            self.failed.emit(str(exc))
+            info = self._errors.map(exc, {
+                "category": ErrorCategory.SCHEDULING,
+                "operation": "clustering",
+            })
+            self.last_error = info
+            self.failed.emit(info.user_message)

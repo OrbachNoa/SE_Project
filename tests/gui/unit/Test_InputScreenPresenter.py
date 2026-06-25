@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock
 from src.gui.features.input.InputScreenPresenter import InputScreenPresenter
 from src.application.ImportBoundary import ImportMode, ImportResult
+from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 
 # ===========================================================================
 # TC-ISP-001: test refresh generate button state when both files are missing.
@@ -90,6 +91,28 @@ def test_presenter_validate_programs_success(mock_controller, mock_router):
     assert view.set_program_error.call_args[0] == ("",)
 
 # ===========================================================================
+# TC-ISP-006b: test generate clicked shows a dialog and does not start
+# generation when no study program is selected.
+# ===========================================================================
+def test_presenter_on_generate_clicked_no_programs(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    view.selected_program_ids.return_value = []
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_generate_clicked()
+
+    # Assert
+    assert view.set_program_error.call_args[0] == ("Please select at least one study program.",)
+    assert view.show_program_selection_error.call_count == 1
+    assert view.show_program_selection_error.call_args[0] == (
+        "Please select at least one study program before generating a schedule.",
+    )
+    assert mock_controller.generate_schedules.call_count == 0
+    assert view.set_running_mode.call_count == 0
+
+# ===========================================================================
 # TC-ISP-006: test generate clicked starts schedule generation.
 # ===========================================================================
 def test_presenter_on_generate_clicked(mock_controller, mock_router):
@@ -130,6 +153,61 @@ def test_presenter_on_load_courses_success(mock_controller, mock_router):
     assert presenter._courses_loaded is True
     assert view.mark_courses_loaded.call_count == 1
     assert view.mark_courses_loaded.call_args[0] == (10,)
+
+# ===========================================================================
+# TC-ISP-007b: test load courses success narrows the available programs to
+# those found in the loaded courses, before refreshing the generate button.
+# ===========================================================================
+def test_presenter_on_load_courses_updates_available_programs(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    view.prompt_for_file.return_value = "courses.csv"
+    view.is_replace_mode_selected.return_value = True
+    view.selected_program_ids.return_value = ["83108"]
+
+    res = ImportResult(success=True, loaded_count=3, errors=[])
+    mock_controller.load_file.return_value = res
+    courses = ["course-stub"]
+    mock_controller.get_loaded_courses.return_value = courses
+
+    program_vms = [ProgramViewModel(program_id="83108", display_name="Industrial Eng.", course_count=3)]
+    mapper = MagicMock()
+    mapper.to_program_vms.return_value = program_vms
+    mapper.to_program_courses_vm.return_value = []
+    mock_controller.get_mapper.return_value = mapper
+
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_load_courses_clicked()
+
+    # Assert
+    mapper.to_program_vms.assert_called_once_with(courses)
+    assert view.set_available_programs.call_count == 1
+    assert view.set_available_programs.call_args[0] == (program_vms,)
+
+    # The selector must be refreshed before the generate button validates against it
+    method_names = [call[0] for call in view.method_calls]
+    assert method_names.index("set_available_programs") < method_names.index("set_generate_button_state")
+
+# ===========================================================================
+# TC-ISP-007c: test load courses failure never touches the program selector.
+# ===========================================================================
+def test_presenter_on_load_courses_failure_skips_available_programs(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    view.prompt_for_file.return_value = "courses.csv"
+    view.is_replace_mode_selected.return_value = True
+
+    res = ImportResult(success=False, loaded_count=0, errors=["CSV parser error"])
+    mock_controller.load_file.return_value = res
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_load_courses_clicked()
+
+    # Assert
+    assert view.set_available_programs.call_count == 0
 
 # ===========================================================================
 # TC-ISP-008: test load courses handles failure.
