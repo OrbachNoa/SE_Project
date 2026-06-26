@@ -105,6 +105,10 @@ def build_controller() -> AppController:
     )
 
     scheduler = SchedulingService(repository=schedule_repository)
+    # Spawn the persistent worker-process pool now, in the background, so the
+    # OS-process / interpreter cold-start cost lands while the user is loading
+    # files instead of on their first "Generate" click.
+    scheduler.warm_up_async()
     exporter  = ScheduleExportService(writer=TextFileWriter())
     mapper    = ViewModelMapper()
 

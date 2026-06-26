@@ -29,19 +29,15 @@ from src.application.errors.ExceptionMapper import (
     default_registry,
 )
 from src.application.errors.ErrorLogger import ErrorLogger
-from src.logic.clustering.llm import (
-    ClusterRequestTranslator,
-    OpenAICompatibleLLMClient,
-)
 from src.config import PROGRESS_POLL_INTERVAL_MS
 
-# Import the formatting and writing utilities
+# Import the formatting utility (cheap, stdlib-only -- safe at module level).
 from src.file_io.formatters.ScheduleCsvFormatter import format_schedule_csv
-from src.file_io.writers.BaseExcelWriter import BaseExcelWriter
 
 if TYPE_CHECKING:
     from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
     from src.application.dto.ScheduleDTO import ScheduleDTO
+    from src.logic.clustering.llm import ClusterRequestTranslator
 
 
 class AppController(QObject):
@@ -100,12 +96,10 @@ class AppController(QObject):
         self._cluster_run = None
         self._active_k = 0
         self._cluster_interpretation = ""
-        # Free-text → ClusterConfig translator. The LLM client reads its API key
-        # from the environment; with no key it stays disabled and the translator
-        # falls back to its dependency-free keyword parser.
-        self._request_translator = ClusterRequestTranslator(
-            OpenAICompatibleLLMClient.from_env()
-        )
+        # Free-text → ClusterConfig translator. Built lazily (see
+        # _get_request_translator) so importing this optional LLM-backed
+        # feature doesn't cost every app launch.
+        self._request_translator: Optional["ClusterRequestTranslator"] = None
 
     # ------------------------------------------------------------------
     # File loading & input state updates
@@ -151,9 +145,13 @@ class AppController(QObject):
         self._disconnect_worker()
         # Cancel the previous worker before starting a new run. Without this, old worker
         # processes keep writing to the (now-cleared) SQLite repository and keep emitting
-        # signals that corrupt the new run's state.
+        # signals that corrupt the new run's state. The persistent worker pool reuses the
+        # same result queue across runs, so we also wait for the old QThread's run() loop
+        # to actually exit -- otherwise it could still be reading messages meant for the
+        # new run (a bounded wait; cancellation typically settles in well under a second).
         if self._worker is not None:
             self._worker.cancel()
+            self._worker.wait(2000)
         self._worker = None
         self._early_nav_fired = False
 
@@ -234,6 +232,10 @@ class AppController(QObject):
 
     def save_schedule_excel(self, index: int, path: str) -> None:
         """Exports the main schedule directly to an auto-fitted Excel file."""
+        # Imported lazily: openpyxl (+ numpy) costs ~580ms to import, only
+        # needed if/when the user actually exports to Excel.
+        from src.file_io.writers.BaseExcelWriter import BaseExcelWriter
+
         schedule_view = self.get_schedule_view(index)
         # Convert the complex view model into a flat table structure
         headers, rows = format_schedule_csv(schedule_view)
@@ -316,6 +318,18 @@ class AppController(QObject):
         getter = getattr(state, "get_repository", None)
         return getter() if callable(getter) else None
 
+    def _get_request_translator(self) -> "ClusterRequestTranslator":
+        """Build (once) and return the free-text -> ClusterConfig translator.
+
+        Imported and constructed lazily: this pulls in the optional LLM
+        client, only needed when the user actually types a free-text
+        clustering request -- not on every app launch.
+        """
+        if self._request_translator is None:
+            from src.logic.clustering.llm import ClusterRequestTranslator, OpenAICompatibleLLMClient
+            self._request_translator = ClusterRequestTranslator(OpenAICompatibleLLMClient.from_env())
+        return self._request_translator
+
     def _invalidate_clustering(self) -> None:
         """Drop any cached clustering session (e.g. after a new generation run).
 
@@ -394,7 +408,7 @@ class AppController(QObject):
         if repo is None:
             raise RuntimeError("clustering requires the SQLite-backed result store")
 
-        translation = self._request_translator.translate(text)
+        translation = self._get_request_translator().translate(text)
         if k is not None:
             from src.logic.clustering.ClusterConfig import K_MODE_FIXED
             translation.config.k_mode = K_MODE_FIXED
@@ -483,6 +497,9 @@ class AppController(QObject):
 
     def save_cluster_schedule_excel(self, cluster_id: int, index_in_cluster: int, path: str) -> None:
         """Exports a specific cluster family schedule directly to an auto-fitted Excel file."""
+        # Imported lazily -- see save_schedule_excel for why.
+        from src.file_io.writers.BaseExcelWriter import BaseExcelWriter
+
         # Retrieve the specific schedule view model for this cluster item
         schedule_view = self.get_cluster_schedule_view(cluster_id, index_in_cluster)
         # Format the data and write to the file
@@ -512,6 +529,7 @@ class AppController(QObject):
     def on_app_closing(self) -> None:
         """Acts as a cleanup intercept hook to eliminate zombie or orphan background worker allocations."""
         self.cancel_scheduling()
+        self._scheduler.shutdown_pool()
 
     # ------------------------------------------------------------------
     # Private — SchedulerWorker signal handlers

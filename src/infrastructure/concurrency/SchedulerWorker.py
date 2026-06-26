@@ -33,7 +33,7 @@ class SchedulerWorker(QThread):
     search_finished       = pyqtSignal()
     error_occurred        = pyqtSignal(str)
 
-    def __init__(self, queue: Queue, cancel_event: Event, processes: List[Process], repository: SQLiteScheduleRepository, max_results: int = None) -> None:
+    def __init__(self, queue: Queue, cancel_event: Event, processes: List[Process], repository: SQLiteScheduleRepository, max_results: int = None, owns_processes: bool = True) -> None:
         super().__init__()
 
         # Shared queue used by all scheduler processes to send messages to this worker.
@@ -44,6 +44,11 @@ class SchedulerWorker(QThread):
         self._processes = processes
         # Repository used to save compressed schedule batches to SQLite.
         self._repository = repository
+        # False when `processes` are persistent workers owned by a long-lived
+        # pool (SchedulingService): this worker must then never start, join,
+        # or terminate them -- only the (per-run) cancel_event may signal them
+        # to stop, since the same OS processes are reused for the next run.
+        self._owns_processes = owns_processes
         # Global result cap. With dynamic work-stealing there are no per-process
         # budgets, so the cap is enforced here across all processes. None disables it.
         self._max_results = max_results
@@ -73,9 +78,10 @@ class SchedulerWorker(QThread):
 
     def run(self) -> None:
         """Starts the scheduler processes and keeps reading messages from the queue."""
-        # Start all background processes that perform the heavy scheduling work.
-        for process in self._processes:
-            process.start()
+        if self._owns_processes:
+            # Start all background processes that perform the heavy scheduling work.
+            for process in self._processes:
+                process.start()
 
         try:
             while True:
@@ -83,14 +89,23 @@ class SchedulerWorker(QThread):
                     # Wait for the next message from any scheduler process.
                     msg_type, payload = self._queue.get(timeout=1.0)
                 except queue.Empty:
-                    # No message arrived during the timeout. 
-                    # If all processes are dead, decide whether the search ended normally or crashed.
-                    if not any(p.is_alive() for p in self._processes):
-                        if self._cancel_event.is_set():
+                    # No message arrived during the timeout.
+                    if self._owns_processes:
+                        # If all processes are dead, decide whether the search ended normally or crashed.
+                        if not any(p.is_alive() for p in self._processes):
+                            if self._cancel_event.is_set():
+                                break
+                            # Fallback for cases where a process ended without sending FINISHED.
+                            self._emit_terminal_state()
                             break
-                        # Fallback for cases where a process ended without sending FINISHED.
-                        self._emit_terminal_state()
-                        break
+                    else:
+                        # Persistent pool: processes stay alive between runs, so
+                        # "all dead" never naturally happens here. Still watch
+                        # for an individual worker crashing unexpectedly.
+                        crashed = [p for p in self._processes if p.exitcode not in (0, None)]
+                        if crashed:
+                            self._emit_terminal_state()
+                            break
                     # Some processes are still alive, so keep waiting for more messages.
                     continue
                 except ValueError:
@@ -147,6 +162,13 @@ class SchedulerWorker(QThread):
         if self._cancel_event is not None:
             self._cancel_event.set()
 
+        if not self._owns_processes:
+            # Persistent pool: the cancel_event alone tells the (reused) OS
+            # processes to stop this run. Joining/terminating them here would
+            # kill processes the pool needs for the next "Generate" click.
+            self._drain_queue()
+            return
+
         # First, give each process a short chance to stop normally.
         for process in self._processes:
             if process is not None and process.is_alive():
@@ -158,19 +180,20 @@ class SchedulerWorker(QThread):
                 process.terminate()
                 process.join(timeout=1.0)
 
-        # Clear remaining queue messages so old data will not stay in the IPC pipe.
-        try:
-            while not self._queue.empty():
-                self._queue.get_nowait()
-        except (queue.Empty, ValueError, OSError):
-            pass
+        self._drain_queue()
 
     def _shutdown(self) -> None:
         """
-        Cleans up all scheduler processes after the worker loop ends. 
-        This runs for every ending case: normal finish, error, or cancellation. 
-        It does not emit GUI signals; it only releases process and queue resources.
+        Cleans up after the worker loop ends. Runs for every ending case:
+        normal finish, error, or cancellation. Does not emit GUI signals; it
+        only releases process and queue resources.
         """
+        if not self._owns_processes:
+            # Persistent pool: never join/terminate these processes -- just
+            # drain leftovers so the queue is clean for the pool's next run.
+            self._drain_queue()
+            return
+
         # If some processes are still alive, ask them to stop first.
         if any(p.is_alive() for p in self._processes):
             if self._cancel_event is not None:
@@ -187,13 +210,16 @@ class SchedulerWorker(QThread):
             else:
                 process.join()
 
-        # Clear leftover queue messages so the queue can close cleanly.
+        self._drain_queue()
+
+    def _drain_queue(self) -> None:
+        """Clear remaining queue messages so stale data never leaks into the next read."""
         try:
             while not self._queue.empty():
                 self._queue.get_nowait()
         except (queue.Empty, ValueError, OSError):
             pass
-        
+
 
     def _handle_schedule_batch(self, payload) -> bool:
         """Saves one compressed schedule batch and notifies the GUI how many schedules were added."""
