@@ -1,3 +1,22 @@
+"""Unit tests for InputScreen — the file-loading and program-selection screen.
+
+Covers presence and labeling of the courses/periods load buttons, the
+default replace-mode selection, that selecting programs updates the count
+badge, that generate is gated on having both files loaded and at least one
+program selected (with a blocking warning dialog on the missing-program
+path), and that a failed file import surfaces a critical message box
+listing the parser's specific errors rather than a generic failure.
+
+Conventions:
+- Each test carries a unique TC-IN-UI-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections. Where
+  construction itself is the behaviour under test, the construction call
+  is placed under Act rather than Arrange.
+- `mock_controller` and `mock_router` come from the shared fixtures in
+  tests/conftest.py; InputScreen needs a live QApplication, provided via
+  the shared `qapp` fixture (`pytestmark = pytest.mark.usefixtures("qapp")`).
+"""
 import pytest
 from unittest.mock import MagicMock, patch
 from src.gui.features.input.InputScreen import InputScreen
@@ -6,29 +25,32 @@ from src.application.ImportBoundary import ImportMode
 pytestmark = pytest.mark.usefixtures("qapp")
 
 # ===========================================================================
-# TC-IN-UI-001: test courses upload button.
+# TC-IN-UI-001: the courses-load button must exist and carry a label that
+# names what it loads — not just a generic "Load" button.
 # ===========================================================================
 def test_courses_upload_button_exists(mock_controller, mock_router):
     # Act
     screen = InputScreen(mock_controller, mock_router)
-    
+
     # Assert
     assert screen._courses_load_btn is not None
     assert "Load Courses" in screen._courses_load_btn.text()
 
 # ===========================================================================
-# TC-IN-UI-002: test periods upload button.
+# TC-IN-UI-002: the periods-load button must exist and carry a label that
+# names what it loads, independent of the courses button.
 # ===========================================================================
 def test_periods_upload_button_exists(mock_controller, mock_router):
     # Act
     screen = InputScreen(mock_controller, mock_router)
-    
+
     # Assert
     assert screen._periods_load_btn is not None
     assert "Load Periods" in screen._periods_load_btn.text()
 
 # ===========================================================================
-# TC-IN-UI-003: test replace mode is default selected.
+# TC-IN-UI-003: replace mode must be selected by default on a fresh screen
+# — update mode requires an explicit user choice, never the starting state.
 # ===========================================================================
 def test_replace_mode_default_selected(mock_controller, mock_router):
     # Act

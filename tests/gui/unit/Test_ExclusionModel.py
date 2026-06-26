@@ -1,10 +1,30 @@
+"""Unit tests for ExclusionModel — the calendar editor's per-period state.
+
+The model wraps a list of PeriodEditViewModel objects and tracks which one
+is currently being edited. Navigating to another period auto-saves the
+in-memory edits (date range, excluded dates) on the period being left,
+before switching — the screen never needs an explicit "save" step between
+periods. Tests cover construction validation, initial state, date-exclusion
+toggling, the auto-save-on-navigate behaviour in both directions, the
+dates_between() helper's boundary cases, and apply().
+
+Conventions:
+- Each test carries a unique TC-EXM-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections, except
+  where the assertion is itself the pytest.raises context manager.
+- No conftest fixture models PeriodEditViewModel or ExclusionModel, so
+  every test builds them directly; this is a plain Python class with no
+  Qt dependency, so no `qapp` fixture is needed either.
+"""
 import pytest
 from src.gui.common.components.ExclusionModel import ExclusionModel
 from src.gui.common.helpers import dates_between
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
 # ===========================================================================
-# TC-EXM-001: test constructor validation.
+# TC-EXM-001: constructing with an empty period list must raise — there is
+# no valid "no periods" state for the editor to fall back to.
 # ===========================================================================
 def test_exclusion_model_init_validation():
     # Act & Assert
@@ -12,7 +32,8 @@ def test_exclusion_model_init_validation():
         ExclusionModel([])
 
 # ===========================================================================
-# TC-EXM-002: test model loads first period properties on init.
+# TC-EXM-002: construction must load the first period's date range and
+# excluded dates immediately, with excluded_dates exposed as a set.
 # ===========================================================================
 def test_exclusion_model_loads_first_period():
     # Arrange
@@ -45,7 +66,8 @@ def test_exclusion_model_loads_first_period():
     assert model.excluded_dates == {"2026-06-02"}
 
 # ===========================================================================
-# TC-EXM-003: test toggle date addition (on).
+# TC-EXM-003: toggling a date not yet excluded must add it and report
+# True (the new excluded state), so the UI knows which style to apply.
 # ===========================================================================
 def test_exclusion_model_toggle_date_on():
     # Arrange
@@ -68,7 +90,8 @@ def test_exclusion_model_toggle_date_on():
     assert "2026-06-02" in model.excluded_dates
 
 # ===========================================================================
-# TC-EXM-004: test toggle date removal (off).
+# TC-EXM-004: toggling an already-excluded date must remove it and report
+# False — the toggle has to be reversible, not a one-way add.
 # ===========================================================================
 def test_exclusion_model_toggle_date_off():
     # Arrange
@@ -91,7 +114,9 @@ def test_exclusion_model_toggle_date_off():
     assert "2026-06-02" not in model.excluded_dates
 
 # ===========================================================================
-# TC-EXM-005: test navigation next automatically saves the current period.
+# TC-EXM-005: move_next() must write the in-memory edits (date range,
+# excluded dates) back onto the period being left, before switching — the
+# screen has no separate "save" button between periods.
 # ===========================================================================
 def test_exclusion_model_navigation_next_saves_state():
     # Arrange
@@ -132,7 +157,8 @@ def test_exclusion_model_navigation_next_saves_state():
     assert vms[0].excluded_dates == ["2026-06-03"]
 
 # ===========================================================================
-# TC-EXM-006: test navigation previous automatically saves the current period.
+# TC-EXM-006: move_previous() must auto-save just like move_next() — the
+# save-on-navigate behaviour is symmetric in both directions.
 # ===========================================================================
 def test_exclusion_model_navigation_previous_saves_state():
     # Arrange
@@ -167,7 +193,8 @@ def test_exclusion_model_navigation_previous_saves_state():
     assert vms[1].excluded_dates == ["2026-07-02"]
 
 # ===========================================================================
-# TC-EXM-007: test dates_between static helper for a standard range.
+# TC-EXM-007: dates_between() must enumerate every calendar date from start
+# to end inclusive — the editor grid needs one cell per date in range.
 # ===========================================================================
 def test_exclusion_model_dates_between_range():
     # Act
@@ -177,7 +204,8 @@ def test_exclusion_model_dates_between_range():
     assert dates == ["2026-06-01", "2026-06-02", "2026-06-03"]
 
 # ===========================================================================
-# TC-EXM-008: test dates_between static helper for a single date.
+# TC-EXM-008: a one-day range (start == end) must return that single date,
+# not an empty list — the inclusive-range logic must not off-by-one here.
 # ===========================================================================
 def test_exclusion_model_dates_between_single():
     # Act
@@ -187,7 +215,8 @@ def test_exclusion_model_dates_between_single():
     assert dates == ["2026-06-01"]
 
 # ===========================================================================
-# TC-EXM-009: test dates_between static helper for an invalid range.
+# TC-EXM-009: an inverted range (start after end) must return an empty
+# list rather than raising or iterating backwards.
 # ===========================================================================
 def test_exclusion_model_dates_between_invalid():
     # Act
@@ -197,7 +226,8 @@ def test_exclusion_model_dates_between_invalid():
     assert dates == []
 
 # ===========================================================================
-# TC-EXM-010: test date_list method.
+# TC-EXM-010: date_list() must expose the current period's full date range
+# (via dates_between) so the editor can render one cell per date.
 # ===========================================================================
 def test_exclusion_model_date_list():
     # Arrange
@@ -219,7 +249,8 @@ def test_exclusion_model_date_list():
     assert dates == ["2026-06-01", "2026-06-02"]
 
 # ===========================================================================
-# TC-EXM-011: test apply saves current period and returns viewmodels list.
+# TC-EXM-011: apply() must save the current period's edits and return the
+# full view-model list — the caller needs the saved data back to persist it.
 # ===========================================================================
 def test_exclusion_model_apply():
     # Arrange

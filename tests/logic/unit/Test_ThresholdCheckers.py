@@ -6,18 +6,29 @@ checkers (ProgramYearConflictChecker, MoedOrderChecker), each of these is driven
 by a user-configurable threshold k that is set in the Settings screen, and each
 one can be turned on or off independently:
 
-    - MinDaysBetweenExamsChecker  (requirements 2.1 and 2.2)
-    - ElectiveConflictCapChecker  (requirement 2.3)
-    - ExamSpanChecker             (requirement 2.4)
-    - MaxExamsPerDayChecker       (requirement 2.5)
+    - MinDaysBetweenExamsChecker  (minimum gap, scoped to obligatory-only or any course)
+    - ElectiveConflictCapChecker  (same-day elective pair-conflict cap)
+    - ExamSpanChecker             (minimum span across a mandatory exam group)
+    - MaxExamsPerDayChecker       (maximum exams on any single day)
 
 They live in a separate file from Test_Checkers.py so that neither file grows
 unreasonably large; the split is by checker family (fixed-rule vs. configurable
-threshold), not by version.
+threshold), not by version. TC-CHK numbering continues from Test_Checkers.py
+(which ends at TC-CHK-011) rather than restarting, since both files share one
+checker-family identifier covering every IConflictChecker implementation.
 
 Convention shared by every checker: check() returns True when the candidate
 placement VIOLATES the rule (a conflict, reject it) and False when the placement
-is acceptable. All tests follow the Arrange-Act-Assert (AAA) pattern.
+is acceptable.
+
+Conventions:
+- Each test carries a unique TC-CHK-NNN identifier in the comment block
+  above its definition, grouped under a section divider per checker.
+- Each test body is split into Arrange / Act / Assert sections.
+- `make_course`, `make_program_entry`, and `make_assignment` come from the
+  shared fixtures in tests/conftest.py; the `_make_*_checker()` and
+  `_make_slot()` helpers below are local since no conftest fixture models
+  a prepared threshold checker or a bare Slot.
 """
 from datetime import date
 

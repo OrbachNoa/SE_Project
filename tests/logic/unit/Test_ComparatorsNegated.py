@@ -1,3 +1,26 @@
+"""
+Tests for the negated comparators: MaxElectiveConflictsComparator and
+MaxExamsPerDayComparator.
+
+Both wrap a lower-is-better metric (peak_elective_conflict,
+max_exams_per_day respectively) and expose it as a higher-is-better sort
+key by negating it, so a calmer/lighter schedule produces a less negative
+key and is ranked first. These cases confirm that negation, stability for
+ties, isolation from the sibling metric, and boundary values all hold.
+
+TC-ID family: this file shares the "CMP" prefix with Test_Comparators.py.
+That sibling owns TC-CMP-001..012 (MinMandatoryGapComparator,
+AvgAllCoursesGapComparator, MandatorySpanComparator); this file continues
+the same family with TC-CMP-013..020 for the two negated comparators
+above. The shared prefix and continuous numbering are intentional and
+should not be renumbered independently.
+
+Test bodies follow the Arrange / Act / Assert structure, marked inline.
+
+Fixtures: uses the shared make_course, make_program_entry, and
+make_assignment factory fixtures from tests/conftest.py to build courses
+and schedules; no other shared fixtures from conftest.py are used.
+"""
 from datetime import date
 import pytest
 

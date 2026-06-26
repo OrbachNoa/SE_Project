@@ -1,3 +1,30 @@
+"""High-level correctness tests for the scheduling algorithm end-to-end.
+
+These tests run the real SlotBuilder + Scheduler + checkers pipeline (no
+mocks) and assert on properties that span multiple classes: no duplicate
+schedules, every returned schedule actually passes every active checker,
+elective-across-program date sharing is genuinely allowed, Moed ALEPH and
+BET exclusions don't leak into each other, the engine backtracks instead
+of giving up after the first conflict, an orphan course's semester
+mismatch raises a clear, named error, configurable threshold checkers
+(min-gap, max-per-day) hold for every result, an impossible threshold
+yields zero results rather than crashing or silently violating the rule,
+and the full checker + scorer + reranker pipeline produces a correctly
+and verifiably descending order. Several tests assert a "sanity" condition
+first (a non-trivial result count, real variance in scores) specifically
+so the main assertion can't pass vacuously on a degenerate scenario.
+
+Conventions:
+- Each test carries a unique TC-BEH-NNN identifier in the comment block
+  above its definition, numbered sequentially. TC-BEH-003 does not exist
+  in this file — left as a gap rather than renumbering the rest, to avoid
+  breaking traceability for no functional gain.
+- Each test body is split into Arrange / Act / Assert sections.
+- `make_course`, `make_program_entry`, and `make_period` come from the
+  shared fixtures in tests/conftest.py; `_default_checkers()` and
+  `_schedule_signature()` below are local helpers with no conftest
+  equivalent.
+"""
 from datetime import date
 import pytest
 

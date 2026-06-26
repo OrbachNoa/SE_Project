@@ -1,13 +1,35 @@
+"""Integration tests for HybridScheduleResultState's SQLite-backed paging.
+
+Unlike the in-memory ScheduleResultState, this state keeps only the
+currently visible window of schedules in memory and delegates counting,
+windowing, and clearing to a repository (mocked here). Tests cover
+construction defaults, count/sqlite_count delegation, the
+is_first_window_ready readiness check, total_pages' ceiling-division
+arithmetic across boundary values, load_page's window-fetch and index
+reset, its bounds-checking, set_schedules' reset-and-clear, and
+add_schedules_batch's fetch-only-when-under-capacity behaviour.
+
+Conventions:
+- Each test carries a unique TC-HYB-STA-NNN identifier in the comment
+  block above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections. The
+  Act/Assert merge into one block only where the assertion is itself a
+  `pytest.raises` context manager — plain return-value checks keep
+  separate Act and Assert sections.
+- `mock_repository` and `make_schedule_dto` come from the shared fixtures
+  in tests/conftest.py.
+"""
 import pytest
 from src.application.state.HybridScheduleResultState import HybridScheduleResultState
 
 # ===========================================================================
-# TC-HYB-STA-001: Verify that HybridScheduleResultState initializes correctly.
+# TC-HYB-STA-001: construction must set current_page/current_index to 0
+# and store the repository and window_size exactly as given.
 # ===========================================================================
 def test_hybrid_state_initialization(mock_repository):
-    # Arrange & Act
+    # Act
     state = HybridScheduleResultState(mock_repository, window_size=10)
-    
+
     # Assert
     assert state.current_page == 0
     assert state.current_index == 0
@@ -15,31 +37,41 @@ def test_hybrid_state_initialization(mock_repository):
     assert state._window_size == 10
 
 # ===========================================================================
-# TC-HYB-STA-002: Verify that count methods delegate to the repository.
+# TC-HYB-STA-002: count() and sqlite_count() must both delegate to the
+# repository's count() — they report the same underlying number, not two
+# independently tracked counters that could drift apart.
 # ===========================================================================
 def test_hybrid_state_count(mock_repository):
     # Arrange
     mock_repository.count.return_value = 42
     state = HybridScheduleResultState(mock_repository, window_size=10)
-    
-    # Act & Assert
-    assert state.count() == 42
-    assert state.sqlite_count() == 42
+
+    # Act
+    count_result = state.count()
+    sqlite_count_result = state.sqlite_count()
+
+    # Assert
+    assert count_result == 42
+    assert sqlite_count_result == 42
     mock_repository.count.assert_called()
 
 # ===========================================================================
-# TC-HYB-STA-003: Verify is_first_window_ready returns True if repository is not empty.
+# TC-HYB-STA-003: is_first_window_ready() must track the repository's
+# count directly — false while empty, true as soon as any row exists.
 # ===========================================================================
 def test_hybrid_state_is_first_window_ready(mock_repository):
     # Arrange
     state = HybridScheduleResultState(mock_repository, window_size=10)
-    
-    # Act & Assert
+
+    # Act
     mock_repository.count.return_value = 0
-    assert not state.is_first_window_ready()
-    
+    ready_when_empty = state.is_first_window_ready()
     mock_repository.count.return_value = 5
-    assert state.is_first_window_ready()
+    ready_when_populated = state.is_first_window_ready()
+
+    # Assert
+    assert ready_when_empty is False
+    assert ready_when_populated is True
 
 # ===========================================================================
 # TC-HYB-STA-004: Verify total_pages computes the ceiling of pages correctly.

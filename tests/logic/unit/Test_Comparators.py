@@ -1,3 +1,23 @@
+"""Unit tests for the non-negated comparator predicates used to rank and sort
+exam schedules: MinMandatoryGapComparator, AvgAllCoursesGapComparator, and
+MandatorySpanComparator. Each comparator exposes a `key()` used by `sorted()`
+to order candidate schedules by a single scheduling-quality metric, so these
+tests check ordering direction, sort stability on ties, agreement with the
+underlying Metrics function, and the sentinel/zero value returned when a
+schedule has no qualifying pair of exams to measure.
+
+TC-ID family: shares the "CMP" prefix with Test_ComparatorsNegated.py — this
+file owns TC-CMP-001..012 (the direct comparators above), and the sibling
+file continues the same family with TC-CMP-013..020 (the negated/inverted
+comparators). Numbering is intentionally split across the two files and must
+stay contiguous between them.
+
+Test bodies follow Arrange/Act/Assert. Fixtures come from tests/conftest.py:
+make_course, make_program_entry, and make_assignment are used to build the
+courses and assignments under test; ExamSchedule instances are constructed
+directly in each test rather than via the empty_schedule fixture.
+"""
+
 from datetime import date
 import pytest
 

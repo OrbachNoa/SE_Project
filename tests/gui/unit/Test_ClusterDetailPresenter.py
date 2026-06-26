@@ -3,34 +3,43 @@
 Every export failure routes through controller.map_error (never a raw
 f"...{error}"), and map_export_error gives the view-layer PDF exporter a way
 back to that same mapper for failures that happen outside any try/except here.
+
+Conventions:
+- Each test carries a unique TC-CDP-NNN identifier in the comment block above
+  its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- controller and router come from the shared mock_controller / mock_router
+  fixtures (tests/conftest.py); the view has no shared fixture, so it is
+  built locally by the _presenter() helper below.
 """
 from unittest.mock import MagicMock
 
 from src.gui.features.clusters.ClusterDetailPresenter import ClusterDetailPresenter
 
 
-def _presenter(controller=None):
+def _presenter(controller, router):
     view = MagicMock()
-    controller = controller or MagicMock()
-    router = MagicMock()
     presenter = ClusterDetailPresenter(view, controller, router)
     presenter._size = 1
-    return presenter, view, controller
+    return presenter, view
 
 
 # ===========================================================================
 # TC-CDP-001: map_export_error delegates to controller.map_error with the
 # cluster_detail/export_pdf context.
 # ===========================================================================
-def test_map_export_error_delegates_to_controller():
-    presenter, view, controller = _presenter()
-    controller.map_error.return_value = "The file could not be written. Please try again."
+def test_cluster_detail_presenter_map_export_error_delegates_to_controller(mock_controller, mock_router):
+    # Arrange
+    presenter, view = _presenter(mock_controller, mock_router)
+    mock_controller.map_error.return_value = "The file could not be written. Please try again."
     error = PermissionError("denied")
 
+    # Act
     message = presenter.map_export_error(error, "out.pdf")
 
+    # Assert
     assert message == "The file could not be written. Please try again."
-    call_error, context = controller.map_error.call_args[0]
+    call_error, context = mock_controller.map_error.call_args[0]
     assert call_error is error
     assert context["operation"] == "export_pdf"
     assert context["screen"] == "cluster_detail"
@@ -41,24 +50,26 @@ def test_map_export_error_delegates_to_controller():
 # TC-CDP-002: on_export_excel shows the mapped message, never a raw
 # PermissionError string — there is no separate `except PermissionError`.
 # ===========================================================================
-def test_on_export_excel_failure_uses_mapped_message():
-    presenter, view, controller = _presenter()
+def test_cluster_detail_presenter_export_excel_failure_uses_mapped_message(mock_controller, mock_router):
+    # Arrange
+    presenter, view = _presenter(mock_controller, mock_router)
     view.ask_save_path_excel.return_value = "out.xlsx"
-    controller.save_cluster_schedule_excel.side_effect = PermissionError("denied")
-    controller.map_error.return_value = "The file could not be written. Please close it and try again."
+    mock_controller.save_cluster_schedule_excel.side_effect = PermissionError("denied")
+    mock_controller.map_error.return_value = "The file could not be written. Please close it and try again."
 
+    # Act
     presenter.on_export_excel()
 
-    assert controller.map_error.call_count == 1
-    context = controller.map_error.call_args[0][1]
+    # Assert
+    assert mock_controller.map_error.call_count == 1
+    context = mock_controller.map_error.call_args[0][1]
     assert context["export_format"] == "excel"
     assert context["path"] == "out.xlsx"
     message = view.show_message.call_args[0][0]
     assert "The file could not be written. Please close it and try again." in message
     assert "PermissionError" not in message
-    # "Export failed." not "Could not save Excel schedule:" — the mapped
-    # message already says the file could not be written, so a "save"
-    # prefix would just restate that.
+    # The mapped message already says the file could not be written, so a
+    # "Could not save" prefix would just restate that.
     assert "Could not save" not in message
     assert message.startswith("Export failed.")
 
@@ -69,16 +80,19 @@ def test_on_export_excel_failure_uses_mapped_message():
 # a mapped message and clears itself instead of letting the exception
 # propagate up to the global sys.excepthook.
 # ===========================================================================
-def test_on_enter_recovers_when_get_cluster_size_fails():
-    presenter, view, controller = _presenter()
+def test_cluster_detail_presenter_on_enter_recovers_when_get_cluster_size_fails(mock_controller, mock_router):
+    # Arrange
+    presenter, view = _presenter(mock_controller, mock_router)
     error = IndexError("cluster 3 does not exist (have 2)")
-    controller.get_cluster_size.side_effect = error
-    controller.map_error.return_value = "Could not open this family. Please try again."
+    mock_controller.get_cluster_size.side_effect = error
+    mock_controller.map_error.return_value = "Could not open this family. Please try again."
 
+    # Act
     presenter.on_enter()
 
-    assert controller.map_error.call_count == 1
-    assert controller.map_error.call_args[0][0] is error
+    # Assert
+    assert mock_controller.map_error.call_count == 1
+    assert mock_controller.map_error.call_args[0][0] is error
     message = view.show_message.call_args[0][0]
     assert "Could not open this family. Please try again." in message
     assert "IndexError" not in message
@@ -91,18 +105,21 @@ def test_on_enter_recovers_when_get_cluster_size_fails():
 # (e.g. a storage read failure) — the screen shows a mapped message and
 # stays navigable instead of crashing.
 # ===========================================================================
-def test_show_current_recovers_when_read_schedule_fails():
-    presenter, view, controller = _presenter()
+def test_cluster_detail_presenter_show_current_recovers_when_read_schedule_fails(mock_controller, mock_router):
+    # Arrange
+    presenter, view = _presenter(mock_controller, mock_router)
     presenter._size = 3
     presenter._index = 1
     error = RuntimeError("sqlite read failure")
-    controller.get_cluster_schedule_view.side_effect = error
-    controller.map_error.return_value = "Could not load the schedule. Please try again."
+    mock_controller.get_cluster_schedule_view.side_effect = error
+    mock_controller.map_error.return_value = "Could not load the schedule. Please try again."
 
+    # Act
     presenter._show_current()
 
-    assert controller.map_error.call_count == 1
-    assert controller.map_error.call_args[0][0] is error
+    # Assert
+    assert mock_controller.map_error.call_count == 1
+    assert mock_controller.map_error.call_args[0][0] is error
     message = view.show_message.call_args[0][0]
     assert "Could not load the schedule. Please try again." in message
     assert "RuntimeError" not in message
@@ -115,15 +132,18 @@ def test_show_current_recovers_when_read_schedule_fails():
 # TC-CDP-005: on_next still routes through the same recoverable path —
 # navigating forward into a schedule that fails to load does not crash.
 # ===========================================================================
-def test_on_next_recovers_when_read_schedule_fails():
-    presenter, view, controller = _presenter()
+def test_cluster_detail_presenter_on_next_recovers_when_read_schedule_fails(mock_controller, mock_router):
+    # Arrange
+    presenter, view = _presenter(mock_controller, mock_router)
     presenter._size = 3
     presenter._index = 0
-    controller.get_cluster_schedule_view.side_effect = RuntimeError("sqlite read failure")
-    controller.map_error.return_value = "Could not load the schedule. Please try again."
+    mock_controller.get_cluster_schedule_view.side_effect = RuntimeError("sqlite read failure")
+    mock_controller.map_error.return_value = "Could not load the schedule. Please try again."
 
+    # Act
     presenter.on_next()
 
+    # Assert
     assert presenter._index == 1
-    assert controller.map_error.call_count == 1
+    assert mock_controller.map_error.call_count == 1
     assert view.show_message.call_count == 1

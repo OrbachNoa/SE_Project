@@ -1,3 +1,21 @@
+"""
+Test_Output.py — Integration tests for TextFileWriter.formatSchedule output.
+
+Covers the textual content and structural ordering of the generated schedule
+output: zero-padded DD-MM-YYYY date formatting, Semester/Moed section headers
+and their fixed (enum-based, not chronological) ordering, instructor name
+inclusion, date sorting within a section, handling of an empty schedule
+without crashing, and that write() actually creates a file on disk with the
+expected content.
+
+Tests use sequential TC-OUT-NNN identifiers and follow Arrange/Act/Assert
+structure in each test body. Fixtures are sourced from tests/conftest.py:
+make_assignment builds an ExamAssignment (optionally given a course, exam
+date, and moed), make_course builds a Course (optionally given program
+entries and an instructor), make_program_entry builds a ProgramEntry for a
+given semester, and empty_schedule provides a fresh ExamSchedule with no
+assignments to populate per test.
+"""
 from datetime import date
 import os
 import pytest
@@ -22,7 +40,7 @@ def test_format_schedule_uses_dd_mm_yyyy_date_format(
     # Assert — output contains the zero-padded DD-MM-YYYY date.
     assert "05-06-2026" in output
     # And not the swapped MM-DD form.
-    assert "06-05-2026" not in output or "05-06-2026" in output
+    assert "06-05-2026" not in output
 
 
 # ===========================================================================

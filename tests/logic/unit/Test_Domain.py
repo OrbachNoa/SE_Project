@@ -1,3 +1,23 @@
+"""Unit tests for the core domain model: Course, ExamPeriod, ExamSchedule,
+ProgramEntry, and the Semester/Moed/EvalType enums.
+
+Covers Course.hasExam() (only EXAM courses need scheduling), ExamPeriod's
+availableDates property and its construction-time guard against a
+non-strictly-increasing date range, ExamSchedule's addAssignment/getByDate,
+ProgramEntry's year and program-code validation, and that each enum
+contains exactly its expected members (no silent additions or removals).
+
+Conventions:
+- Each test carries a unique TC-DOM-NNN identifier in the comment block
+  above its definition, numbered sequentially, grouped under a section
+  divider per class/concept.
+- Each test body is split into Arrange / Act / Assert sections — merged
+  into a single Act & Assert only where the assertion is itself a
+  `pytest.raises` context manager (parametrized inputs already serve as
+  the arrangement, so there is nothing left to set up separately).
+- `make_course`, `make_period`, `make_program_entry`, `make_assignment`,
+  and `empty_schedule` come from the shared fixtures in tests/conftest.py.
+"""
 from datetime import date
 import pytest
 
@@ -120,7 +140,7 @@ def test_get_available_dates_returns_both_days_for_two_day_period(make_period):
     (date(2026, 6, 30), date(2026, 6, 1)),   # start  > end (invalid)
 ])
 def test_exam_period_rejects_non_strict_start_before_end(start, end):
-    # Arrange + Act + Assert — constructor must raise.
+    # Act & Assert — constructor must raise.
     with pytest.raises(ValueError):
         ExamPeriod(
             semester=Semester.FALL,
@@ -191,7 +211,7 @@ def test_get_by_date_on_empty_schedule_returns_empty_list(empty_schedule):
 # ===========================================================================
 @pytest.mark.parametrize("good_year", [1, 2, 3, 4])
 def test_program_entry_accepts_year_in_range(good_year, make_program_entry):
-    # Arrange + Act — should not raise.
+    # Act — should not raise.
     entry = make_program_entry(year=good_year)
 
     # Assert
@@ -202,7 +222,7 @@ def test_program_entry_accepts_year_in_range(good_year, make_program_entry):
 # ===========================================================================
 @pytest.mark.parametrize("bad_year", [0, 5, -1, 10])
 def test_program_entry_rejects_year_out_of_range(bad_year, make_program_entry):
-    # Arrange + Act + Assert
+    # Act & Assert
     with pytest.raises(ValueError):
         make_program_entry(year=bad_year)
 
@@ -218,7 +238,7 @@ def test_program_entry_rejects_year_out_of_range(bad_year, make_program_entry):
     "",          # empty
 ])
 def test_program_entry_rejects_invalid_program_id(bad_code, make_program_entry):
-    # Arrange + Act + Assert
+    # Act & Assert
     with pytest.raises(ValueError):
         make_program_entry(program_id=bad_code)
 
@@ -231,7 +251,7 @@ def test_program_entry_rejects_invalid_program_id(bad_code, make_program_entry):
 # TC-DOM-014: Only FALL, SPRI, SUMM exist; nothing else.
 # ===========================================================================
 def test_semester_enum_has_exactly_three_members():
-    # Arrange + Act
+    # Act
     names = {m.name for m in Semester}
 
     # Assert
@@ -242,7 +262,7 @@ def test_semester_enum_has_exactly_three_members():
 # TC-DOM-015: Only ALEPH, BET, GIMEL exist.
 # ===========================================================================
 def test_moed_enum_has_exactly_three_members():
-    # Arrange + Act
+    # Act
     names = {m.name for m in Moed}
 
     # Assert
@@ -254,7 +274,7 @@ def test_moed_enum_has_exactly_three_members():
 # PROJECT, ATTENDANCE — and no others.
 # ===========================================================================
 def test_eval_type_enum_has_exactly_three_members():
-    # Arrange + Act
+    # Act
     names = {m.name for m in EvalType}
 
     # Assert

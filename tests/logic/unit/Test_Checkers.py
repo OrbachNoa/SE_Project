@@ -1,3 +1,23 @@
+"""Unit tests for the two fixed IConflictChecker implementations.
+
+ProgramYearConflictChecker and MoedOrderChecker enforce hard scheduling
+rules that are always active regardless of user configuration — unlike
+the configurable threshold checkers in Test_ThresholdCheckers.py.
+ProgramYearConflictChecker rejects two OBLIGATORY courses from the same
+program/year on the same date (electives are explicitly exempt).
+MoedOrderChecker rejects a duplicate moed for the same course and enforces
+that a course's moeds appear in chronological order (ALEPH before BET).
+
+Conventions:
+- Each test carries a unique TC-CHK-NNN identifier in the comment block
+  above its definition. This file holds TC-CHK-001..011; numbering
+  continues — not restarts — in Test_ThresholdCheckers.py (TC-CHK-012
+  onward), since both files share one checker-family identifier covering
+  every IConflictChecker implementation, fixed and configurable alike.
+- Each test body is split into Arrange / Act / Assert sections.
+- `make_course`, `make_program_entry`, `make_assignment`, and
+  `empty_schedule` come from the shared fixtures in tests/conftest.py.
+"""
 from datetime import date
 import pytest
 

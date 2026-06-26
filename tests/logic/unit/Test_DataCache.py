@@ -1,3 +1,25 @@
+"""Unit tests for the input-caching infrastructure: FileChangeDetector,
+DiskCacheRepository, and DataCache.
+
+FileChangeDetector hashes source files (SHA-256, chunked for large files) so
+CachedInputLoader can skip re-parsing unchanged courses/periods files.
+DiskCacheRepository persists a DataCache to/from a pickle file on disk,
+returning None (rather than raising) for any missing, corrupted, or
+unreadable cache — a cache miss must never crash the app, it should just
+fall back to a fresh parse. Tests cover hash correctness (including the
+chunked-read path for files over 64 KB), change detection across
+unchanged/modified/added/removed file sets, the repository's null-safe
+load() across every failure mode, save()/load() round-tripping a real
+DataCache, and DataCache's own default field values.
+
+Conventions:
+- Each test carries a unique TC-DATA-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- `make_data_cache` comes from the shared fixture in tests/conftest.py;
+  file content is built directly via `tmp_path` since no fixture models
+  raw file bytes.
+"""
 import pickle
 import pytest
 from pathlib import Path

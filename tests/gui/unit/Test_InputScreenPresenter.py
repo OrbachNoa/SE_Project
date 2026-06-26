@@ -1,3 +1,22 @@
+"""Unit tests for InputScreenPresenter — InputScreen's coordination layer.
+
+The presenter mediates between the view (mocked here) and the controller:
+it decides when the generate button may be enabled, validates that at
+least one program is selected before generation starts, narrows the
+available-programs list to whatever the just-loaded courses actually
+contain (and does so before the generate button is re-validated against
+that narrower list), and turns load/progress/early-results callbacks into
+the corresponding view updates.
+
+Conventions:
+- Each test carries a unique TC-ISP-NNN identifier in the comment block
+  above its definition, numbered sequentially (with lettered variants
+  such as 006b/007b/007c for closely related scenarios on the same method).
+- Each test body is split into Arrange / Act / Assert sections.
+- `mock_controller` and `mock_router` come from the shared fixtures in
+  tests/conftest.py; `view` has no shared fixture, so it is a local
+  MagicMock() in every test.
+"""
 import pytest
 from unittest.mock import MagicMock
 from src.gui.features.input.InputScreenPresenter import InputScreenPresenter

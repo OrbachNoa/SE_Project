@@ -1,3 +1,17 @@
+"""Tests for ScheduleReranker.rerank: ordering ScheduleDTOs by stored scores.
+
+These cases cover single- and multi-criterion sorting, priority reversal,
+empty/single-element inputs, negated (fewer-is-better) criteria, sort
+stability on ties, an empty priority list, and a missing score key. Each
+test is identified by a sequential TC-RNK-NNN tag and follows the
+Arrange/Act/Assert structure in its body.
+
+Fixture policy: none of the shared fixtures from tests/conftest.py are
+used here. Every ScheduleDTO is built inline through the local _dto()
+helper below, since these tests only need a `scores` dict and have no
+need for the domain-object factories (make_course, make_period, etc.)
+defined in conftest.py.
+"""
 import pytest
 
 from src.application.dto.ScheduleDTO import ScheduleDTO

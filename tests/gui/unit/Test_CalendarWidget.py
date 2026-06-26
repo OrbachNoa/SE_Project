@@ -1,3 +1,21 @@
+"""Unit tests for CalendarWidget and its OutputCalendarWidget subclass.
+
+CalendarWidget builds a per-date grid of cells from a plain list of date
+strings, then lets callers attach exam badges (display_assignments) or mark
+cells excluded/included for the period editor. OutputCalendarWidget reuses
+the same grid but applies its own object-name styling for excluded dates on
+the read-only output screen. Tests cover grid construction and clearing,
+badge content/formatting, and that exclusion styling sets the expected Qt
+object name (which the stylesheet keys off) rather than just an internal flag.
+
+Conventions:
+- Each test carries a unique TC-CW-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`; no other conftest fixture
+  applies to this widget's plain construction.
+"""
 import pytest
 from PyQt6.QtWidgets import QLabel
 from src.gui.common.components.CalendarWidget import CalendarWidget
@@ -7,7 +25,8 @@ from src.application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
 pytestmark = pytest.mark.usefixtures("qapp")
 
 # ===========================================================================
-# TC-CW-001: test grid construction.
+# TC-CW-001: setup_month_grid must create one layout and one frame per date
+# given, and show the month banner with the correct month/year text.
 # ===========================================================================
 def test_calendar_widget_grid_construction():
     # Arrange
@@ -25,7 +44,9 @@ def test_calendar_widget_grid_construction():
     assert "June 2026" in widget.month_lbl.text()
 
 # ===========================================================================
-# TC-CW-002: test grid clearing when empty list is passed.
+# TC-CW-002: rebuilding the grid with an empty date list must clear the
+# previous month's cells, not just stop adding new ones — otherwise a
+# month-to-month navigation would leak stale cells.
 # ===========================================================================
 def test_calendar_widget_grid_clearing():
     # Arrange
@@ -41,7 +62,9 @@ def test_calendar_widget_grid_clearing():
     assert len(widget._day_frames) == 0
 
 # ===========================================================================
-# TC-CW-003: test display_assignments constructs badge widget in layout.
+# TC-CW-003: display_assignments must add the exam badge as a second item
+# in the day's layout (after the day-number label) and tag it with the
+# "calendar-exam-badge" object name the stylesheet relies on.
 # ===========================================================================
 def test_calendar_widget_display_assignments_adds_badge_to_layout():
     # Arrange
@@ -69,7 +92,9 @@ def test_calendar_widget_display_assignments_adds_badge_to_layout():
     assert exam_widget.objectName() == "calendar-exam-badge"
 
 # ===========================================================================
-# TC-CW-004: test display_assignments formats subtitle text (strips ID and tags).
+# TC-CW-004: the badge's displayed text must show the course title plus a
+# cleaned-up subtitle — the "ID: " prefix and "<br>" HTML tag from the
+# view-model subtitle are stripped/converted, not shown raw.
 # ===========================================================================
 def test_calendar_widget_display_assignments_formats_text():
     # Arrange
@@ -95,7 +120,9 @@ def test_calendar_widget_display_assignments_formats_text():
     assert "ID: " not in exam_widget.text()
 
 # ===========================================================================
-# TC-CW-005: test set date excluded style updates frame object name.
+# TC-CW-005: marking a date excluded must set the cell frame's object name
+# to "calendar-cell-excluded" — the stylesheet has no other way to detect
+# exclusion, since it never reads the underlying boolean directly.
 # ===========================================================================
 def test_calendar_widget_exclusion_style_when_excluded():
     # Arrange
@@ -110,7 +137,9 @@ def test_calendar_widget_exclusion_style_when_excluded():
     assert widget._day_frames["2026-06-01"].objectName() == "calendar-cell-excluded"
 
 # ===========================================================================
-# TC-CW-006: test set date included style updates frame object name.
+# TC-CW-006: re-including a previously-excluded date must reset the cell
+# frame's object name to "calendar-cell-included" — the toggle has to be
+# reversible, not a one-way style change.
 # ===========================================================================
 def test_calendar_widget_exclusion_style_when_included():
     # Arrange
@@ -125,7 +154,9 @@ def test_calendar_widget_exclusion_style_when_included():
     assert widget._day_frames["2026-06-01"].objectName() == "calendar-cell-included"
 
 # ===========================================================================
-# TC-CW-007: test OutputCalendarWidget custom styling.
+# TC-CW-007: OutputCalendarWidget uses its own "-output" suffixed object
+# name for excluded dates, distinct from the editor's styling, so the
+# read-only output screen can be styled independently of the editor.
 # ===========================================================================
 def test_output_calendar_widget_styles():
     # Arrange

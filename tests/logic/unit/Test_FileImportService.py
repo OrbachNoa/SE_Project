@@ -4,6 +4,14 @@ ImportResult keeps `errors: List[str]` for backward compatibility, but every
 failure should now also populate `error_details: List[AppErrorInfo]` with the
 correct category (INPUT_FILE), via the shared ExceptionMapperRegistry — not a
 locally formatted string.
+
+Conventions:
+- Each test carries a unique TC-FIS-NNN identifier in the comment block above
+  its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- The `service` fixture builds a FileImportService with all of its
+  collaborators mocked; no conftest fixture models this service, so the
+  fixture is local to this file.
 """
 import pytest
 from unittest.mock import MagicMock
@@ -27,11 +35,14 @@ def service():
 # TC-FIS-001: a missing file populates error_details with an INPUT_FILE
 # AppErrorInfo (FileNotFoundError), alongside the legacy errors string.
 # ===========================================================================
-def test_missing_file_populates_error_details(service, tmp_path):
+def test_file_import_service_missing_file_populates_error_details(service, tmp_path):
+    # Arrange
     missing = tmp_path / "does_not_exist.txt"
 
+    # Act
     result = service.load_file(str(missing), "courses", ImportMode.REPLACE)
 
+    # Assert
     assert result.success is False
     assert result.has_errors()
     assert len(result.error_details) == 1
@@ -46,12 +57,15 @@ def test_missing_file_populates_error_details(service, tmp_path):
 # AppErrorInfo built from the validator's ValueError, context-steered to
 # INPUT_FILE rather than the generic VALIDATION category.
 # ===========================================================================
-def test_empty_file_populates_error_details_as_input_file(service, tmp_path):
+def test_file_import_service_empty_file_populates_error_details_as_input_file(service, tmp_path):
+    # Arrange
     empty = tmp_path / "empty.txt"
     empty.write_text("", encoding="utf-8")
 
+    # Act
     result = service.load_file(str(empty), "courses", ImportMode.REPLACE)
 
+    # Assert
     assert result.success is False
     info = result.error_details[0]
     assert info.category == ErrorCategory.INPUT_FILE
@@ -63,13 +77,16 @@ def test_empty_file_populates_error_details_as_input_file(service, tmp_path):
 # TC-FIS-003: a parser failure (after validation passes) also populates
 # error_details, with the path/file_type recorded in context.
 # ===========================================================================
-def test_parser_failure_populates_error_details_with_context(service, tmp_path):
+def test_file_import_service_parser_failure_populates_error_details_with_context(service, tmp_path):
+    # Arrange
     valid_file = tmp_path / "courses.txt"
     valid_file.write_text("some content", encoding="utf-8")
     service._parser_factory.create.return_value.parse.side_effect = ValueError("bad row 3")
 
+    # Act
     result = service.load_file(str(valid_file), "courses", ImportMode.REPLACE)
 
+    # Assert
     assert result.success is False
     info = result.error_details[0]
     assert info.category == ErrorCategory.INPUT_FILE
@@ -80,30 +97,36 @@ def test_parser_failure_populates_error_details_with_context(service, tmp_path):
 # ===========================================================================
 # TC-FIS-004: a successful load leaves error_details empty.
 # ===========================================================================
-def test_successful_load_has_no_error_details(service, tmp_path):
+def test_file_import_service_successful_load_has_no_error_details(service, tmp_path):
+    # Arrange
     valid_file = tmp_path / "courses.txt"
     valid_file.write_text("some content", encoding="utf-8")
     service._parser_factory.create.return_value.parse.return_value = [1, 2, 3]
 
+    # Act
     result = service.load_file(str(valid_file), "courses", ImportMode.REPLACE)
 
+    # Assert
     assert result.success is True
     assert result.error_details == []
     assert result.errors == []
 
 
 # ===========================================================================
-# TC-FIS-008: a load failure that goes through `_failure()` (missing file,
+# TC-FIS-005: a load failure that goes through `_failure()` (missing file,
 # bad format, parser error, ...) must reach the technical log too, not just
 # populate error_details — otherwise these failures are silent to developers.
 # ===========================================================================
-def test_missing_file_failure_is_logged(service, tmp_path):
+def test_file_import_service_missing_file_failure_is_logged(service, tmp_path):
+    # Arrange
     missing = tmp_path / "does_not_exist.txt"
     logged = []
     service._error_logger.log = lambda info, cause=None: logged.append((info, cause))
 
+    # Act
     result = service.load_file(str(missing), "courses", ImportMode.REPLACE)
 
+    # Assert
     assert result.success is False
     assert len(logged) == 1
     info, cause = logged[0]
@@ -112,11 +135,12 @@ def test_missing_file_failure_is_logged(service, tmp_path):
 
 
 # ===========================================================================
-# TC-FIS-005: a cache-write failure (OSError from persist) must not discard
+# TC-FIS-006: a cache-write failure (OSError from persist) must not discard
 # data already merged into state — the load still reports success, the
 # failure is only logged (graceful degradation, like a broken cache file).
 # ===========================================================================
-def test_cache_persist_failure_does_not_fail_the_load(service, tmp_path):
+def test_file_import_service_cache_persist_failure_does_not_fail_the_load(service, tmp_path):
+    # Arrange
     valid_file = tmp_path / "courses.txt"
     valid_file.write_text("some content", encoding="utf-8")
     service._parser_factory.create.return_value.parse.return_value = [1, 2, 3]
@@ -124,8 +148,10 @@ def test_cache_persist_failure_does_not_fail_the_load(service, tmp_path):
     logged = []
     service._error_logger.log = lambda info, cause=None: logged.append(info)
 
+    # Act
     result = service.load_file(str(valid_file), "courses", ImportMode.REPLACE)
 
+    # Assert
     assert result.success is True
     assert result.loaded_count == 3
     assert len(logged) == 1
@@ -133,11 +159,12 @@ def test_cache_persist_failure_does_not_fail_the_load(service, tmp_path):
 
 
 # ===========================================================================
-# TC-FIS-006: a cache-read failure (OSError from try_load, e.g. a file
+# TC-FIS-007: a cache-read failure (OSError from try_load, e.g. a file
 # becoming unreadable mid-check) is treated as a cache miss — the service
 # falls through to parsing instead of propagating a raw OSError.
 # ===========================================================================
-def test_cache_try_load_failure_falls_back_to_parsing(service, tmp_path):
+def test_file_import_service_cache_try_load_failure_falls_back_to_parsing(service, tmp_path):
+    # Arrange
     valid_file = tmp_path / "courses.txt"
     valid_file.write_text("some content", encoding="utf-8")
     service._cache.try_load.side_effect = OSError("file vanished")
@@ -145,8 +172,10 @@ def test_cache_try_load_failure_falls_back_to_parsing(service, tmp_path):
     logged = []
     service._error_logger.log = lambda info, cause=None: logged.append(info)
 
+    # Act
     result = service.load_file(str(valid_file), "courses", ImportMode.UPDATE)
 
+    # Assert
     assert result.success is True
     assert result.loaded_count == 2
     assert len(logged) == 1
@@ -155,20 +184,23 @@ def test_cache_try_load_failure_falls_back_to_parsing(service, tmp_path):
 
 
 # ===========================================================================
-# TC-FIS-007: a PermissionError raised by the parser itself (disk/permission
+# TC-FIS-008: a PermissionError raised by the parser itself (disk/permission
 # fault while reading the file, distinct from a parse-content ValueError)
 # is mapped instead of escaping unhandled — success is False, category is
 # INPUT_FILE (a read failure, not export), and the message stays clean.
 # ===========================================================================
-def test_parser_permission_error_populates_error_details_as_input_file(service, tmp_path):
+def test_file_import_service_parser_permission_error_populates_error_details_as_input_file(service, tmp_path):
+    # Arrange
     valid_file = tmp_path / "courses.txt"
     valid_file.write_text("some content", encoding="utf-8")
     service._parser_factory.create.return_value.parse.side_effect = PermissionError(
         13, "denied", str(valid_file)
     )
 
+    # Act
     result = service.load_file(str(valid_file), "courses", ImportMode.REPLACE)
 
+    # Assert
     assert result.success is False
     assert len(result.error_details) == 1
     info = result.error_details[0]

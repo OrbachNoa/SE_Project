@@ -1,3 +1,23 @@
+"""Unit tests for ConstraintsSettingsDialog — the per-constraint threshold editor.
+
+The dialog renders one row per configurable threshold checker (5 total:
+min_gap_obligatory, min_gap_any, elective_conflict_cap, exam_span,
+max_exams_per_day), each with a checkbox and a threshold spinbox that is
+only enabled while its checkbox is checked. Tests cover the all-off default
+when no ConstraintsConfig is supplied, that enabling a row and clicking
+Apply builds a config carrying exactly that row's threshold (every other
+field staying None), and the reverse: disabling an already-active row
+clears its threshold back to None on Apply.
+
+Conventions:
+- Each test carries a unique TC-CSD-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`, plus pytest-qt's `qtbot`
+  fixture for widget lifecycle management and simulated clicks; no
+  conftest fixture models ConstraintsConfig or the dialog itself.
+"""
 import pytest
 from unittest.mock import MagicMock
 

@@ -1,3 +1,27 @@
+"""Unit tests for the clustering feature pipeline: score extraction and normalization.
+
+Covers ScoreFeatureExtractor (building feature vectors from a schedule's
+precomputed sort scores, including default criteria, missing-score handling,
+batch extraction, and rejection of unknown criteria) and FeatureNormalizer
+(min-max rescaling to [0, 1], constant-column safety, projecting new vectors
+onto a previously fitted scale, and guarding against use-before-fit or
+fitting on empty data).
+
+This file owns TC-CLU-001..010, the first quarter of a single numbered test
+family shared across four sibling files that each exercise a different layer
+of the clustering subsystem: this file (TC-CLU-001..010, feature extraction
+and normalization), Test_ClusteringDistanceMetrics.py (TC-CLU-011..016,
+distance metrics), Test_ClusteringAlgorithms.py (TC-CLU-017..027, clustering
+algorithms), and Test_ClusteringService.py (TC-CLU-028..032, the clustering
+service facade). The shared prefix and continuous numbering let the family be
+read as one coherent suite despite living in separate files.
+
+Every test body follows Arrange/Act/Assert. None of the shared factory
+fixtures defined in tests/conftest.py apply here: this file's collaborators
+(ScheduleDTO, ScoreFeatureExtractor, FeatureNormalizer, numpy arrays) are
+plain, cheap-to-construct objects, so each test builds its own inputs
+directly in the Arrange section instead of going through a fixture.
+"""
 import numpy as np
 import pytest
 
@@ -100,7 +124,8 @@ def test_score_feature_extractor_rejects_unknown_criterion():
     # Arrange
     bad_criteria = ["NOT_A_REAL_CRITERION"]
 
-    # Act + Assert
+    # Act
+    # Assert
     with pytest.raises(ValueError):
         ScoreFeatureExtractor(bad_criteria)
 
@@ -166,7 +191,8 @@ def test_feature_normalizer_raises_when_used_before_fit():
     # Arrange
     normalizer = FeatureNormalizer()
 
-    # Act + Assert
+    # Act
+    # Assert
     with pytest.raises(RuntimeError):
         normalizer.transform(np.array([[1.0]]))
 
@@ -180,6 +206,7 @@ def test_feature_normalizer_rejects_an_empty_matrix():
     normalizer = FeatureNormalizer()
     empty_matrix = np.empty((0, 2))
 
-    # Act + Assert
+    # Act
+    # Assert
     with pytest.raises(ValueError):
         normalizer.fit(empty_matrix)

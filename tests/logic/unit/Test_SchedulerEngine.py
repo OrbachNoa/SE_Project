@@ -1,3 +1,23 @@
+"""Unit tests for Scheduler — the core backtracking engine.
+
+Covers the expected-count case (every pair of distinct candidate dates for
+two non-conflicting obligatory courses is a valid schedule), that multiple
+solutions and an impossible-conflict empty result are both handled without
+crashing, that every returned schedule is complete (one assignment per
+required course), that an injected custom checker is genuinely consulted,
+that a course shared across two programs is scheduled exactly once (not
+duplicated), that only EXAM-evaluated courses are ever scheduled, and the
+"no exams to schedule" base case for a program with zero EXAM-eligible
+courses.
+
+Conventions:
+- Each test carries a unique TC-ENG-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- `make_course`, `make_program_entry`, and `make_period` come from the
+  shared fixtures in tests/conftest.py; `_default_checkers()` below is a
+  local helper with no conftest equivalent.
+"""
 from datetime import date
 from unittest.mock import MagicMock
 import pytest
@@ -266,12 +286,8 @@ def test_program_with_only_non_exam_courses_returns_empty_schedule(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
-    # - expect more than 0 valid schedules
-    # - expect only the EXAM course to appear in any schedule
-    if len(schedules) > 0:
-        for s in schedules:
-            assert len(s.assignments) == 0, (
-                "A program with no 'Exam' courses should not create "
-                "any exam schedules."
-            )
+    # Assert — with zero EXAM-eligible courses, SlotBuilder produces zero
+    # slots, and the scheduler's "no exams to schedule" base case
+    # (`if not slots: return`) returns immediately with no results at all —
+    # not a single schedule containing zero assignments.
+    assert schedules == []
