@@ -1,3 +1,28 @@
+"""Performance tests for the scheduling engine, scoring, reranking, and
+clustering pipelines, marked with `@pytest.mark.performance`.
+
+The 30-second budget (TC-PER-001/002) is the headline scheduling-engine
+constraint: a typical and a heavy course load must both complete the
+backtracking search well within it. The remaining tests budget the other
+pipeline stages independently — scoring 1000 schedules, reranking 10,000
+already-scored DTOs, a full threshold-checker-enabled search capped at a
+production-sized result window, and the clustering pipeline on a realistic
+sample size — since each of these runs once per generated schedule (or
+once per UI action) in the real worker and must not become the bottleneck.
+Each test also asserts a secondary sanity condition (a non-None/non-empty
+result) so a test can't pass vacuously because the code under test
+errored out near-instantly instead of doing real work.
+
+Conventions:
+- Each test carries a unique TC-PER-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections, with the
+  Act section timed via `time.perf_counter()` around only the operation
+  being budgeted (not its setup).
+- `make_course`, `make_program_entry`, and `make_period` come from the
+  shared fixtures in tests/conftest.py; `_build_courses()`/`_build_period()`
+  below are local scale-generating helpers with no conftest equivalent.
+"""
 from datetime import date, timedelta
 import time
 import pytest
@@ -125,7 +150,7 @@ def test_typical_load_under_30_seconds(make_course, make_program_entry,
     # Assert — Check that it took less than 30 seconds.
     assert elapsed < MAX_EXECUTION_SECONDS, (
         f"Typical load (5 programs × 10 courses, 30-day period) took "
-        f"{elapsed:.2f}s, exceeding the {MAX_EXECUTION_SECONDS}s SRS §5.1 "
+        f"{elapsed:.2f}s, exceeding the {MAX_EXECUTION_SECONDS}s "
         f"performance budget."
     )
     # Sanity check — the run actually produced something (not just
@@ -164,8 +189,7 @@ def test_maximum_load_under_30_seconds(make_course, make_program_entry,
     assert elapsed < MAX_EXECUTION_SECONDS, (
         f"Maximum load (5 programs × 20 courses, 60-day period, "
         f"10 excluded dates) took {elapsed:.2f}s, exceeding the "
-        f"{MAX_EXECUTION_SECONDS}s SRS §5.1 performance budget. "
-        f"Optimisation required — see SCRUM-45."
+        f"{MAX_EXECUTION_SECONDS}s performance budget."
     )
     assert schedules is not None
 

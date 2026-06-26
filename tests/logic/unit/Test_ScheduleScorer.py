@@ -1,3 +1,19 @@
+"""
+Test_ScheduleScorer.py — Tests for ScheduleScorer scoring behavior.
+
+Covers both ScheduleScorer.score() (batch scoring of a full ExamSchedule) and
+_IncrementalScoreState (incremental add_assignment/pop_assignment scoring that
+must stay consistent with the batch score) across the five scoring criteria:
+MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP, ELECTIVE_CONFLICTS, MANDATORY_SPAN and
+MAX_EXAMS_PER_DAY.
+
+Tests are identified with sequential TC-SCO-NNN identifiers and each test body
+follows the Arrange/Act/Assert structure.
+
+Fixture policy: uses the shared `make_course`, `make_program_entry`,
+`make_assignment` and `empty_schedule` fixtures from tests/conftest.py; no
+fixtures are defined locally in this file.
+"""
 from datetime import date
 import pytest
 
@@ -321,20 +337,25 @@ def test_incremental_state_min_mandatory_gap_updates_after_each_add(
     assignment_b = make_assignment(course=course_b, exam_date=date(2026, 6, 6))
     assignment_c = make_assignment(course=course_c, exam_date=date(2026, 6, 16))
 
-    # Act — the first exam has no peer yet, so the gap is still the sentinel.
+    # Act
+    # Add the exams one at a time and capture the running score after each
+    # addition, since the test verifies the minimum gap at every step:
+    # - after the first exam there is no peer yet, so the gap stays at the
+    #   sentinel value;
+    # - after the second exam a 5-day gap appears against the first;
+    # - after the third exam a wider 10-day gap appears, so the minimum
+    #   should remain at 5 rather than widen.
     state.add_assignment(assignment_a)
-    # Assert
-    assert state.score()[MIN_MANDATORY_GAP] == 10_000.0
-
-    # Act — the second exam forms a 5-day gap with the first.
+    score_after_first = state.score()[MIN_MANDATORY_GAP]
     state.add_assignment(assignment_b)
-    # Assert
-    assert state.score()[MIN_MANDATORY_GAP] == 5.0
-
-    # Act — the third exam forms a wider 10-day gap, so the minimum stays 5.
+    score_after_second = state.score()[MIN_MANDATORY_GAP]
     state.add_assignment(assignment_c)
+    score_after_third = state.score()[MIN_MANDATORY_GAP]
+
     # Assert
-    assert state.score()[MIN_MANDATORY_GAP] == 5.0
+    assert score_after_first == 10_000.0
+    assert score_after_second == 5.0
+    assert score_after_third == 5.0
 
 
 # ===========================================================================

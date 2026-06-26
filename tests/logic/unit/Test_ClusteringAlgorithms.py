@@ -1,3 +1,24 @@
+"""Unit tests for the clustering algorithms: K-means, auto-K selection, and sampling.
+
+Covers KMeansClusteringStrategy (cluster separation, k-capping, determinism, and
+empty-input rejection), AutoKSelector (silhouette-driven K choice and the
+degenerate-population shortcut), and ScheduleSampler (index sampling and the
+guard against a non-positive sample size).
+
+This file owns TC-CLU-017..027 as one segment of a TC-CLU numbering family shared
+across four sibling files, each covering a different facet of the clustering
+subsystem: Test_ClusteringFeatures.py (TC-CLU-001..010, feature extraction and
+normalization), Test_ClusteringDistanceMetrics.py (TC-CLU-011..016, distance
+metrics), this file (TC-CLU-017..027, clustering algorithms), and
+Test_ClusteringService.py (TC-CLU-028..032, the service that wires the pipeline
+together).
+
+Every test body follows the Arrange/Act/Assert structure, each step marked with
+its own comment. No shared fixtures from tests/conftest.py are used here: every
+test builds its own plain numpy arrays and strategy/selector/sampler instances
+inline, since the inputs are simple numeric data rather than the domain objects
+(Course, ExamPeriod, etc.) that the conftest factories are meant for.
+"""
 import numpy as np
 import pytest
 
@@ -50,7 +71,8 @@ def test_kmeans_clustering_produces_k_non_empty_clusters_for_three_blobs():
     # Act
     output = strategy.cluster(points, k=3)
 
-    # Assert — three distinct, non-empty clusters of three members each.
+    # Assert
+    # Three distinct, non-empty clusters of three members each.
     unique_labels, counts = np.unique(output.labels, return_counts=True)
     assert len(unique_labels) == 3
     assert sorted(counts.tolist()) == [3, 3, 3]
@@ -100,7 +122,11 @@ def test_kmeans_clustering_rejects_an_empty_point_set():
     strategy = KMeansClusteringStrategy(seed=42)
     empty_points = np.empty((0, 2))
 
-    # Act + Assert
+    # Act
+    # The raise happens during the call, so Act and Assert are combined in
+    # the pytest.raises context manager rather than capturing a return value.
+
+    # Assert
     with pytest.raises(ValueError):
         strategy.cluster(empty_points, k=2)
 
@@ -207,6 +233,12 @@ def test_schedule_sampler_sample_maps_items_to_original_indices():
 # ValueError instead of producing a sampler that can never sample.
 # ===========================================================================
 def test_schedule_sampler_rejects_a_non_positive_max_sample():
-    # Act + Assert
+    # Arrange
+
+    # Act
+    # Construction itself is the action under test, so the raise is checked
+    # via the pytest.raises context manager rather than a separate call.
+
+    # Assert
     with pytest.raises(ValueError):
         ScheduleSampler(max_sample=0)

@@ -1,3 +1,24 @@
+"""Unit tests for ProgramSelectorCardWidget — the input screen's program summary card.
+
+The card shows a placeholder until programs are loaded, opens a
+ProgramSelectorDialog on click to pick programs, and renders the current
+selection as chips with a count badge. Tests cover initial/empty state,
+chip rendering after selection, the dialog accept/cancel mouse-click flow,
+how set_program_view_models() reconciles a changed course list against an
+existing selection (keeping still-valid picks, dropping stale ones without
+a spurious signal when nothing actually changed), and the no-courses-loaded
+guard that warns instead of opening a dialog with nothing to select.
+
+Conventions:
+- Each test carries a unique TC-PSCW-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections. Where
+  construction itself is the behaviour under test, the construction call
+  is placed under Act rather than Arrange.
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`; `_make_view_models()` is
+  a local helper since no conftest fixture models a list of ProgramViewModel.
+"""
 import pytest
 from unittest.mock import MagicMock, patch
 from PyQt6.QtWidgets import QLabel
@@ -15,7 +36,8 @@ def _make_view_models():
 
 
 # ===========================================================================
-# TC-PSCW-001: test initial badge text and empty selection list.
+# TC-PSCW-001: a freshly constructed card must show "0 / max" and report
+# zero selected programs — no selection survives from a prior instance.
 # ===========================================================================
 def test_program_selector_card_initial_state_badge_and_selection():
     # Act
@@ -26,7 +48,8 @@ def test_program_selector_card_initial_state_badge_and_selection():
     assert len(widget.selected_program_ids()) == 0
 
 # ===========================================================================
-# TC-PSCW-002: test initial placeholder label exists with correct text.
+# TC-PSCW-002: with programs available but none selected yet, the card
+# must show a "click to select" placeholder, not a blank summary area.
 # ===========================================================================
 def test_program_selector_card_initial_state_placeholder():
     # Act
@@ -38,7 +61,8 @@ def test_program_selector_card_initial_state_placeholder():
     assert placeholder.text() == "Click to select programs"
 
 # ===========================================================================
-# TC-PSCW-003: test that rendering chips updates the count badge.
+# TC-PSCW-003: _refresh_program_summary() must update the count badge to
+# match the current selection size after it changes.
 # ===========================================================================
 def test_program_selector_card_rendering_chips_updates_badge():
     # Arrange
@@ -52,7 +76,8 @@ def test_program_selector_card_rendering_chips_updates_badge():
     assert widget._programs_count_badge.text() == "2 / 5"
 
 # ===========================================================================
-# TC-PSCW-004: test that rendering chips removes the placeholder label.
+# TC-PSCW-004: once a selection exists, the "click to select" placeholder
+# must be removed from the layout, not just hidden behind the chips.
 # ===========================================================================
 def test_program_selector_card_rendering_chips_removes_placeholder():
     # Arrange
@@ -72,7 +97,8 @@ def test_program_selector_card_rendering_chips_removes_placeholder():
     assert not placeholder_in_layout
 
 # ===========================================================================
-# TC-PSCW-005: test that rendering chips generates the correct chip labels.
+# TC-PSCW-005: one "program-chip" label must be rendered per selected
+# program, each naming its specific program ID — not a generic count chip.
 # ===========================================================================
 def test_program_selector_card_rendering_chips_populates_labels():
     # Arrange
@@ -90,7 +116,9 @@ def test_program_selector_card_rendering_chips_populates_labels():
 
 
 # ===========================================================================
-# TC-PSCW-006: test mouse press dialog flow when selection is accepted.
+# TC-PSCW-006: clicking the card must open the dialog preselecting the
+# current selection, and accepting it must apply the dialog's result and
+# fire selection_changed exactly once.
 # ===========================================================================
 def test_program_selector_card_mouse_click_flow_accept():
     # Arrange
@@ -114,7 +142,8 @@ def test_program_selector_card_mouse_click_flow_accept():
     assert mock_slot.call_count == 1
 
 # ===========================================================================
-# TC-PSCW-007: test that the program selector card mouse click flow is rejected when selection is cancelled/rejected.
+# TC-PSCW-007: cancelling the dialog must leave the prior selection
+# untouched and must NOT fire selection_changed — a cancel is a true no-op.
 # ===========================================================================
 def test_program_selector_card_mouse_click_flow_cancel():
     # Arrange

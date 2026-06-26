@@ -1,3 +1,28 @@
+"""Integration tests for ScheduleFeasibilityValidator and the feasibility
+rule set it runs before the scheduler ever starts searching.
+
+ScheduleFeasibilityValidator.validate() returns a plain list of error
+strings; callers (main.py, SchedulingService.py) decide whether to raise
+InfeasibleScheduleError from that list. Tests cover the happy path
+(no errors for a satisfiable setup), the descriptive-error path for an
+unsatisfiable one, the two structural domain rules (NonEmptyDomainRule,
+MoedOrderDomainRule) in isolation, that a disabled threshold config lets
+through what an enabled one would reject, that structural and
+threshold-based violations both contribute independently when several
+rules fail at once, each configurable checker's feasibility_bound()
+proving a configuration mathematically impossible before the scheduler
+wastes time searching for it, and FeasibilityContext.selected_set's
+program-list-to-set conversion.
+
+Conventions:
+- Each test carries a unique TC-FEA-NNN identifier in the comment block
+  above its definition, numbered sequentially, grouped under a section
+  divider per rule/checker family.
+- Each test body is split into Arrange / Act / Assert sections.
+- `make_course` and `make_program_entry` come from the shared fixtures in
+  tests/conftest.py; `Slot` and `FeasibilityContext` are constructed
+  directly since no conftest fixture models them.
+"""
 from datetime import date
 import pytest
 

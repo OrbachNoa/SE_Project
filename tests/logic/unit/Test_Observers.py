@@ -1,3 +1,23 @@
+"""Unit tests for the three IScheduleObserver implementations.
+
+CollectingScheduleObserver keeps every found schedule in memory (used by
+tests and small runs). QueueScheduleObserver batches schedules and pushes
+them across a process boundary via a multiprocessing Queue, compressing
+each batch with zlib+pickle. StreamingScheduleObserver writes schedules
+directly to disk as they're found, for runs too large to hold in memory.
+Tests cover each observer's collection/batching/streaming behaviour, their
+should_cancel()/on_error()/on_finished() lifecycle, and that a failing
+write path surfaces as a real OSError rather than being swallowed.
+
+Conventions:
+- Each test carries a unique TC-OBS-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections. Tests
+  covering a single observer's full lifecycle (TC-OBS-003, TC-OBS-005)
+  exercise several lifecycle steps within one Act block before asserting
+  on all of them together, since the steps build on shared observer state.
+- `make_assignment` comes from the shared fixture in tests/conftest.py.
+"""
 import pytest
 import zlib
 import pickle
@@ -10,7 +30,9 @@ from src.models.Domain import ExamSchedule
 
 
 # ===========================================================================
-# TC-OBS-001: CollectingScheduleObserver collects snapshots of schedules.
+# TC-OBS-001: on_schedule_found must store a real snapshot, not a live
+# reference — popping an assignment off the original schedule afterwards
+# must not affect the already-collected copy.
 # ===========================================================================
 def test_collecting_schedule_observer_collects_snapshots(make_assignment):
     # Arrange
@@ -33,7 +55,10 @@ def test_collecting_schedule_observer_collects_snapshots(make_assignment):
 
 
 # ===========================================================================
-# TC-OBS-002: QueueScheduleObserver buffers and flushes schedules based on batch_size.
+# TC-OBS-002: schedules must accumulate locally and NOT cross the queue
+# until batch_size is reached — sending one message per schedule would be
+# far too costly across the process boundary. The flushed batch must be a
+# compressed, unpicklable-back blob carrying exactly batch_size items.
 # ===========================================================================
 def test_queue_schedule_observer_buffering_and_flush(make_assignment):
     # Arrange

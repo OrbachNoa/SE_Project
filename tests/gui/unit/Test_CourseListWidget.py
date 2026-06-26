@@ -1,3 +1,23 @@
+"""Unit tests for CourseListWidget — collapsible per-program course blocks.
+
+The widget renders one collapsible block per loaded program, each holding
+the program's course rows. Tests cover the placeholder shown when no
+programs are loaded, that rendering builds one block per program with the
+expected header text and an exam-relevant row tagged for styling, that
+expand/collapse toggles both the internal flag and the body's visibility in
+sync, and two reject paths: expanding an unknown program ID must be a no-op
+rather than raising or expanding the wrong block, and a program with zero
+courses must render its block without any course rows or group label.
+
+Conventions:
+- Each test carries a unique TC-CL-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`; ProgramCoursesViewModel
+  and CourseRowViewModel have no conftest fixture, so each test builds its
+  own view models directly.
+"""
 import pytest
 from PyQt6.QtWidgets import QLabel
 from src.gui.common.components.CourseListWidget import CourseListWidget
@@ -6,7 +26,9 @@ from src.application.viewmodels.ProgramViewModel import ProgramCoursesViewModel,
 pytestmark = pytest.mark.usefixtures("qapp")
 
 # ===========================================================================
-# TC-CL-001: test course list empty state.
+# TC-CL-001: rendering with no programs must show the "no programs loaded"
+# placeholder label — the empty state needs to be visibly different from a
+# blank widget, not just an absence of content.
 # ===========================================================================
 def test_course_list_empty_state():
     # Arrange
@@ -21,7 +43,9 @@ def test_course_list_empty_state():
     assert empty_label.text() == "No study programs loaded into context."
 
 # ===========================================================================
-# TC-CL-002: test course list rendering with program block and course rows.
+# TC-CL-002: rendering a program with one exam-relevant course must build a
+# collapsed block keyed by program ID, with the header showing both the ID
+# and name, and a course row tagged "course-row-exam" for styling.
 # ===========================================================================
 def test_course_list_rendering():
     # Arrange
@@ -58,7 +82,9 @@ def test_course_list_rendering():
     assert course_row is not None
 
 # ===========================================================================
-# TC-CL-003: test course list expanding a program block.
+# TC-CL-003: expand() must flip the block's expanded flag and reveal the
+# body in the same call — a block that reports expanded=True with a still-
+# hidden body would be a real (if subtle) UI bug.
 # ===========================================================================
 def test_course_list_expand():
     # Arrange
@@ -89,7 +115,9 @@ def test_course_list_expand():
     assert block._body.isHidden() is False
 
 # ===========================================================================
-# TC-CL-004: test course list collapsing an expanded program block.
+# TC-CL-004: collapse() must reverse expand() exactly — flag back to
+# False and body hidden again — confirming the toggle round-trips instead
+# of only working in one direction.
 # ===========================================================================
 def test_course_list_collapse():
     # Arrange
@@ -121,7 +149,9 @@ def test_course_list_collapse():
     assert block._body.isHidden() is True
 
 # ===========================================================================
-# TC-CL-005: test reject case: expanding non-existent program ID behaves gracefully.
+# TC-CL-005: expand() given a program ID that was never rendered must be a
+# safe no-op — the real block must stay collapsed, not raise a KeyError or
+# silently expand an unrelated block.
 # ===========================================================================
 def test_course_list_expand_invalid_id_reject():
     # Arrange
@@ -152,7 +182,9 @@ def test_course_list_expand_invalid_id_reject():
     assert block._body.isHidden() is True
 
 # ===========================================================================
-# TC-CL-006: test reject case: program block with empty course list handles gracefully.
+# TC-CL-006: a program with zero courses must still get a block (keyed by
+# its ID), but that block must contain no group label and no course rows —
+# rendering must not fabricate placeholder rows for missing data.
 # ===========================================================================
 def test_course_list_program_with_no_courses_reject():
     # Arrange

@@ -23,13 +23,13 @@ This field tests the core logic of the system and is devided into Unit Tests and
 #### 3.1.1 Unit Tests
 
 * **Test File Parsers:**
-  * Tests the abstract FileParser base class and three concrete parsers: CoursesFileParser, ExamPeriodsFileParser, ProgramsFileParser. Each parser reads a UTF-8 text file, splits on the $$$$ separator, and returns typed domain objects.
+  * Tests the abstract FileParser base class, three concrete parsers (CoursesFileParser, ExamPeriodsFileParser, ProgramsFileParser), and the ParserFactory registry that creates them. Each parser reads a UTF-8 text file, splits on the $$$$ separator, and returns typed domain objects.
 
 * **Test Domain Model:**
-  * Tests the core domain classes: Course, ExamPeriod, ExamAssignment, ExamSchedule, and supporting enums.
+  * Tests the core domain classes: Course, ExamPeriod, ExamSchedule, and ProgramEntry, plus the supporting Semester/Moed/EvalType enums.
 
 * **Test Input Validator:**
-  * Tests MaxProgramsValidator (max 5 programs) and ProgramExistenceValidator (only known program codes).
+  * Tests MaxProgramsValidator (max 5 programs) and ProgramExistenceValidator (only known program codes), the IInputValidator base class's default error messaging, ValidationResult's state tracking, and ValidatorPipeline's aggregation and fail-fast behaviour.
 
 * **Test Conflict Checker:**
   * Tests the fixed IConflictChecker implementations: ProgramYearConflictChecker and MoedOrderChecker. These checkers enforce hard scheduling rules that are always active regardless of user configuration.
@@ -38,22 +38,22 @@ This field tests the core logic of the system and is devided into Unit Tests and
   * Tests the configurable threshold checkers: MinDaysBetweenExamsChecker, ElectiveConflictCapChecker, ExamSpanChecker, and MaxExamsPerDayChecker. Each checker is tested for boundary values (below k, exactly k, above k), correct scope filtering, and correct behaviour when disabled. These tests are maintained in a dedicated file separate from Test_Checkers.py, as the two checker families differ in their configuration model.
 
 * **Test Scheduler Engine:**
-  * Tests the Scheduler class — the core backtracking engine that generates all valid schedules. Also covers the optional checker-statistics mode, verifying that per-checker call and rejection counters are accumulated correctly during the search and that the statistics accessor returns an empty result when the mode is disabled.
+  * Tests the Scheduler class — the core backtracking engine that generates all valid schedules. Verifies the expected schedule count for simple non-conflicting cases, multiple-solution and impossible-case handling, that every returned schedule is complete, that an injected custom checker is consulted, that a course shared across programs is scheduled once, that only EXAM-evaluated courses are scheduled, and the empty-result base case for a program with no EXAM-eligible courses.
 
 * **Test Slot Builder:**
-  * Tests the SlotBuilder class — builds slots for scheduling.
+  * Tests the SlotBuilder class for converting courses and exam periods into Slots — difficulty-based sort ordering, filtering by selected program and exam-relevant evaluation type, candidate-date population from period availability, one slot per moed/semester, and the construction-time guard against a course whose semester has no matching period.
 
 * **Test Observers:**
-  * Tests Observer pattern implementation for monitoring schedule generation progress.
+  * Tests the three IScheduleObserver implementations: CollectingScheduleObserver (in-memory collection), QueueScheduleObserver (batches schedules across a process boundary via a multiprocessing Queue), and StreamingScheduleObserver (writes schedules directly to disk), including their lifecycle and error-handling behaviour.
 
 * **Test Boundary DTOs:**
-  * Tests boundary DTOs for schedule generation.
+  * Tests AssignmentDTO and ScheduleDTO for correct field storage and pickling across the process boundary, and ScheduleDTOAdapter for correctly reconstructing the richer domain-like view objects (dates, enums, nested course view) that downstream consumers expect.
 
 * **Test Data Cache:**
-  * Tests the DataCache class for efficient storage and retrieval of schedule data, including add/get courses/periods, clear, count, and iteration.
+  * Tests the input-caching infrastructure: FileChangeDetector for SHA-256 file hashing and change detection, and DiskCacheRepository for persisting a DataCache to and from a pickle file on disk — returning safely instead of crashing when the cache file is missing, corrupted, or unreadable.
 
 * **Test ViewModel Mapper:**
-  * Tests the ViewModelMapper class for correct conversion of domain model objects to ViewModels.
+  * Tests the ViewModelMapper class for correct conversion of schedule DTOs and domain objects (Course, ExamPeriod) into the schedule, calendar, program, and period-edit view models consumed by the GUI.
 
 * **Test Metrics:**
   * Tests the five metric functions used to score and rank schedules: min_mandatory_gap, avg_all_courses_gap, peak_elective_conflict, mandatory_span, and max_exams_per_day. Also tests the index-building helpers that these functions rely on.
@@ -62,7 +62,7 @@ This field tests the core logic of the system and is devided into Unit Tests and
   * Tests the ScheduleScorer class and its incremental state. Verifies that all five criterion scores are computed correctly for a complete schedule, that lower-is-better criteria are correctly negated, and that the incremental state correctly supports add and pop operations used during backtracking.
 
 * **Test Schedule Reranker:**
-  * Tests the rerank() and sort_key() functions. Verifies descending ordering by a single criterion, tie-breaking by a second criterion, stability of equal-score entries, and the sentinel value for missing scores.
+  * Tests the rerank() function. Verifies descending ordering by a single criterion, tie-breaking by a second criterion, stability of equal-score entries, and the sentinel value for missing scores.
 
 * **Test Checker Factory:**
   * Tests the build_checkers() function. Verifies that the correct set of checkers is assembled for any combination of active and inactive criteria, that the threshold k is correctly transmitted to each checker, and that the two base checkers are always present regardless of configuration.
@@ -82,10 +82,22 @@ This field tests the core logic of the system and is devided into Unit Tests and
 * **Test Clustering Service:**
   * Tests the full clustering pipeline: fit() followed by cluster() produces correctly separated groups, cluster summaries remain in original units, and configuration parameters are validated at construction time.
 
+* **Test Error Mapping:**
+  * Tests the core exception-to-AppErrorInfo mapping rules in ExceptionMapperRegistry — how raw exceptions (MemoryError, PermissionError, parser ValueError, the domain InfeasibleScheduleError, FileNotFoundError, and unknown exceptions) are mapped to the correct category, severity, recoverable flag, and a stable error code.
+
+* **Test Error Mapping Context:**
+  * Tests context-driven error mapping, where a caller-supplied context dict steers ExceptionMapperRegistry's resulting category, severity, and message wording, and tests build_process_error_payload, the equivalent boundary used by worker-process stages.
+
+* **Test File Import Service:**
+  * Tests the FileImportService for correct error reporting — verifying that every failed import populates structured AppErrorInfo error details with the correct category, routed through the shared ExceptionMapperRegistry rather than a locally formatted string.
+
+* **Test Text File Writer:**
+  * Tests the TextFileWriter's write-failure path — verifying that a write failure propagates as a real OSError rather than being caught and locally reported.
+
 #### 3.1.2 Integration Tests
 
 * **Test Behavioural:**
-  * High-level correctness tests for the scheduling algorithm. Verify properties that span multiple classes, including scheduling with configurable gap constraints, maximum exams per day, impossible constraint detection, full scoring and ranking pipeline, and score distribution across independent cohorts.
+  * High-level correctness tests for the scheduling algorithm. Verify properties that span multiple classes, including no duplicate schedules, every returned schedule passing every active conflict check, configurable gap and maximum-exams-per-day constraints, impossible-constraint detection, and the full scoring-and-ranking pipeline.
 
 * **Test Feasibility Validator:**
   * Tests ScheduleFeasibilityValidator and the feasibility rules. Verifies that the validator returns an empty list for valid configurations, accumulates errors from multiple violated rules, and that structural rules and threshold-based rules contribute independently to the error list. Also covers the feasibility_bound() method of each configurable threshold checker, verifying that mathematically impossible configurations are detected before the scheduler begins, and that FeasibilityContext.selected_set correctly filters programs when a selection is provided.
@@ -94,19 +106,19 @@ This field tests the core logic of the system and is devided into Unit Tests and
   * Tests integration between parsers, validators, schedulers, and writers. Full end-to-end pipeline tests using real fixture files.
 
 * **Test Application State:**
-  * Tests ApplicationState for managing application-wide state and transitions.
+  * Tests InputDataState for managing loaded courses/periods and serializing them to and from a DataCache, and ScheduleResultState for tracking the generated schedule results and the currently selected one.
 
 * **Test Main:**
   * Tests the CLI main() function — correct exit codes, clean stderr, no Python tracebacks.
 
 * **Test Output:**
-  * Tests the file writer outputs in correct format with the correct data.
+  * Tests TextFileWriter.formatSchedule for correct output formatting — zero-padded DD-MM-YYYY dates, fixed Semester/Moed section ordering, instructor name inclusion, date sorting within a section, and that write() creates a file on disk with the expected content.
 
 * **Test Scheduling Service:**
-  * Tests the SchedulingService for correct scheduling logic.
+  * Tests the SchedulingService facade for correct slot building and asynchronous schedule generation — including the background process/worker wiring, cancellation, and that a course whose semester has no matching period raises a clear error.
 
 * **Test Hybrid State:**
-  * Tests the HybridState class for correct state management, including efficient window-based database pagination.
+  * Tests the HybridScheduleResultState class for correct SQLite-backed window management, including efficient page loading, count delegation, and database pagination.
 
 ### 3.2 GUI Tests
 This field tests the GUI aspect of the system and is devided into Unit Tests and Integration Tests.
@@ -117,19 +129,19 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
   * Tests the ActionBarWidget for correct initial state, button rendering, mode toggle (replace/update), and signal emission when load/generate buttons are clicked.
 
 * **Test App Controller:**
-  * Tests the AppController class for correct delegation to the ApplicationFacade — verifying that load_file, generate_schedules, get_loaded_courses, get_loaded_periods, get_page_info, get_schedule_view, and cancel all propagate the correct arguments and return values.
+  * Tests the AppController class — the application's single entry point for GUI screens — for correct delegation to its importer, scheduler, and exporter collaborators: verifying that load_file, generate_schedules, get_loaded_courses, get_loaded_periods, get_page_info, get_schedule_view, and cancel_scheduling all propagate the correct arguments and return values.
 
 * **Test Calendar Editor Widget:**
   * Tests the CalendarEditorWidget for correct display of exam periods, date exclusion toggling, and proper rendering of excluded-date indicators.
 
 * **Test Calendar Widget:**
-  * Tests the CalendarWidget for correct month rendering, exam-date highlighting, and interaction with the period navigator when the displayed month changes.
+  * Tests the CalendarWidget for correct month rendering and exam-date badge display, and its OutputCalendarWidget subclass for its own excluded-date styling.
 
 * **Test Course List Widget:**
-  * Tests the CourseListWidget for correct rendering of course blocks from a list of domain Course objects, and correct filtering behaviour by program ID.
+  * Tests the CourseListWidget for correct rendering of course blocks from a list of domain Course objects, and correct expand/collapse behaviour for a given program block by ID.
 
 * **Test Exclusion Model:**
-  * Tests the ExclusionModel for managing excluded-date state — adding, removing, and querying excluded dates, and ensuring the model fires the correct change signals.
+  * Tests the ExclusionModel for managing excluded-date state — adding, removing, and querying excluded dates, and that navigating between periods auto-saves the in-memory edits on the period being left.
 
 * **Test Input Screen:**
   * Tests the InputScreen widget for correct rendering of the action bar and program selector card, file-load button wiring, and mode switching between replace and update.
@@ -138,7 +150,7 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
   * Tests the InputScreenPresenter for correct coordination between the InputScreen view and the AppController — verifying file load delegation, import mode forwarding, and course-list refresh after a successful load.
 
 * **Test Navigation:**
-  * Tests the NavigationState model for correct index tracking across a schedule result set — including boundary guards, reset-on-set-schedules, and out-of-bounds error handling.
+  * Tests ScheduleResultState's current-index tracking for correct boundary guards, reset-on-set-schedules, and out-of-bounds error handling, and ViewModelMapper's navigation-context output for both empty and non-empty schedules.
 
 * **Test Output Screen:**
   * Tests the OutputScreen widget for correct initial state, forward/backward schedule navigation, calendar month display, schedule counter updates, and back-to-input routing.
@@ -153,7 +165,7 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
   * Tests the ProgramSelectorDialog for correct initial selection state, checkbox toggle behaviour, and enforcement of the maximum five-program selection limit with a warning popup.
 
 * **Test Program Selector Card Widget:**
-  * Tests the ProgramSelectorCardWidget for correct initial badge and placeholder state, chip rendering after selection, badge count updates, and mouse-click flow for both accept and cancel dialog outcomes.
+  * Tests the ProgramSelectorCardWidget for correct initial badge and placeholder state, chip rendering after selection, mouse-click flow for both accept and cancel dialog outcomes, how a changed course list reconciles against an existing selection, and the no-courses-loaded guard that warns instead of opening the dialog.
 
 * **Test Solution Bar Widget:**
   * Tests the SolutionBarWidget for correct initial disabled state, button tooltips, back/export click signal emission, next/previous navigation signal emission, paging signal emission, and rejection of clicks on disabled buttons.
@@ -165,7 +177,16 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
   * Tests the SortConfigPanel and SortRow widgets for correct display, automatic priority badge assignment when a criterion is enabled, and correct priority order emitted after reordering.
 
 * **Test Sort Worker:**
-  * Tests the SortWorker QThread for correct emission of the ready signal with sorted results, and correct handling of an empty input list.
+  * Tests the SortWorker QThread for correct emission of the ready signal with sorted results, correct handling of an empty input list, and that a failure during sorting is reported through the failed signal with a structured error record.
+
+* **Test Cluster Detail Presenter:**
+  * Tests the ClusterDetailPresenter for correct error handling during cluster export and navigation — verifying that export and read failures route through the controller's error mapper and leave the screen in a recoverable state rather than crashing.
+
+* **Test Cluster Overview Presenter:**
+  * Tests the ClusterOverviewPresenter for correct handling of background ClusterWorker failures — verifying that the worker's structured error record reaches the controller's technical log in addition to the clean message shown to the user.
+
+* **Test Schedule Pdf Exporter:**
+  * Tests the PDF export error path — verifying that a failure during HTML build or Qt printing is reported through the presenter's error-mapping callback rather than showing the raw exception.
 
 #### 3.2.2 Integration Tests
 
@@ -182,7 +203,7 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
 This field tests the performance aspect of the system.
 
 * **Test Performance:**
-  * Verify the 30-second SRS constraint under realistic and maximum load scenarios. Additional tests cover scoring throughput on large result sets, sort ranking on high-volume collections, full scheduling with all threshold constraints active, and the clustering pipeline on a realistic sample size.
+  * Verify the 30-second constraint under realistic and maximum load scenarios. Additional tests cover scoring throughput on large result sets, sort ranking on high-volume collections, full scheduling with all threshold constraints active, and the clustering pipeline on a realistic sample size.
 
 # Test File Structure
 ```bash
@@ -220,7 +241,11 @@ tests/
 │   │   ├── Test_ClusteringFeatures.py
 │   │   ├── Test_ClusteringDistanceMetrics.py
 │   │   ├── Test_ClusteringAlgorithms.py
-│   │   └── Test_ClusteringService.py
+│   │   ├── Test_ClusteringService.py
+│   │   ├── Test_ErrorMapping.py
+│   │   ├── Test_ErrorMappingContext.py
+│   │   ├── Test_FileImportService.py
+│   │   └── Test_TextFileWriter.py
 │   └── integration/
 │       ├── Test_ApplicationState.py
 │       ├── Test_SchedulingService.py
@@ -249,10 +274,13 @@ tests/
 │   │   ├── Test_Navigation.py
 │   │   ├── Test_ConstraintsSettingsDialog.py
 │   │   ├── Test_SortConfigPanel.py
-│   │   └── Test_SortWorker.py
+│   │   ├── Test_SortWorker.py
+│   │   ├── Test_ClusterDetailPresenter.py
+│   │   ├── Test_ClusterOverviewPresenter.py
+│   │   └── Test_SchedulePdfExporter.py
 │   └── integration/
 │       ├── Test_GUI.py
-│       ├── Test_GUIIntegration.py
+│       ├── Test_GuiIntegration.py
 │       └── Test_Workers.py
 └── performance/
     └── Test_Performance.py

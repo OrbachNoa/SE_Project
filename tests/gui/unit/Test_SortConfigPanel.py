@@ -1,3 +1,21 @@
+"""Unit tests for SortConfigPanel and its SortRow widgets.
+
+The panel renders one SortRow per known scoring criterion (ALL_CRITERIA).
+Checking a row's box adds it to the active priority list and assigns it the
+next rank badge automatically; rows can be reordered, and Apply emits the
+priority list in whatever order the rows are currently displayed — not the
+order the panel was constructed with. Tests cover the initial unconfigured
+display, automatic badge assignment on enabling a criterion, and that a
+manual reorder is reflected in the emitted priority.
+
+Conventions:
+- Each test carries a unique TC-SCP-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`, plus pytest-qt's `qtbot`
+  fixture; no conftest fixture models SortConfigPanel or its rows.
+"""
 import pytest
 
 from PyQt6.QtCore import Qt

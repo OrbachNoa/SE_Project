@@ -1,3 +1,24 @@
+"""Unit tests for SortWorker — the background QThread that runs sort scoring.
+
+SortWorker wraps a call to the controller's compute_sort_data() so the GUI
+thread isn't blocked while large result sets are scored and ordered. Tests
+cover the happy path (the `ready` signal carries the controller's result),
+an empty priority list completing normally rather than erroring, and that a
+failure inside compute_sort_data is reported through `failed` with a clean,
+user-safe message plus a structured AppErrorInfo on `last_error` — never
+the raw exception text.
+
+Conventions:
+- Each test carries a unique TC-SW-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`; the controller is a plain
+  MagicMock since no conftest fixture models this worker's specific
+  collaborator. The failure-path test calls `worker.run()` synchronously
+  instead of `start()`/`qtbot.waitSignal`, since it does not depend on the
+  thread actually executing in the background.
+"""
 import pytest
 from unittest.mock import MagicMock
 

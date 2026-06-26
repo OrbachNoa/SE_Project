@@ -1,3 +1,22 @@
+"""Unit tests for OutputScreenPresenter — the output screen's coordination layer.
+
+The presenter mediates between the view (mocked here) and the controller:
+it formats the solution counter and page-bar labels from raw state, drives
+calendar rendering from a ScheduleViewModel, guards PDF/TXT export against
+an empty result set or an exam-less schedule, recovers cleanly when reading
+or exporting a schedule fails (routing every failure through
+controller.map_error rather than a raw exception string), and stops the
+background sort worker on screen exit.
+
+Conventions:
+- Each test carries a unique TC-OSP-NNN identifier in the comment block
+  above its definition, numbered sequentially (with a lettered variant,
+  015b, for a closely related scenario on the same method).
+- Each test body is split into Arrange / Act / Assert sections.
+- `controller` and `router` come from the shared `mock_controller` /
+  `mock_router` fixtures in tests/conftest.py; `view` has no shared
+  fixture, so it is a local MagicMock() in every test.
+"""
 import pytest
 from unittest.mock import MagicMock
 from src.gui.features.output.OutputScreenPresenter import OutputScreenPresenter
@@ -5,20 +24,22 @@ from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel, Sche
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
 # ===========================================================================
-# TC-OSP-001: test refresh counter when total is 0.
+# TC-OSP-001: with zero solutions, the counter must read "No solutions" and
+# every navigation/export control must be disabled — there is nothing to
+# navigate to or export.
 # ===========================================================================
-def test_presenter_refresh_counter_zero_solutions():
+def test_presenter_refresh_counter_zero_solutions(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 0
-    
+
     # Act
     presenter.refresh_counter()
-    
+
     # Assert
     assert view.set_solution_counter.call_count == 1
     assert view.set_solution_counter.call_args[0] == ("No solutions",)
@@ -26,21 +47,23 @@ def test_presenter_refresh_counter_zero_solutions():
     assert view.set_solution_controls.call_args.kwargs == {"can_prev": False, "can_next": False, "can_export": False}
 
 # ===========================================================================
-# TC-OSP-002: test refresh counter when total is greater than 0.
+# TC-OSP-002: with several solutions and a mid-range current index, the
+# counter must show the 1-based position out of the total, and every
+# navigation/export control must be enabled.
 # ===========================================================================
-def test_presenter_refresh_counter_multiple_solutions():
+def test_presenter_refresh_counter_multiple_solutions(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 5
     presenter._current_index = 2
-    
+
     # Act
     presenter.refresh_counter()
-    
+
     # Assert
     assert view.set_solution_counter.call_count == 1
     assert view.set_solution_counter.call_args[0] == ("Solution 3 / 5",)
@@ -48,41 +71,44 @@ def test_presenter_refresh_counter_multiple_solutions():
     assert view.set_solution_controls.call_args.kwargs == {"can_prev": True, "can_next": True, "can_export": True}
 
 # ===========================================================================
-# TC-OSP-003: test page bar is invisible when there is only 1 page.
+# TC-OSP-003: with only a single page of results, the database paging bar
+# must be hidden entirely — paging controls are meaningless with one page.
 # ===========================================================================
-def test_presenter_refresh_page_bar_single_page():
+def test_presenter_refresh_page_bar_single_page(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total_pages = 1
-    
+
     # Act
     presenter.refresh_page_bar()
-    
+
     # Assert
     assert view.set_page_bar_visible.call_count == 1
     assert view.set_page_bar_visible.call_args[0] == (False,)
 
 # ===========================================================================
-# TC-OSP-004: test page bar display when multiple pages and next is ready.
+# TC-OSP-004: on page 1 of 3 with the next page already materialised in
+# SQLite (sqlite_count above the window threshold), next/last must be
+# enabled and first/previous must be disabled.
 # ===========================================================================
-def test_presenter_refresh_page_bar_multiple_pages_next_ready():
+def test_presenter_refresh_page_bar_multiple_pages_next_ready(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total_pages = 3
     presenter._current_page = 0
-    presenter._sqlite_count = 15_000 
-    
+    presenter._sqlite_count = 15_000
+
     # Act
     presenter.refresh_page_bar()
-    
+
     # Assert
     assert view.set_page_bar.call_count == 1
     assert view.set_page_bar.call_args.kwargs == {
@@ -95,22 +121,24 @@ def test_presenter_refresh_page_bar_multiple_pages_next_ready():
     }
 
 # ===========================================================================
-# TC-OSP-005: test page bar display when next page is not ready in sqlite cache.
+# TC-OSP-005: the same page-1-of-3 setup, but with sqlite_count below the
+# window threshold — next/last must now be disabled, since the next page's
+# rows have not been persisted to SQLite yet.
 # ===========================================================================
-def test_presenter_refresh_page_bar_multiple_pages_next_not_ready():
+def test_presenter_refresh_page_bar_multiple_pages_next_not_ready(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total_pages = 3
     presenter._current_page = 0
     presenter._sqlite_count = 5_000  # < 10,000
-    
+
     # Act
     presenter.refresh_page_bar()
-    
+
     # Assert
     assert view.set_page_bar.call_count == 1
     assert view.set_page_bar.call_args.kwargs == {
@@ -123,12 +151,15 @@ def test_presenter_refresh_page_bar_multiple_pages_next_not_ready():
     }
 
 # ===========================================================================
-# TC-OSP-006: test loading pages delegates to controller.
+# TC-OSP-006: on_next_page() must ask the controller to load the next page
+# and refresh the presenter's own page/total state from what the
+# controller reports back — not assume the requested page succeeded as-is.
 # ===========================================================================
-def test_presenter_page_loads():
+def test_presenter_page_loads(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
+    controller = mock_controller
+    router = mock_router
     controller.get_page_info.return_value = {
         "current_page": 1,
         "total_pages": 3,
@@ -136,15 +167,14 @@ def test_presenter_page_loads():
         "window_size": 10,
         "sqlite_count": 25_000
     }
-    router = MagicMock()
-    
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total_pages = 3
     presenter._current_page = 0
-    
+
     # Act
     presenter.on_next_page()
-    
+
     # Assert
     assert controller.load_page.call_count == 1
     assert controller.load_page.call_args[0] == (1,)
@@ -152,36 +182,38 @@ def test_presenter_page_loads():
     assert presenter._total == 10
 
 # ===========================================================================
-# TC-OSP-007: test show_current filters and paints correct items.
+# TC-OSP-007: show_current() must filter the schedule's excluded dates and
+# items down to the period currently being viewed, and paint only the
+# matching items onto the calendar grid for that date range.
 # ===========================================================================
-def test_presenter_show_current_renders_calendar():
+def test_presenter_show_current_renders_calendar(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     p1 = PeriodEditViewModel(semester="FALL", moed="ALEPH", start_date="2026-06-01", end_date="2026-06-05", excluded_dates=["2026-06-02"])
     item1 = ScheduleItemViewModel(date="2026-06-03", title="Course A", subtitle="83100", tooltip="Details")
     item2 = ScheduleItemViewModel(date="2026-06-10", title="Course B", subtitle="83200", tooltip="Details")
-    
+
     schedule_view = ScheduleViewModel(items=[item1, item2], current_index=0, total=1)
     controller.get_schedule_view.return_value = schedule_view
-    
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 1
     presenter._periods.reset([p1])
-    
+
     # Act
     presenter.show_current()
-    
+
     # Assert
     assert view.set_screen_updates.call_count == 2
     assert view.set_screen_updates.call_args_list[0][0] == (False,)
     assert view.set_screen_updates.call_args_list[1][0] == (True,)
-    
+
     assert view.set_period_navigation.call_count == 1
     assert view.set_period_navigation.call_args[0] == ("Semester FALL - Moed ALEPH (1/1)", False, False)
-    
+
     assert view.render_calendar.call_count == 1
     args = view.render_calendar.call_args[0]
     assert args[0] == ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05"]
@@ -192,11 +224,11 @@ def test_presenter_show_current_renders_calendar():
 # ===========================================================================
 # TC-OSP-008: test show_current handles errors when reading schedule fails.
 # ===========================================================================
-def test_presenter_show_current_handles_exception():
+def test_presenter_show_current_handles_exception(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
+    controller = mock_controller
+    router = mock_router
 
     error = Exception("Database read failure")
     controller.get_schedule_view.side_effect = error
@@ -222,18 +254,18 @@ def test_presenter_show_current_handles_exception():
 # ===========================================================================
 # TC-OSP-009: test export pdf is rejected when total is 0.
 # ===========================================================================
-def test_presenter_export_pdf_guard_total_zero():
+def test_presenter_export_pdf_guard_total_zero(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 0
-    
+
     # Act
     presenter.on_export_pdf()
-    
+
     # Assert
     assert view.show_nothing_to_export.call_count == 1
     assert view.show_nothing_to_export.call_args[0] == ("There is no schedule to export yet.",)
@@ -241,21 +273,21 @@ def test_presenter_export_pdf_guard_total_zero():
 # ===========================================================================
 # TC-OSP-010: test export pdf is rejected when schedule has no exams.
 # ===========================================================================
-def test_presenter_export_pdf_guard_empty_schedule():
+def test_presenter_export_pdf_guard_empty_schedule(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     empty_view = ScheduleViewModel(items=[], current_index=0, total=1)
     controller.get_schedule_view.return_value = empty_view
-    
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 1
-    
+
     # Act
     presenter.on_export_pdf()
-    
+
     # Assert
     assert view.show_nothing_to_export.call_count == 1
     assert view.show_nothing_to_export.call_args[0] == ("This schedule has no exams to export.",)
@@ -263,11 +295,11 @@ def test_presenter_export_pdf_guard_empty_schedule():
 # ===========================================================================
 # TC-OSP-011: test export pdf handles errors when reading schedule fails.
 # ===========================================================================
-def test_presenter_export_pdf_handles_exception():
+def test_presenter_export_pdf_handles_exception(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
+    controller = mock_controller
+    router = mock_router
 
     error = Exception("Export retrieval failure")
     controller.get_schedule_view.side_effect = error
@@ -289,21 +321,21 @@ def test_presenter_export_pdf_handles_exception():
 # ===========================================================================
 # TC-OSP-012: test export pdf executes successfully on valid schedule.
 # ===========================================================================
-def test_presenter_export_pdf_success():
+def test_presenter_export_pdf_success(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     valid_view = ScheduleViewModel(items=[ScheduleItemViewModel(date="2026-06-01", title="A", subtitle="B", tooltip="C")], current_index=0, total=1)
     controller.get_schedule_view.return_value = valid_view
-    
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 1
-    
+
     # Act
     presenter.on_export_pdf()
-    
+
     # Assert
     assert view.export_schedule_pdf.call_count == 1
     assert view.export_schedule_pdf.call_args[0] == (valid_view, 0)
@@ -311,22 +343,22 @@ def test_presenter_export_pdf_success():
 # ===========================================================================
 # TC-OSP-013: test on_leave disables active state and stops worker.
 # ===========================================================================
-def test_presenter_on_leave_stops_worker():
+def test_presenter_on_leave_stops_worker(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._is_active = True
-    
+
     mock_worker = MagicMock()
     mock_worker.isRunning.return_value = True
     presenter._sort_worker = mock_worker
-    
+
     # Act
     presenter.on_leave()
-    
+
     # Assert
     assert presenter._is_active is False
     assert mock_worker.quit.call_count == 1
@@ -336,22 +368,22 @@ def test_presenter_on_leave_stops_worker():
 # ===========================================================================
 # TC-OSP-014: test on_export_txt delegates to controller correctly.
 # ===========================================================================
-def test_presenter_on_export_txt_success():
+def test_presenter_on_export_txt_success(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     valid_view = ScheduleViewModel(items=[ScheduleItemViewModel(date="2026-06-01", title="A", subtitle="B", tooltip="C")], current_index=0, total=1)
     controller.get_schedule_view.return_value = valid_view
     view.ask_save_path.return_value = "C:/test/path.txt"
-    
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 1
-    
+
     # Act
     presenter.on_export_txt()
-    
+
     # Assert
     assert view.ask_save_path.call_count == 1
     assert controller.save_schedule.call_count == 1
@@ -361,15 +393,15 @@ def test_presenter_on_export_txt_success():
 # ===========================================================================
 # TC-OSP-015: test on_export_txt rejected when total is zero.
 # ===========================================================================
-def test_presenter_on_export_txt_guard_total_zero():
+def test_presenter_on_export_txt_guard_total_zero(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
-    
+    controller = mock_controller
+    router = mock_router
+
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 0
-    
+
     # Act
     presenter.on_export_txt()
 
@@ -383,10 +415,11 @@ def test_presenter_on_export_txt_guard_total_zero():
 # no "Could not save schedule:" prefix restating what the message already
 # says (the dialog title "Export error" already gives that context).
 # ===========================================================================
-def test_presenter_on_export_txt_save_failure_shows_message_without_prefix():
+def test_presenter_on_export_txt_save_failure_shows_message_without_prefix(mock_controller, mock_router):
+    # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
+    controller = mock_controller
+    router = mock_router
 
     valid_view = ScheduleViewModel(
         items=[ScheduleItemViewModel(date="2026-06-01", title="A", subtitle="B", tooltip="C")],
@@ -401,8 +434,10 @@ def test_presenter_on_export_txt_save_failure_shows_message_without_prefix():
     presenter = OutputScreenPresenter(view, controller, router)
     presenter._total = 1
 
+    # Act
     presenter.on_export_txt()
 
+    # Assert
     assert view.show_export_error.call_args[0][0] == (
         "The file could not be written. Please close it and try again."
     )
@@ -412,13 +447,13 @@ def test_presenter_on_export_txt_save_failure_shows_message_without_prefix():
 # TC-OSP-016: a SortWorker failure's structured AppErrorInfo (last_error)
 # reaches the controller's technical log, not just the GUI message.
 # ===========================================================================
-def test_presenter_on_sort_failed_logs_structured_error_via_controller():
+def test_presenter_on_sort_failed_logs_structured_error_via_controller(mock_controller, mock_router):
     # Arrange
     from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory, ErrorSeverity
 
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
+    controller = mock_controller
+    router = mock_router
 
     presenter = OutputScreenPresenter(view, controller, router)
     info = AppErrorInfo(
@@ -448,11 +483,11 @@ def test_presenter_on_sort_failed_logs_structured_error_via_controller():
 # PDF export operation/path context — this is what SchedulePdfExporter calls
 # when the HTML/Qt-printing step fails outside any presenter try/except.
 # ===========================================================================
-def test_presenter_map_export_error_delegates_to_controller():
+def test_presenter_map_export_error_delegates_to_controller(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
-    controller = MagicMock()
-    router = MagicMock()
+    controller = mock_controller
+    router = mock_router
     controller.map_error.return_value = "The file could not be written. Please try again."
 
     presenter = OutputScreenPresenter(view, controller, router)

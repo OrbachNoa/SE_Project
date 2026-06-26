@@ -1,3 +1,27 @@
+"""Unit tests for the five schedule-scoring metric functions and the
+index-building helpers they depend on.
+
+The index builders (build_cohort_index, build_span_index,
+build_program_index, build_elective_index) precompute per-course lookups
+once per schedule, scoped by requirement (obligatory/elective) and program
+selection, so the metric functions themselves can run as simple lookups
+rather than re-filtering courses every call. The five metrics
+(min_mandatory_gap, avg_all_courses_gap, peak_elective_conflict,
+mandatory_span, max_exams_per_day) each capture a different aspect of
+schedule quality: tightest mandatory spacing, average spacing across all
+courses, worst single-day elective pile-up, mandatory exam-window width
+per moed group, and busiest single day per program. Each metric's tests
+verify both its main computation and its specific edge case (no pair to
+compare, single exam, empty schedule).
+
+Conventions:
+- Each test carries a unique TC-MET-NNN identifier in the comment block
+  above its definition, numbered sequentially, grouped under a section
+  divider per function.
+- Each test body is split into Arrange / Act / Assert sections.
+- `make_course`, `make_program_entry`, `make_assignment`, and
+  `empty_schedule` come from the shared fixtures in tests/conftest.py.
+"""
 from datetime import date
 import pytest
 

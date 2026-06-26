@@ -1,3 +1,23 @@
+"""Unit tests for ActionBarWidget — the input screen's primary action toolbar.
+
+The widget exposes five buttons (load courses, load periods, generate,
+cancel, view results) and a replace/update mode toggle. Tests verify the
+default disabled/hidden state before any data is loaded, that the mode
+toggle is mutually exclusive, that each button's click actually reaches a
+connected slot, and that a disabled button's click never fires its slot —
+the same guard InputScreenPresenter relies on while a run is in progress.
+
+Conventions:
+- Each test carries a unique TC-ABW-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections. Where
+  construction itself is the behaviour under test (e.g. checking default
+  state), the construction call is placed under Act rather than Arrange.
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`, since every PyQt widget
+  needs a live QApplication; no other conftest fixture applies to this
+  widget's plain construction.
+"""
 import pytest
 from unittest.mock import MagicMock
 from src.gui.features.input.widgets.ActionBarWidget import ActionBarWidget
@@ -5,12 +25,14 @@ from src.gui.features.input.widgets.ActionBarWidget import ActionBarWidget
 pytestmark = pytest.mark.usefixtures("qapp")
 
 # ===========================================================================
-# TC-ABW-001: test default initial state of action bar controls.
+# TC-ABW-001: before any course/period file is loaded, generate must stay
+# disabled and the cancel/view-results controls must stay hidden — only
+# the two load buttons and the default replace mode are active.
 # ===========================================================================
 def test_action_bar_initial_state():
-    # Arrange
+    # Act — construction itself produces the default state under test.
     widget = ActionBarWidget()
-    
+
     # Assert
     # Buttons exist
     assert widget.courses_load_btn is not None
@@ -27,7 +49,8 @@ def test_action_bar_initial_state():
     assert widget.view_results_btn.isVisible() is False
 
 # ===========================================================================
-# TC-ABW-002: test radio button toggling.
+# TC-ABW-002: replace and update mode are mutually exclusive — checking
+# one must uncheck the other, in both directions.
 # ===========================================================================
 def test_action_bar_mode_toggling():
     # Arrange
@@ -48,7 +71,9 @@ def test_action_bar_mode_toggling():
     assert widget.mode_update.isChecked() is False
 
 # ===========================================================================
-# TC-ABW-003: test button clicked signals.
+# TC-ABW-003: each of the five buttons' clicked signal reaches a connected
+# slot exactly once per click — confirms the widget wires real Qt signals,
+# not just visually-present buttons with no behaviour behind them.
 # ===========================================================================
 def test_action_bar_button_clicks():
     # Arrange
@@ -82,7 +107,9 @@ def test_action_bar_button_clicks():
     assert mock_view.call_count == 1
 
 # ===========================================================================
-# TC-ABW-004: test that clicking a disabled generate button is rejected.
+# TC-ABW-004: a click on a disabled generate_btn must not reach the
+# connected slot — the button has to be genuinely disabled at the Qt level,
+# not merely styled to look inactive.
 # ===========================================================================
 def test_action_bar_disabled_click_rejection():
     # Arrange
@@ -98,7 +125,9 @@ def test_action_bar_disabled_click_rejection():
     assert mock_generate.call_count == 0
 
 # ===========================================================================
-# TC-ABW-005: test control states when entering running state.
+# TC-ABW-005: while a generation run is in progress, the action bar must
+# hide generate/load controls and show cancel — preventing a second run
+# from being started concurrently.
 # ===========================================================================
 def test_action_bar_enter_running_state():
     # Arrange
@@ -117,7 +146,8 @@ def test_action_bar_enter_running_state():
     assert widget.periods_load_btn.isEnabled() is False
 
 # ===========================================================================
-# TC-ABW-006: test control states when exiting running state.
+# TC-ABW-006: once a run ends, the action bar must restore the pre-run
+# control layout — generate/load controls visible again, cancel hidden.
 # ===========================================================================
 def test_action_bar_exit_running_state():
     # Arrange

@@ -1,3 +1,30 @@
+"""Unit tests for the clustering subsystem's distance metrics.
+
+Covers EuclideanDistanceMetric and WeightedEuclideanDistanceMetric: plain
+straight-line distance, the batched point-to-centroid distance matrix used
+by the clustering algorithms, and weighted distance behaviour (matching
+plain Euclidean at unit weights, scaling a dimension's contribution, and
+rejecting invalid weight vectors).
+
+This file is one of four sibling files that share the "CLU" TC-ID prefix,
+each covering a different layer of the clustering subsystem as one
+continuous numbered family:
+  - Test_ClusteringFeatures.py     TC-CLU-001..010 (feature extraction/normalization)
+  - Test_ClusteringDistanceMetrics.py (this file)  TC-CLU-011..016 (distance metrics)
+  - Test_ClusteringAlgorithms.py   TC-CLU-017..027 (clustering algorithms/sampling)
+  - Test_ClusteringService.py      TC-CLU-028..032 (clustering service)
+The numbering is intentionally continuous across the four files and must
+not be restarted within any single file.
+
+Test bodies follow the Arrange/Act/Assert structure, marked with explicit
+``# Arrange`` / ``# Act`` / ``# Assert`` comments.
+
+Fixture policy: none of the shared fixtures defined in tests/conftest.py
+apply here. Those fixtures build scheduling domain objects (courses, exam
+periods, assignments, DTOs); this file tests pure distance-metric math on
+small NumPy arrays, so each test constructs its own minimal vectors inline
+instead.
+"""
 import numpy as np
 import pytest
 
@@ -22,7 +49,8 @@ def test_euclidean_distance_metric_computes_straight_line_distance():
     # Act
     result = metric.distance(a, b)
 
-    # Assert — a classic 3-4-5 right triangle.
+    # Assert
+    # 3-4-5 right triangle, so the straight-line distance is exactly 5.
     assert result == 5.0
 
 
@@ -80,7 +108,8 @@ def test_weighted_euclidean_distance_applies_the_weight():
     # Act
     result = metric.distance(a, b)
 
-    # Assert — sqrt(4 * 1^2 + 1 * 1^2) = sqrt(5), not the unweighted sqrt(2).
+    # Assert
+    # sqrt(4 * 1^2 + 1 * 1^2) = sqrt(5), not the unweighted sqrt(2).
     assert result == pytest.approx(5 ** 0.5)
 
 
@@ -89,7 +118,12 @@ def test_weighted_euclidean_distance_applies_the_weight():
 # dimension's contribution to the distance.
 # ===========================================================================
 def test_weighted_euclidean_distance_rejects_negative_weights():
-    # Act + Assert
+    # Arrange
+
+    # Act
+    # Assert
+    # Validation happens inside the constructor, so the call and the
+    # expected outcome are captured together by the context manager.
     with pytest.raises(ValueError):
         WeightedEuclideanDistanceMetric([-1.0, 1.0])
 
@@ -99,6 +133,11 @@ def test_weighted_euclidean_distance_rejects_negative_weights():
 # count toward similarity.
 # ===========================================================================
 def test_weighted_euclidean_distance_rejects_all_zero_weights():
-    # Act + Assert
+    # Arrange
+
+    # Act
+    # Assert
+    # Validation happens inside the constructor, so the call and the
+    # expected outcome are captured together by the context manager.
     with pytest.raises(ValueError):
         WeightedEuclideanDistanceMetric([0.0, 0.0])

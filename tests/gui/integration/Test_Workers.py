@@ -1,6 +1,35 @@
+"""Integration tests for the concurrency layer: SchedulerWorker (the QThread
+that bridges a worker process's queue to GUI-thread Qt signals) and
+SchedulerProcessRunner (the entry point that actually runs inside that
+worker process).
+
+SchedulerWorker tests cover normal message dispatch (batch/progress/
+finished), the process-crash drainage path when the queue goes empty and
+the process has died, a structured AppErrorInfo payload arriving over the
+queue, an unexpected IPC read failure being mapped to a clean message
+instead of leaking raw exception text, and the cancel flow (set the event,
+drain the queue non-blocking, terminate the process if it didn't exit in
+time). SchedulerProcessRunner tests cover the success path and two error
+paths (a generic RuntimeError and a MemoryError, the latter required to
+keep its RESOURCE category rather than becoming a generic infrastructure
+failure) — TC-SCHED-WORK-006 also follows that error payload through a
+real SchedulerWorker to confirm the two halves of the pipeline agree on
+the same structured record.
+
+Conventions:
+- Each test carries a unique TC-SCHED-WORK-NNN identifier in the comment
+  block above its definition, numbered sequentially (with lettered
+  variants for closely related scenarios on the same method).
+- Each test body is split into Arrange / Act / Assert sections.
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`, since SchedulerWorker is
+  a QThread. `mock_repository` (also shared) is used wherever a
+  SchedulerWorker needs a repository — it is plain `MagicMock(spec=
+  SQLiteScheduleRepository)`, identical to what these tests would
+  otherwise build locally.
+"""
 import queue
 import pytest
-import sys
 from unittest.mock import MagicMock, patch, ANY
 
 from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
@@ -13,68 +42,64 @@ pytestmark = pytest.mark.usefixtures("qapp")
 # ===========================================================================
 # TC-SCHED-WORK-001: Test that SchedulerWorker dispatches queue messages to corresponding signals.
 # ===========================================================================
-def test_worker_dispatches_messages():
+def test_worker_dispatches_messages(mock_repository):
     # Arrange
     mock_queue = MagicMock()
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
-    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
-    
+
     mock_queue.get.side_effect = [
         ("SCHEDULE_BATCH", (b"compressed_data", 2)),
         ("PROGRESS", 50),
         ("FINISHED", None)
     ]
-    
+
     worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
-    
+
     batch_counts = []
     progress_vals = []
-    finished_called = False
-    
+    finished_calls = []
+
     worker.schedules_batch_found.connect(batch_counts.append)
     worker.progress_updated.connect(progress_vals.append)
-    worker.search_finished.connect(lambda: setattr(sys.modules[__name__], "finished_called", True))
-    
-    setattr(sys.modules[__name__], "finished_called", False)
-    
+    worker.search_finished.connect(lambda: finished_calls.append(True))
+
     # Act
     worker.run()
-    
+
     # Assert
     mock_repository.insert_compressed_batch.assert_called_once_with(b"compressed_data", 2, ANY)
     assert batch_counts == [2]
     assert progress_vals == [50]
-    assert getattr(sys.modules[__name__], "finished_called") is True
+    assert finished_calls == [True]
 
 
 # ===========================================================================
 # TC-SCHED-WORK-002: Test that if the process dies unexpectedly, SchedulerWorker handles it and emits error.
 # ===========================================================================
-def test_worker_process_crash_drainage_path():
+def test_worker_process_crash_drainage_path(mock_repository):
     # Arrange
     mock_queue = MagicMock()
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
-    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
-    
+
     mock_queue.get.side_effect = queue.Empty()
-    
+
     mock_process.is_alive.return_value = False
     mock_process.exitcode = 137
     mock_cancel_event.is_set.return_value = False
-    
+
     worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
-    
+
     error_msg = None
     def on_error(msg):
         nonlocal error_msg
         error_msg = msg
     worker.error_occurred.connect(on_error)
-    
+
     # Act
     worker.run()
-    
+
     # Assert
     assert error_msg is not None
     assert "crashed unexpectedly" in error_msg
@@ -89,7 +114,7 @@ def test_worker_process_crash_drainage_path():
 # TC-SCHED-WORK-002b: a serialised AppErrorInfo ERROR payload from a worker
 # process is unpacked into a clean message + structured record.
 # ===========================================================================
-def test_worker_handles_structured_error_payload():
+def test_worker_handles_structured_error_payload(mock_repository):
     # Arrange
     from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory, ErrorSeverity
 
@@ -105,7 +130,6 @@ def test_worker_handles_structured_error_payload():
     mock_queue = MagicMock()
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
-    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
     mock_queue.get.side_effect = [("ERROR", info.to_payload())]
 
     worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
@@ -126,12 +150,11 @@ def test_worker_handles_structured_error_payload():
 # mapper registry instead of building user_message with str(e) directly —
 # the raw exception text must never reach the GUI-facing message.
 # ===========================================================================
-def test_worker_unexpected_queue_read_error_is_mapped_not_raw():
+def test_worker_unexpected_queue_read_error_is_mapped_not_raw(mock_repository):
     # Arrange
     mock_queue = MagicMock()
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
-    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
 
     mock_queue.get.side_effect = RuntimeError("pipe broke unexpectedly")
 
@@ -155,21 +178,20 @@ def test_worker_unexpected_queue_read_error_is_mapped_not_raw():
 # ===========================================================================
 # TC-SCHED-WORK-003: Test that cancel flow sets event, drains queue, and terminates process if needed.
 # ===========================================================================
-def test_worker_cancel_graceful_and_terminate():
+def test_worker_cancel_graceful_and_terminate(mock_repository):
     # Arrange
     mock_queue = MagicMock()
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
-    mock_repository = MagicMock(spec=SQLiteScheduleRepository)
-    
+
     mock_process.is_alive.return_value = True
     mock_queue.empty.side_effect = [False, False, True]
-    
+
     worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
-    
+
     # Act
     worker.cancel()
-    
+
     # Assert
     assert mock_cancel_event.set.call_count == 1
     assert any(kwargs.get("timeout") == 0.5 for _, _, kwargs in mock_process.join.mock_calls)
@@ -188,7 +210,7 @@ def test_process_runner_success(mock_obs_cls, mock_sched_cls):
     mock_sched_cls.return_value = mock_scheduler
     mock_observer = MagicMock()
     mock_obs_cls.return_value = mock_observer
-    
+
     queue = MagicMock()
     cancel_event = MagicMock()
     slots = []
@@ -223,10 +245,10 @@ def test_process_runner_error_handling(mock_obs_cls, mock_sched_cls):
     mock_scheduler = MagicMock()
     mock_sched_cls.return_value = mock_scheduler
     mock_scheduler.generateSchedules.side_effect = RuntimeError("backtracking error")
-    
+
     mock_observer = MagicMock()
     mock_obs_cls.return_value = mock_observer
-    
+
     queue = MagicMock()
     cancel_event = MagicMock()
     slots = []
@@ -261,7 +283,7 @@ def test_process_runner_error_handling(mock_obs_cls, mock_sched_cls):
 # ===========================================================================
 @patch("src.infrastructure.concurrency.SchedulerProcessRunner.Scheduler")
 @patch("src.infrastructure.concurrency.SchedulerProcessRunner.QueueScheduleObserver")
-def test_process_runner_memory_error_maps_to_resource(mock_obs_cls, mock_sched_cls):
+def test_process_runner_memory_error_maps_to_resource(mock_obs_cls, mock_sched_cls, mock_repository):
     # Arrange
     mock_scheduler = MagicMock()
     mock_sched_cls.return_value = mock_scheduler
@@ -290,14 +312,10 @@ def test_process_runner_memory_error_maps_to_resource(mock_obs_cls, mock_sched_c
 
     # And the full pipeline: SchedulerWorker rebuilds the same record from the
     # payload it receives over the queue, with last_error reflecting it.
-    from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
-    from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
-
     worker_queue = MagicMock()
     worker_queue.get.side_effect = [("ERROR", payload)]
     worker_process = MagicMock()
-    worker_repository = MagicMock(spec=SQLiteScheduleRepository)
-    worker = SchedulerWorker(worker_queue, MagicMock(), [worker_process], worker_repository)
+    worker = SchedulerWorker(worker_queue, MagicMock(), [worker_process], mock_repository)
     messages = []
     worker.error_occurred.connect(messages.append)
 

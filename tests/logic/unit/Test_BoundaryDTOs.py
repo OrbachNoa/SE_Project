@@ -1,3 +1,23 @@
+"""
+Tests for the DTO transport boundary: AssignmentDTO, ScheduleDTO, and
+ScheduleDTOAdapter.
+
+These DTOs are the contract that crosses the process boundary (e.g. via
+pickling for multiprocessing), so this file verifies that they hold their
+fields correctly, survive serialization round-trips, reject unexpected
+attributes (slots enforcement), and that ScheduleDTOAdapter correctly
+reconstructs the richer view objects (dates, enums, nested course view)
+that downstream consumers expect.
+
+Tests are identified with sequential TC-DTO-NNN identifiers, and each test
+body follows the Arrange/Act/Assert structure.
+
+Fixture policy: this file does not use any tests/conftest.py fixtures.
+All DTOs are constructed directly with literal values, since the goal here
+is to test the DTO/adapter boundary itself in isolation, independent of the
+domain-object factories used elsewhere in the suite.
+"""
+
 import pickle
 import pytest
 from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
@@ -12,7 +32,9 @@ from src.application.dto.ScheduleDTOAdapter import ScheduleDTOAdapter
 # TC-DTO-001: Test that AssignmentDTO stores fields correctly.
 # ===========================================================================
 def test_assignment_dto_fields():
-    # Arrange & Act
+    # Arrange
+
+    # Act
     dto = AssignmentDTO(
         course_id="10101",
         course_name="Calculus 1",
@@ -73,8 +95,10 @@ def test_dto_pickle_serialization():
 def test_assignment_dto_rejects_extra_attributes():
     # Arrange
     dto = AssignmentDTO("10101", "Calc 1", "Dr. Cohen", "2026-06-01", "FALL", "ALEPH")
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises(AttributeError):
         dto.non_existent_field = "test"  # type: ignore
 
@@ -83,7 +107,11 @@ def test_assignment_dto_rejects_extra_attributes():
 # TC-DTO-005: Test that AssignmentDTO rejects instantiation with missing arguments.
 # ===========================================================================
 def test_assignment_dto_missing_arguments():
-    # Arrange, Act & Assert
+    # Arrange
+
+    # Act
+
+    # Assert
     # missing required positional arguments
     with pytest.raises(TypeError):
         AssignmentDTO(course_id="10101")
@@ -95,10 +123,12 @@ def test_assignment_dto_missing_arguments():
 def test_schedule_dto_rejects_extra_attributes():
     # Arrange
     dto = ScheduleDTO()
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises(AttributeError):
-        dto.non_existent_field = "test"  
+        dto.non_existent_field = "test"
 
 
 # ===========================================================================
@@ -107,8 +137,10 @@ def test_schedule_dto_rejects_extra_attributes():
 def test_dto_pickle_deserialization_failure():
     # Arrange
     invalid_data = b"invalid pickled bytes data stream"
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises((pickle.UnpicklingError, EOFError, AttributeError, ValueError, TypeError)):
         pickle.loads(invalid_data)
 
@@ -147,8 +179,10 @@ def test_schedule_dto_adapter_invalid_date():
     # Arrange
     a = AssignmentDTO("10101", "Calc 1", "Dr. Cohen", "invalid-date-format", "FALL", "ALEPH")
     schedule = ScheduleDTO(assignments=[a], total_assignments=1)
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises(ValueError):
         ScheduleDTOAdapter(schedule)
 
@@ -160,8 +194,10 @@ def test_schedule_dto_adapter_invalid_semester():
     # Arrange
     a = AssignmentDTO("10101", "Calc 1", "Dr. Cohen", "2026-06-01", "NOT_A_SEMESTER", "ALEPH")
     schedule = ScheduleDTO(assignments=[a], total_assignments=1)
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises(ValueError):
         ScheduleDTOAdapter(schedule)
 
@@ -173,8 +209,10 @@ def test_schedule_dto_adapter_invalid_moed():
     # Arrange
     a = AssignmentDTO("10101", "Calc 1", "Dr. Cohen", "2026-06-01", "FALL", "NOT_A_MOED")
     schedule = ScheduleDTO(assignments=[a], total_assignments=1)
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises(ValueError):
         ScheduleDTOAdapter(schedule)
 
@@ -186,8 +224,10 @@ def test_schedule_dto_adapter_rejects_extra_attributes():
     # Arrange
     schedule = ScheduleDTO(assignments=[], total_assignments=0)
     adapter = ScheduleDTOAdapter(schedule)
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises(AttributeError):
         adapter.extra_attribute = "forbidden"
 
@@ -201,8 +241,10 @@ def test_adapted_assignment_view_rejects_extra_attributes():
     schedule = ScheduleDTO(assignments=[a], total_assignments=1)
     adapter = ScheduleDTOAdapter(schedule)
     adapted_assignment = adapter.assignments[0]
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises(AttributeError):
         adapted_assignment.extra_attribute = "forbidden"
 
@@ -216,8 +258,10 @@ def test_adapted_course_view_rejects_extra_attributes():
     schedule = ScheduleDTO(assignments=[a], total_assignments=1)
     adapter = ScheduleDTOAdapter(schedule)
     adapted_course = adapter.assignments[0].course
-    
-    # Act & Assert
+
+    # Act
+
+    # Assert
     with pytest.raises(AttributeError):
         adapted_course.extra_attribute = "forbidden"
 

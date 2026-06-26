@@ -1,3 +1,20 @@
+"""
+Tests for CheckerFactory.build_checkers, which assembles the list of
+constraint checkers to run for a schedule search based on a
+ConstraintsConfig: the two base checkers are always present, and each
+optional threshold field adds (or omits) its corresponding checker with
+the configured k value forwarded unchanged.
+
+Test cases are identified with sequential TC-FAC-NNN identifiers, and
+each test body is organized into Arrange/Act/Assert sections.
+
+Fixture policy: most tests build ConstraintsConfig and call build_checkers
+directly with no shared fixtures, since the inputs are simple value
+objects. TC-FAC-009 is the exception, using the shared make_course,
+make_program_entry, make_assignment, and empty_schedule fixtures from
+tests/conftest.py to assemble a realistic course/schedule pair for
+exercising the base checkers end to end.
+"""
 from datetime import date
 import pytest
 
@@ -67,7 +84,8 @@ def test_build_checkers_adds_only_min_gap_obligatory_checker():
     # Act
     checkers = build_checkers(config, courses=[])
 
-    # Assert — exactly 3 checkers means no other threshold checker was added.
+    # Assert
+    # Exactly 3 checkers means no other threshold checker was added.
     assert len(checkers) == 3
     assert isinstance(checkers[2], MinDaysBetweenExamsChecker)
     assert checkers[2]._scope is GapScope.OBLIGATORY_ONLY
@@ -205,11 +223,13 @@ def test_base_checkers_are_already_prepared_by_the_factory(
     schedule = empty_schedule
     candidate = make_assignment(course=course, exam_date=date(2026, 6, 1))
 
-    # Act — call check() directly; the test never calls prepare() itself.
+    # Act
+    # Call check() directly; the test never calls prepare() itself.
     program_year_result = checkers[0].check(candidate, schedule)
     moed_order_result = checkers[1].check(candidate, schedule)
 
-    # Assert — both base checkers ran without raising and found no conflict.
+    # Assert
+    # Both base checkers ran without raising and found no conflict.
     assert isinstance(checkers[0], ProgramYearConflictChecker)
     assert isinstance(checkers[1], MoedOrderChecker)
     assert program_year_result is False

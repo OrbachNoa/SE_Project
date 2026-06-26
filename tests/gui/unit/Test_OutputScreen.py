@@ -1,3 +1,24 @@
+"""Unit tests for OutputScreen — the schedule navigation and display screen.
+
+Covers initial prev/next button state, forward/backward navigation
+updating both button state and the presenter's current index, the solution
+counter text, calendar rendering of the selected month's assignments, and
+the back-to-input routing.
+
+Conventions:
+- Each test carries a unique TC-OU-UI-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- This file defines its OWN `mock_controller` fixture, overriding the
+  shared one in tests/conftest.py — deliberately, not by oversight.
+  OutputScreen connects to `controller.total_count_updated`, a real Qt
+  signal; calling `.emit()` on a MagicMock-based fake signal is a no-op
+  that never invokes connected slots, so the shared MagicMock controller
+  can't exercise that wiring. `MockController` here is a genuine QObject
+  subclass with an actual `pyqtSignal(int)`, giving real signal/slot
+  semantics. Do not replace this with the shared fixture — it would not
+  fail loudly, it would just silently stop testing the signal connection.
+"""
 import pytest
 from unittest.mock import MagicMock
 from PyQt6.QtCore import pyqtSignal, QObject
@@ -33,7 +54,8 @@ def mock_controller(viewmodel_mapper):
     return controller
 
 # ===========================================================================
-# TC-OU-UI-001: test initial solution navigation button states.
+# TC-OU-UI-001: on the first schedule of a multi-schedule result, prev must
+# be disabled (nothing before it) and next must be enabled.
 # ===========================================================================
 def test_solution_navigation_initial_state(mock_controller, mock_router):
     # Arrange
@@ -51,7 +73,8 @@ def test_solution_navigation_initial_state(mock_controller, mock_router):
 
 
 # ===========================================================================
-# TC-OU-UI-002: test next schedule button navigates forward.
+# TC-OU-UI-002: on_next() must advance the presenter's index and flip the
+# button states (prev enabled, next disabled at the last schedule).
 # ===========================================================================
 def test_next_schedule_button_navigates_forward(mock_controller, mock_router):
     # Arrange
@@ -72,7 +95,8 @@ def test_next_schedule_button_navigates_forward(mock_controller, mock_router):
 
 
 # ===========================================================================
-# TC-OU-UI-003: test previous schedule button navigates backward.
+# TC-OU-UI-003: on_prev() must mirror on_next() — stepping back from index
+# 1 restores index 0 and the original button state.
 # ===========================================================================
 def test_previous_schedule_button_navigates_backward(mock_controller, mock_router):
     # Arrange
@@ -94,7 +118,8 @@ def test_previous_schedule_button_navigates_backward(mock_controller, mock_route
 
 
 # ===========================================================================
-# TC-OU-UI-004: test schedule counter updates.
+# TC-OU-UI-004: the solution-number input must show the 1-based current
+# position and update immediately after navigating to the next schedule.
 # ===========================================================================
 def test_schedule_counter_updates(mock_controller, mock_router):
     # Arrange
@@ -115,7 +140,8 @@ def test_schedule_counter_updates(mock_controller, mock_router):
     assert screen.solution_bar.solution_input.text() == "2"
 
 # ===========================================================================
-# TC-OU-UI-005: test calendar shows selected month.
+# TC-OU-UI-005: on_enter() must render the calendar for the month
+# containing the schedule's exam dates, with a cell for each exam date.
 # ===========================================================================
 def test_calendar_shows_selected_month(mock_controller, mock_router):
     # Arrange
@@ -146,7 +172,9 @@ def test_calendar_shows_selected_month(mock_controller, mock_router):
 
 
 # ===========================================================================
-# TC-OU-UI-006: test that clicking the back button navigates back to input.
+# TC-OU-UI-006: clicking the solution bar's back button must invoke the
+# router's back() exactly once — the screen delegates navigation, it
+# doesn't implement its own routing.
 # ===========================================================================
 def test_back_button_navigates_to_input_screen(mock_controller, mock_router):
     # Arrange

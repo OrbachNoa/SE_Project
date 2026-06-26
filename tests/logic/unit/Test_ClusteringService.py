@@ -1,3 +1,25 @@
+"""Unit tests for ClusteringService, the orchestrator that wires feature
+extraction, normalization, K selection, and the clustering strategy into a
+single fit()/cluster() pipeline and reports the outcome as a ClusterResult.
+
+This file owns TC-CLU-028 through TC-CLU-032. The "CLU" prefix is shared
+across four sibling files that each cover one layer of the clustering
+subsystem as a single numbered family:
+  - Test_ClusteringFeatures.py          TC-CLU-001..010 (feature extraction)
+  - Test_ClusteringDistanceMetrics.py    TC-CLU-011..016 (distance metrics)
+  - Test_ClusteringAlgorithms.py         TC-CLU-017..027 (clustering strategies)
+  - Test_ClusteringService.py (this file) TC-CLU-028..032 (end-to-end orchestration)
+
+Every test body follows the Arrange/Act/Assert structure, with each section
+marked by its own exact comment so the setup, the call under test, and the
+outcome checks stay visually distinct.
+
+Fixture policy: this file does not draw on any shared fixtures from
+tests/conftest.py. Those fixtures build domain objects (Course, ExamPeriod,
+ExamAssignment, etc.) for the scheduling engine, whereas these tests only
+need bare ScheduleDTO score dictionaries and ClusteringService/ClusterConfig
+instances, which are cheaper and clearer to construct inline per test.
+"""
 import pytest
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
@@ -65,9 +87,12 @@ def test_clustering_service_cluster_before_fit_raises():
     # Arrange
     service = ClusteringService(ClusterConfig(k_mode="fixed", k=2))
 
-    # Act + Assert
+    # Act
+    act = lambda: service.cluster()
+
+    # Assert
     with pytest.raises(RuntimeError):
-        service.cluster()
+        act()
 
 
 # ===========================================================================
@@ -78,9 +103,12 @@ def test_clustering_service_fit_on_empty_schedules_raises():
     # Arrange
     service = ClusteringService(ClusterConfig(k_mode="fixed", k=2))
 
-    # Act + Assert
+    # Act
+    act = lambda: service.fit([])
+
+    # Assert
     with pytest.raises(ValueError):
-        service.fit([])
+        act()
 
 
 # ===========================================================================

@@ -1,3 +1,33 @@
+"""Unit tests for AppController — the application facade behind the GUI.
+
+AppController is the real class under test here (unlike most GUI test
+files, which mock the controller); its collaborators (importer, scheduler,
+exporter, mapper) are mocked instead. Covers delegation of file/page/export
+operations to the right collaborator, the worker lifecycle around
+generate_schedules (signal wiring, progress polling, cancellation), the
+early-results-ready navigation firing exactly once per run, and the error
+layer: every exception path (infeasible input, MemoryError, a worker's
+structured AppErrorInfo, an unmapped exception) must reach the GUI as a
+clean message — never a raw exception string or traceback — while the full
+technical detail still reaches the log.
+
+Conventions:
+- Each test carries a unique TC-AC-NNN identifier in the comment block
+  above its definition, numbered sequentially (lettered variants such as
+  005b/005c/019b cover closely related scenarios on the same method).
+  TC-AC-004 does not exist in this file — left as a gap rather than
+  renumbering the tests after it, to avoid breaking traceability to any
+  existing references for no functional gain.
+- Each test body is split into Arrange / Act / Assert sections.
+- `controller` is a LOCAL fixture building the real AppController with
+  mocked collaborators (`mock_importer`, `mock_scheduler`, `mock_exporter`,
+  `mock_mapper`) — distinct in purpose from the shared `mock_controller`
+  fixture in tests/conftest.py (which fakes the controller itself for
+  other files testing code that depends on it).
+- Tests use the shared `qapp` fixture (tests/conftest.py) via
+  `pytestmark = pytest.mark.usefixtures("qapp")`, since AppController
+  exposes PyQt signals.
+"""
 import pytest
 from unittest.mock import MagicMock
 from src.application.AppController import AppController
@@ -34,7 +64,8 @@ def controller(mock_importer, mock_scheduler, mock_exporter, mock_mapper):
 
 
 # ===========================================================================
-# TC-AC-001: test load_file delegating to the importer
+# TC-AC-001: load_file must forward its exact arguments to the importer
+# and return whatever the importer reports, unmodified.
 # ===========================================================================
 def test_load_file(mock_importer, controller):
     # Arrange
@@ -50,7 +81,8 @@ def test_load_file(mock_importer, controller):
     assert result == expected_result
 
 # ===========================================================================
-# TC-AC-002: test update_exam_periods delegating to input state
+# TC-AC-002: update_exam_periods must forward the edited view models
+# verbatim to the input state's apply_period_edits.
 # ===========================================================================
 def test_update_exam_periods(controller):
     # Arrange
@@ -64,7 +96,8 @@ def test_update_exam_periods(controller):
     assert controller._input_state.apply_period_edits.call_args[0][0] == ["vm1", "vm2"]
 
 # ===========================================================================
-# TC-AC-003: test generate_schedules with empty program list emits error
+# TC-AC-003: generate_schedules with no programs selected must emit a
+# clear error and must not attempt to start the scheduler at all.
 # ===========================================================================
 def test_generate_schedules_empty_programs_emits_error(controller):
     # Arrange
@@ -79,7 +112,9 @@ def test_generate_schedules_empty_programs_emits_error(controller):
     assert error_slot.call_args[0][0] == "Please select at least one program before running the scheduler."
 
 # ===========================================================================
-# TC-AC-005: test generate_schedules starts worker and connects signals
+# TC-AC-005: generate_schedules must start the background worker, wire up
+# all four of its signals exactly once each, and start the progress-poll
+# timer — a missing connection here would silently drop GUI updates.
 # ===========================================================================
 def test_generate_schedules_starts_worker(mock_scheduler, controller):
     # Arrange
@@ -143,7 +178,8 @@ def test_generate_schedules_memory_error_shown_as_resource(mock_scheduler, contr
 
 
 # ===========================================================================
-# TC-AC-006: test cancel_scheduling when worker is active and running
+# TC-AC-006: cancelling while a worker is actually running must forward
+# the cancel to the scheduler.
 # ===========================================================================
 def test_cancel_scheduling_active_worker(mock_scheduler, controller):
     # Arrange
@@ -158,7 +194,8 @@ def test_cancel_scheduling_active_worker(mock_scheduler, controller):
     assert mock_scheduler.cancel.call_count == 1
 
 # ===========================================================================
-# TC-AC-007: test cancel_scheduling when worker is not running
+# TC-AC-007: cancelling when the worker has already stopped must be a
+# no-op — the scheduler's cancel must not be called on a dead worker.
 # ===========================================================================
 def test_cancel_scheduling_inactive_worker(mock_scheduler, controller):
     # Arrange
@@ -173,7 +210,8 @@ def test_cancel_scheduling_inactive_worker(mock_scheduler, controller):
     assert mock_scheduler.cancel.call_count == 0
 
 # ===========================================================================
-# TC-AC-008: test get_schedule_view delegating to the mapper
+# TC-AC-008: get_schedule_view must delegate to the mapper, passing the
+# requested index through as current_index.
 # ===========================================================================
 def test_get_schedule_view(mock_mapper, controller):
     # Arrange
@@ -188,7 +226,8 @@ def test_get_schedule_view(mock_mapper, controller):
     assert mock_mapper.to_schedule_vm.call_args.kwargs["current_index"] == 3
 
 # ===========================================================================
-# TC-AC-009: test save_schedule delegating to the exporter
+# TC-AC-009: save_schedule must fetch the DTO for the given index from the
+# schedule state and hand it, with the target path, to the exporter.
 # ===========================================================================
 def test_save_schedule(mock_exporter, controller):
     # Arrange
@@ -203,7 +242,8 @@ def test_save_schedule(mock_exporter, controller):
     assert mock_exporter.save.call_args[0] == (dto, "output.pdf")
 
 # ===========================================================================
-# TC-AC-010: test load_page delegating to the schedule state
+# TC-AC-010: load_page must forward the requested page number unchanged
+# to the schedule state.
 # ===========================================================================
 def test_load_page(controller):
     # Arrange
@@ -217,7 +257,9 @@ def test_load_page(controller):
     assert controller._schedule_state.load_page.call_args[0][0] == 5
 
 # ===========================================================================
-# TC-AC-011: test get_page_info delegating to the schedule state
+# TC-AC-011: get_page_info must assemble its dict from the schedule
+# state's individual accessors (current page, total pages, count) rather
+# than caching a stale snapshot.
 # ===========================================================================
 def test_get_page_info(controller):
     # Arrange
@@ -238,7 +280,8 @@ def test_get_page_info(controller):
     assert info["total_count"] == 30
 
 # ===========================================================================
-# TC-AC-012: test get_loaded_courses, get_loaded_periods, and get_mapper
+# TC-AC-012: the three plain getters (loaded courses, loaded periods,
+# mapper) must each return the facade's current value with no transformation.
 # ===========================================================================
 def test_facade_getters(mock_mapper, controller):
     # Act
@@ -252,7 +295,8 @@ def test_facade_getters(mock_mapper, controller):
     assert mapper is mock_mapper
 
 # ===========================================================================
-# TC-AC-013: test on_app_closing cancels scheduling
+# TC-AC-013: closing the app while a worker is running must still cancel
+# the scheduler — the app must not leave a background process orphaned.
 # ===========================================================================
 def test_on_app_closing(mock_scheduler, controller):
     # Arrange
@@ -267,7 +311,8 @@ def test_on_app_closing(mock_scheduler, controller):
     assert mock_scheduler.cancel.call_count == 1
 
 # ===========================================================================
-# TC-AC-014: test handle_schedule_found emits schedule_found signal
+# TC-AC-014: a single schedule found by the worker must be re-emitted to
+# the GUI via the controller's own schedule_found signal, unmodified.
 # ===========================================================================
 def test_handle_schedule_found(controller):
     # Arrange
@@ -283,7 +328,10 @@ def test_handle_schedule_found(controller):
     assert mock_slot.call_args[0][0] == dto
 
 # ===========================================================================
-# TC-AC-015: test handle_schedules_batch_found emits batch and early navigation signals
+# TC-AC-015: once the first window of results is ready, a batch found must
+# emit the batch signal, the updated total count, AND fire early_results_ready
+# exactly once — the GUI should not wait for the full search to finish
+# before showing results.
 # ===========================================================================
 def test_handle_schedules_batch_found_with_early_nav(controller):
     # Arrange
@@ -312,7 +360,9 @@ def test_handle_schedules_batch_found_with_early_nav(controller):
     assert controller._early_nav_fired is True
 
 # ===========================================================================
-# TC-AC-016: test handle_schedules_batch_found suppresses second early nav
+# TC-AC-016: once early_results_ready has already fired once, later
+# batches must NOT fire it again — the GUI navigates to results once, not
+# on every subsequent batch.
 # ===========================================================================
 def test_handle_schedules_batch_found_early_nav_only_once(controller):
     # Arrange
@@ -333,7 +383,9 @@ def test_handle_schedules_batch_found_early_nav_only_once(controller):
     assert controller._early_nav_fired is True
 
 # ===========================================================================
-# TC-AC-017: test poll_progress emits progress_updated signal with total count
+# TC-AC-017: the progress-timer's poll tick must read the schedule state's
+# current count and re-emit it via progress_updated — this is what drives
+# the "N schedules found so far" label.
 # ===========================================================================
 def test_poll_progress(controller):
     # Arrange
@@ -352,7 +404,9 @@ def test_poll_progress(controller):
     assert mock_slot.call_args[0][0] == 85
 
 # ===========================================================================
-# TC-AC-018: test handle_search_finished emits search_finished signal
+# TC-AC-018: when the search finishes, the controller must re-emit
+# search_finished AND reset the early-nav-fired flag — so a subsequent
+# run can fire early navigation again instead of staying suppressed.
 # ===========================================================================
 def test_handle_search_finished(controller):
     # Arrange

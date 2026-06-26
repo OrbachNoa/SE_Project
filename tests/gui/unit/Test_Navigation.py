@@ -1,3 +1,14 @@
+"""Tests for screen-router navigation behavior: showing screens, tracking
+history, and going back, exercised here through ScheduleResultState's
+current-index bookkeeping and ViewModelMapper's navigation-context output.
+
+Test identifiers follow the sequential TC-NAV-NNN scheme, and each test body
+is organized into Arrange / Act / Assert sections.
+
+Fixture policy: this file uses the factory fixtures `make_schedule_dto` and
+`make_assignment_dto` from tests/conftest.py; it does not use
+mock_controller, mock_router, or qapp.
+"""
 import pytest
 from src.application.state.ScheduleResultState import ScheduleResultState
 from src.application.services.ViewModelMapper import ViewModelMapper
@@ -9,9 +20,10 @@ from src.application.services.ViewModelMapper import ViewModelMapper
 def test_navigation_empty_state_raises_index_error():
     # Arrange
     state = ScheduleResultState()
-    
-    # Act & Assert
+
+    # Assert
     with pytest.raises(IndexError):
+        # Act
         state.current_index = 0
 
 
@@ -57,9 +69,10 @@ def test_navigation_index_out_of_bounds_errors(bad_index, make_schedule_dto):
     state = ScheduleResultState()
     dto = make_schedule_dto()
     state.set_schedules([dto, dto, dto])
-    
-    # Act & Assert
+
+    # Assert
     with pytest.raises(IndexError):
+        # Act
         state.current_index = bad_index
 
 
