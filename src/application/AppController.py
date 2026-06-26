@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import List, Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QSettings
@@ -530,6 +531,21 @@ class AppController(QObject):
         """Acts as a cleanup intercept hook to eliminate zombie or orphan background worker allocations."""
         self.cancel_scheduling()
         self._scheduler.shutdown_pool()
+
+    def warm_up_clustering_async(self) -> None:
+        """Pre-import the clustering engine on a background thread.
+
+        ClusteringCoordinator -> ClusteringService pulls in scikit-learn/scipy
+        (~2.3s to import). Nothing is built here -- this only primes Python's
+        module cache, so by the time the user actually opens the Clusters
+        screen (after loading files and generating schedules, which already
+        takes a while), the import is already done and that screen opens
+        instantly. Sessions that never open Clusters never pay this cost.
+        """
+        def _import_clustering_engine() -> None:
+            from src.application.services.ClusteringCoordinator import ClusteringCoordinator  # noqa: F401
+
+        threading.Thread(target=_import_clustering_engine, daemon=True).start()
 
     # ------------------------------------------------------------------
     # Private — SchedulerWorker signal handlers
