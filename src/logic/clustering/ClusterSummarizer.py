@@ -26,12 +26,17 @@ from src.logic.comparators.ScheduleScorer import (
     MIN_MANDATORY_GAP,
 )
 from src.logic.clustering.ExtendedFeatureComputer import (
+    AVG_MOED_GAP,
+    MIN_MOED_GAP,
     GAP_STD_DEV,
     AVG_PREP_DAYS,
+    DOUBLE_EXAM_DAYS,
+    BUSIEST_WEEK_COUNT,
     MAX_REST_DAYS,
     B2B_EXAM_INCIDENCE,
     DEPT_EXAM_CONCURRENCY,
     INSTRUCTOR_EXAM_GAP,
+    MANDATORY_CONSEC,
 )
 
 
@@ -59,29 +64,53 @@ _PHRASES = {
         "A light busiest-day load",
         "A heavy busiest-day load",
     ),
+    AVG_MOED_GAP: (
+        "Longer Moed A to B grading gaps",
+        "Shorter Moed A to B grading gaps",
+    ),
+    MIN_MOED_GAP: (
+        "A generous minimum Moed A to B gap",
+        "A tight minimum Moed A to B gap",
+    ),
     GAP_STD_DEV: (
         "Highly consistent study gaps",
         "Unevenly distributed study gaps",
     ),
     AVG_PREP_DAYS: (
-        "Abundant study prep days",
-        "Limited study prep days",
+        "Abundant study prep days before mandatory exams",
+        "Limited study prep days before mandatory exams",
     ),
     MAX_REST_DAYS: (
         "Generous max rest gaps between exams",
         "Compact exam spacing",
     ),
+    DOUBLE_EXAM_DAYS: (
+        "Fewer days with multiple exams",
+        "More days with multiple exams",
+    ),
     B2B_EXAM_INCIDENCE: (
-        "Low rate of back-to-back exams",
-        "High rate of back-to-back exams",
+        "Fewer consecutive days with exams",
+        "More consecutive days with exams",
+    ),
+    BUSIEST_WEEK_COUNT: (
+        "A lighter busiest-week exam load",
+        "A heavier busiest-week exam load",
     ),
     DEPT_EXAM_CONCURRENCY: (
         "Low department-specific exam concurrency",
         "High department-specific exam concurrency",
     ),
+    MAX_REST_DAYS: (
+        "Longer recovery windows between exams",
+        "Compact exam spacing overall",
+    ),
     INSTRUCTOR_EXAM_GAP: (
         "Excellent instructor grading gaps",
         "Tight grading windows for instructors",
+    ),
+    MANDATORY_CONSEC: (
+        "Fewer back-to-back mandatory exams",
+        "More back-to-back mandatory exams",
     ),
 }
 

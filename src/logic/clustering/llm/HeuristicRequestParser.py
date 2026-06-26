@@ -23,6 +23,11 @@ from src.logic.comparators.ScheduleScorer import (
 from src.logic.clustering.ExtendedFeatureComputer import (
     GAP_STD_DEV,
     AVG_PREP_DAYS,
+    AVG_MOED_GAP,
+    MIN_MOED_GAP,
+    DOUBLE_EXAM_DAYS,
+    BUSIEST_WEEK_COUNT,
+    MANDATORY_CONSEC,
     MAX_REST_DAYS,
     B2B_EXAM_INCIDENCE,
     DEPT_EXAM_CONCURRENCY,
@@ -75,6 +80,27 @@ _CRITERION_KEYWORDS: Dict[str, List[str]] = {
     INSTRUCTOR_EXAM_GAP: [
         "instructor gap", "professor gap", "lecturer gap", "faculty spacing",
         "מרווח מרצים", "מרצה", "פרופסור",
+    ],
+    AVG_MOED_GAP: [
+        "average moed gap", "average exam gap", "average spacing",
+        "מרווח ממוצע", "מרווח בחינות ממוצע",
+    ],
+    MIN_MOED_GAP: [
+        "minimum moed gap", "minimum exam gap", "tightest moed spacing",
+        "מרווח מינימלי", "מרווח בחינות מינימלי",
+    ],
+    
+    DOUBLE_EXAM_DAYS: [
+        "double exam days", "two exams in one day", "same day exams",
+        "ימים עם שתי בחינות", "מבחנים באותו יום",
+    ],
+    BUSIEST_WEEK_COUNT: [
+        "busiest week", "busiest week count", "most exams in a week",
+        "שבוע עמוס ביותר", "השבוע הכי עמוס",
+    ],
+    MANDATORY_CONSEC: [
+        "mandatory consecutive", "consecutive mandatory", "consecutive exams",
+        "חובה עוקבות", "מבחנים עוקבים", "עוקבות",
     ],
 }
 

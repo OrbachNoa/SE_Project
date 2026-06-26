@@ -7,13 +7,18 @@ from __future__ import annotations
 
 from src.logic.clustering.ExtendedFeatureComputer import (
     AVG_MOED_GAP,
-    AVG_PREP_DAYS,
-    BUSIEST_WEEK_COUNT,
-    DOUBLE_EXAM_DAYS,
+    MIN_MOED_GAP,
     GAP_STD_DEV,
+    AVG_PREP_DAYS,
+    DOUBLE_EXAM_DAYS,
+    BUSIEST_WEEK_COUNT,
+    MAX_REST_DAYS,
     MANDATORY_CONSEC,
     MAX_REST_DAYS,
     MIN_MOED_GAP,
+    B2B_EXAM_INCIDENCE,
+    DEPT_EXAM_CONCURRENCY,
+    INSTRUCTOR_EXAM_GAP,
 )
 from src.logic.comparators.ScheduleScorer import (
     AVG_ALL_COURSES_GAP,
@@ -22,59 +27,59 @@ from src.logic.comparators.ScheduleScorer import (
     MAX_EXAMS_PER_DAY,
     MIN_MANDATORY_GAP,
 )
-from src.logic.clustering.ExtendedFeatureComputer import (
-    GAP_STD_DEV,
-    AVG_PREP_DAYS,
-    MAX_REST_DAYS,
-    B2B_EXAM_INCIDENCE,
-    DEPT_EXAM_CONCURRENCY,
-    INSTRUCTOR_EXAM_GAP,
-)
 
 # Friendly labels, in no particular order (lookup by criterion id).
 CRITERION_LABELS = {
+    # Sort criteria
     MIN_MANDATORY_GAP:   "Min mandatory gap (days)",
     AVG_ALL_COURSES_GAP: "Avg gap, all courses (days)",
     ELECTIVE_CONFLICTS:  "Elective conflicts",
     MANDATORY_SPAN:      "Mandatory span (days)",
     MAX_EXAMS_PER_DAY:   "Max exams per day",
-    GAP_STD_DEV: "Exam gaps std-dev (days)",
-    AVG_PREP_DAYS: "Avg prep time (days)",
-    MAX_REST_DAYS: "Max gap between exams (days)",
-    B2B_EXAM_INCIDENCE: "Back-to-back exam rate",
-    DEPT_EXAM_CONCURRENCY: "Dept exam concurrency",
-    INSTRUCTOR_EXAM_GAP: "Instructor exam spacing (days)",
+    # Extended features
+    AVG_MOED_GAP:        "Avg Gap between Moed A and Moed B (days)",
+    MIN_MOED_GAP:        "Min gap between Moed A and Moed B (days)",
+    GAP_STD_DEV:         "Gap consistency (days)",
+    AVG_PREP_DAYS:       "Avg prep days (mandatory)",
+    DOUBLE_EXAM_DAYS:    "Double exam days",
+    BUSIEST_WEEK_COUNT:  "Busiest week (exams)",
+    MAX_REST_DAYS:       "Max gap between exams (days)",
+    MANDATORY_CONSEC:    "Consecutive mandatory days",
+    B2B_EXAM_INCIDENCE: "B2B Exam Incidence",
+    DEPT_EXAM_CONCURRENCY: "Departmental Exam Concurrency",
+    INSTRUCTOR_EXAM_GAP: "Instructor Exam Gap",
 }
 
 # Detailed summaries describing what each criterion calculates/means.
 CRITERION_SUMMARIES = {
+    # Sort criteria
     MIN_MANDATORY_GAP: "Minimum number of days between two mandatory exams for any student.",
     AVG_ALL_COURSES_GAP: "Average spacing (in days) between consecutive exams across all courses.",
     ELECTIVE_CONFLICTS: "Number of students experiencing overlapping exams for elective courses.",
     MANDATORY_SPAN: "The total length of the exam period (in days) spanning mandatory course exams.",
     MAX_EXAMS_PER_DAY: "The maximum number of exams scheduled on any single day.",
-    GAP_STD_DEV: "Standard deviation of study gaps, measuring schedule spacing consistency.",
-    AVG_PREP_DAYS: "The average number of preparation days students have before mandatory exams.",
-    MAX_REST_DAYS: "The maximum gap (in days) between consecutive exams, highlighting inactive periods.",
+    # Extended features
+    AVG_MOED_GAP:        "Average number of days between Moed A and Moed B exams for the same course.",
+    MIN_MOED_GAP:        "Minimum number of days between Moed A and Moed B exams for the same course.",
+    GAP_STD_DEV:         "Standard deviation of study gaps, measuring schedule spacing consistency.",
+    AVG_PREP_DAYS:       "The average number of preparation days students have before mandatory exams.",
+    DOUBLE_EXAM_DAYS:    "Number of days with two or more exams scheduled.",
+    BUSIEST_WEEK_COUNT:  "The peak number of exams scheduled within any single calendar week.",
+    MAX_REST_DAYS:       "The maximum gap (in days) between consecutive exams, highlighting inactive periods.",
+    MANDATORY_CONSEC:    "Number of times a student has mandatory exams on consecutive days.",
     B2B_EXAM_INCIDENCE: "The percentage of all exams that are scheduled back-to-back on consecutive days.",
     DEPT_EXAM_CONCURRENCY: "The peak number of exams scheduled for a single department on any given day.",
     INSTRUCTOR_EXAM_GAP: "The minimum spacing (in days) between exams taught by the same instructor.",
-    # Extended clustering features
-    AVG_MOED_GAP:        "Avg Moed A→B gap (days)",
-    MIN_MOED_GAP:        "Min Moed A→B gap (days)",
-    GAP_STD_DEV:         "Gap consistency",
-    AVG_PREP_DAYS:       "Avg prep days (mandatory)",
-    DOUBLE_EXAM_DAYS:    "Double exam days",
-    BUSIEST_WEEK_COUNT:  "Busiest week (exams)",
-    MAX_REST_DAYS:       "Longest rest (days)",
-    MANDATORY_CONSEC:    "Consecutive mandatory days",
 }
 
 # Criteria stored negated (higher-is-better); flip the sign for display so the
 # user sees a natural, positive count.
 _NEGATED = {
     ELECTIVE_CONFLICTS,
-    MAX_EXAMS_PER_DAY, DOUBLE_EXAM_DAYS, BUSIEST_WEEK_COUNT, MANDATORY_CONSEC, GAP_STD_DEV,
+    MAX_EXAMS_PER_DAY,
+    DOUBLE_EXAM_DAYS,
+    BUSIEST_WEEK_COUNT,
+    MANDATORY_CONSEC,
     GAP_STD_DEV,
     B2B_EXAM_INCIDENCE,
     DEPT_EXAM_CONCURRENCY,
@@ -132,12 +137,26 @@ def display_value_to_percentage(crit_key: str, val_str: str) -> int:
         if val <= 1.0:
             return 100
         return min(100, max(0, int((1.0 / val) * 100)))
+    elif crit_key == AVG_MOED_GAP:
+        # Higher is better, optimal >= 14.0 days
+        return min(100, max(0, int((val / 14.0) * 100)))
+    elif crit_key == MIN_MOED_GAP:
+        # Higher is better, optimal >= 10.0 days
+        return min(100, max(0, int((val / 10.0) * 100)))
     elif crit_key == GAP_STD_DEV:
         # Lower is better, 0 is perfect.
         return min(100, max(0, int((1.0 / (1.0 + val)) * 100)))
     elif crit_key == AVG_PREP_DAYS:
         # Higher is better, optimal >= 4.0 days
         return min(100, max(0, int((val / 4.0) * 100)))
+    elif crit_key == DOUBLE_EXAM_DAYS:
+        # Lower is better, 0 is perfect.
+        return min(100, max(0, int((1.0 / (1.0 + val)) * 100)))
+    elif crit_key == BUSIEST_WEEK_COUNT:
+        # Lower is better, optimal <= 2 exams.
+        if val <= 2.0:
+            return 100
+        return min(100, max(0, int((2.0 / val) * 100)))
     elif crit_key == MAX_REST_DAYS:
         # Lower is better. optimal <= 5.0.
         if val <= 5.0:
@@ -155,5 +174,7 @@ def display_value_to_percentage(crit_key: str, val_str: str) -> int:
     elif crit_key == INSTRUCTOR_EXAM_GAP:
         # Higher is better. optimal >= 7.0 days.
         return min(100, max(0, int((val / 7.0) * 100)))
+    elif crit_key == MANDATORY_CONSEC:
+        # Lower is better, 0 is perfect.
+        return min(100, max(0, int((1.0 / (1.0 + val)) * 100)))
     return min(100, max(0, int(val)))
-

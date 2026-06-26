@@ -158,14 +158,6 @@ QFrame#card QPushButton#more-metrics-btn:hover {{
     text-decoration: underline;
     color: #0d5c56;
 }}
-QFrame#card QToolTip {{
-    background-color: #F5F5F4;
-    color: #3E352F;
-    border: 1px solid #CBD5E1;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 12px;
-}}
 QFrame#card QLabel#card-title {{
     font-size: 15px;
     color: #2B2521;

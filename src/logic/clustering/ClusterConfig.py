@@ -23,7 +23,10 @@ from src.logic.comparators.ScheduleScorer import (
     AVG_ALL_COURSES_GAP,
     MIN_MANDATORY_GAP,
 )
-from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
+from src.logic.clustering.ExtendedFeatureComputer import (
+    ALL_EXTENDED_FEATURES,
+    DEFAULT_EXTENDED_FEATURES,
+)
 
 
 # How K is decided for a run.
@@ -43,7 +46,7 @@ class ClusterConfig:
 
     # Which of the score criteria take part in the feature vector. The
     # default is all of them, in their canonical order.
-    criteria: Tuple[str, ...] = tuple(list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES))
+    criteria: Tuple[str, ...] = tuple(list(ALL_CRITERIA) + list(DEFAULT_EXTENDED_FEATURES))
 
     # Optional per-criterion weight (criterion_id -> weight). Empty means every
     # selected criterion is weighted 1.0. Lets a future request say "group mostly

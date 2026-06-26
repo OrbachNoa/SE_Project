@@ -101,25 +101,31 @@ class ClusterCardWidget(QFrame):
 
         # Store full summary for popup dialog
         self._card_title_text = card.title
-        self._full_summary = card.summary
+        
+        # Format the summary list of (crit_key, label, value_str) for display and sorting
+        formatted_summary = [
+            (crit_key, label(crit_key), display_value(crit_key, card.summary.get(crit_key, 0.0)))
+            for crit_key in card.criteria
+        ]
+        self._full_summary = formatted_summary
         self._min_max = card.min_max
         self._defining_criterion = card.defining_criterion
 
         # Sort all summary items by their goodness percentage and display the top 5
         from src.gui.features.clusters.widgets.MetricWidgetFactory import display_value_to_percentage
         sorted_summary = sorted(
-            card.summary,
+            formatted_summary,
             key=lambda item: display_value_to_percentage(item[0], item[2]),
             reverse=True
         )
         summary_to_show = sorted_summary[:5]
-        has_extra = len(card.summary) > 5
+        has_extra = len(formatted_summary) > 5
 
-        for row, (crit_key, label, value) in enumerate(summary_to_show):
+        for row, (crit_key, label_txt, value) in enumerate(summary_to_show):
             is_defining = (crit_key == card.defining_criterion)
             name, indicator, val = create_metric_widgets(
                 crit_key=crit_key,
-                label_txt=label,
+                label_txt=label_txt,
                 value=value,
                 min_max=card.min_max,
                 is_defining=is_defining,

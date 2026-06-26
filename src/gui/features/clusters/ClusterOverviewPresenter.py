@@ -110,7 +110,7 @@ class ClusterOverviewPresenter:
             # Silence the warning, just keep the new K
             pass
         else:
-            self._warn_capped_k(wanted_k, active_k, custom_warn if custom_warn else None)
+            self._warn_capped_k(wanted_k, custom_warn if custom_warn else None)
 
         # Save state on success
         self._last_request_text = text
@@ -209,7 +209,7 @@ class ClusterOverviewPresenter:
         self._view.set_compare_enabled(False)
 
         custom_warn = "\n\n".join(list(dict.fromkeys(self._worker.warnings))) if self._worker and self._worker.warnings else None
-        self._warn_capped_k(self._last_k, active_k, custom_warn)
+        self._warn_capped_k(self._last_k, custom_warn)
 
     def _on_worker_failed(self, message: str) -> None:
         self._view.set_busy(False)
@@ -220,18 +220,11 @@ class ClusterOverviewPresenter:
             self._controller.log_worker_error(self._worker.last_error)
 
     def _warn_capped_k(self, requested_k: Optional[int], active_k: int, custom_warning: Optional[str] = None) -> None:
-        """Alerts the user if the requested cluster count was limited/capped or raised a warning."""
-        if (requested_k is not None and active_k < requested_k) or custom_warning:
-            if custom_warning:
-                msg = (
-                    f"Clustering Warning:\n\n{custom_warning}\n\n"
-                    f"The engine could not split the schedules into the requested {requested_k} families "
-                    f"because they do not have enough distinct score variations."
-                )
-            else:
-                msg = (
-                    f"Could only group into {active_k} families.\n\n"
-                    f"The generated schedules do not have enough distinct score variations "
-                    f"to form {requested_k} separate families."
-                )
+        """Alerts the user if the requested cluster count raised a warning."""
+        if custom_warning:
+            msg = (
+                f"Clustering Warning:\n\n{custom_warning}\n\n"
+                f"The engine could not split the schedules into the requested {requested_k} families "
+                f"because they do not have enough distinct score variations."
+            )
             self._view.show_message(msg)
