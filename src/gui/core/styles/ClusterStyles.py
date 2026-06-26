@@ -2,7 +2,8 @@
 
 from gui.core.styles.Palette import (
     COLOR_PRIMARY, COLOR_PRIMARY_HOVER, COLOR_BORDER, COLOR_MUTED,
-    COLOR_TEXT, COLOR_BG
+    COLOR_TEXT, COLOR_BG, COLOR_OVERLAY_A, COLOR_OVERLAY_B,
+    COLOR_OVERLAY_MUTUAL, BG_OVERLAY_A, BG_OVERLAY_B, BG_OVERLAY_MUTUAL
 )
 
 CLUSTER_STYLESHEET = f"""
@@ -307,5 +308,89 @@ QScrollArea#all-metrics-scroll {{
 QDialog#all-metrics-dialog QFrame#card {{
     background-color: transparent;
     border: none;
+}}
+
+/* ── Cluster Comparison Styles ───────────────────────────────────── */
+QFrame#compare-archetype-panel {{
+    background-color: #FFFFFF;
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 12px;
+    padding: 16px;
+}}
+QFrame#compare-archetype-panel QLabel#archetype-title {{
+    font-size: 16px;
+    font-weight: bold;
+    color: {COLOR_TEXT};
+    background: transparent;
+}}
+QLabel#compare-metric-better {{
+    background-color: #DCFCE7;
+    color: #15803D;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+}}
+QLabel#delta-indicator {{
+    color: #16A34A;
+    font-weight: bold;
+    font-size: 14px;
+    background: transparent;
+}}
+QPushButton#btn-calendar-overlay {{
+    background-color: {COLOR_PRIMARY};
+    color: #FFFFFF;
+    border: 1px solid {COLOR_PRIMARY_HOVER};
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: bold;
+    font-size: 13px;
+}}
+QPushButton#btn-calendar-overlay:hover {{
+    background-color: {COLOR_PRIMARY_HOVER};
+}}
+QPushButton#btn-calendar-overlay:pressed {{
+    background-color: #1F5F6F;
+}}
+
+/* ── Legend Panel ── */
+QFrame#legend-panel {{
+    background-color: #F8F5F0;
+    border: 1px solid #E4DFD5;
+    border-radius: 8px;
+    padding: 2px 10px;
+}}
+QFrame#legend-panel QLabel {{
+    color: {COLOR_TEXT};
+    background: transparent;
+}}
+
+/* ── Calendar Overlay Badges ── */
+QLabel#overlay-badge-a {{
+    background-color: {BG_OVERLAY_A};
+    color: {COLOR_TEXT};
+    border: 1.5px solid {COLOR_OVERLAY_A};
+    font-size: 11px;
+    border-radius: 4px;
+    padding: 3px;
+    font-weight: 500;
+}}
+QLabel#overlay-badge-b {{
+    background-color: {BG_OVERLAY_B};
+    color: {COLOR_TEXT};
+    border: 1.5px solid {COLOR_OVERLAY_B};
+    font-size: 11px;
+    border-radius: 4px;
+    padding: 3px;
+    font-weight: 500;
+}}
+QLabel#overlay-badge-mutual {{
+    background-color: {BG_OVERLAY_MUTUAL};
+    color: {COLOR_TEXT};
+    border: 1.5px solid {COLOR_OVERLAY_MUTUAL};
+    font-size: 11px;
+    border-radius: 4px;
+    padding: 3px;
+    font-weight: 500;
 }}
 """
