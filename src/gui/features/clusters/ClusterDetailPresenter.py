@@ -14,12 +14,22 @@ class ClusterDetailPresenter:
         self._index = 0
         self._size = 0
 
+        # True only while this screen is the one currently visible. Guards
+        # _on_search_finished so a regeneration that finishes after the user
+        # has left this screen doesn't pop a stale notice.
+        self._is_active = False
+        self._update_notice_shown = False
+        if hasattr(self._controller, "search_finished"):
+            self._controller.search_finished.connect(self._on_search_finished)
+
     # Called by the overview screen before navigating here.
     def set_cluster(self, cluster_id: int) -> None:
         self._cluster_id = cluster_id
         self._index = 0
 
     def on_enter(self) -> None:
+        self._is_active = True
+        self._update_notice_shown = False
         try:
             self._size = self._controller.get_cluster_size(self._cluster_id)
             self._view.set_periods(self._available_periods())
@@ -35,7 +45,24 @@ class ClusterDetailPresenter:
         self._show_current()
 
     def on_leave(self) -> None:
-        pass
+        self._is_active = False
+
+    def _on_search_finished(self) -> None:
+        """A new generation run finished while this family was open.
+
+        The cached clustering session this screen is browsing has just been
+        invalidated (AppController._invalidate_clustering, fired from
+        _handle_search_finished). Tell the user once, but don't force them
+        off the screen or touch _cluster_id/_index -- they may still want to
+        finish looking at the family they have open.
+        """
+        if not self._is_active or self._update_notice_shown:
+            return
+        self._update_notice_shown = True
+        self._view.show_message(
+            "New results have finished generating. Go back to the overview "
+            "to see the updated families."
+        )
 
     def on_back(self) -> None:
         self._router.back()

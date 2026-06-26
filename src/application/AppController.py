@@ -25,6 +25,7 @@ from src.application.errors.ErrorModel import (
     ErrorCategory,
     ErrorSeverity,
 )
+from src.application.errors.ApplicationErrors import ApplicationError
 from src.application.errors.ExceptionMapper import (
     ExceptionMapperRegistry,
     default_registry,
@@ -444,7 +445,24 @@ class AppController(QObject):
 
     def _require_run(self):
         if self._cluster_run is None:
-            raise RuntimeError("compute_clusters() must run before browsing clusters")
+            raise ApplicationError(
+                "The clustering results were updated by a new schedule run. "
+                "Go back to the family overview to see the latest groups.",
+                info=AppErrorInfo(
+                    code="CLUSTER_SESSION_EXPIRED",
+                    category=ErrorCategory.PERSISTENCE,
+                    severity=ErrorSeverity.WARNING,
+                    user_message=(
+                        "The clustering results were updated by a new schedule run. "
+                        "Go back to the family overview to see the latest groups."
+                    ),
+                    technical_message=(
+                        "compute_clusters() must run before browsing clusters "
+                        "(cluster_run invalidated by a background regeneration)"
+                    ),
+                    recoverable=True,
+                ),
+            )
         return self._cluster_run
 
     def _cluster_dto(self, working_index: int) -> ScheduleViewModel:
