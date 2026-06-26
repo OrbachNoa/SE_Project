@@ -21,6 +21,7 @@ import numpy as np
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.logic.clustering.IFeatureExtractor import IFeatureExtractor
+from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
 from src.logic.clustering.ClusteringScorer import EXTENDED_CRITERIA
 

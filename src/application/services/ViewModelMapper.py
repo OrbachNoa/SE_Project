@@ -260,7 +260,8 @@ class ViewModelMapper:
                     estimated_population_size=cluster.estimated_population_size,
                     sampled=result.sampled,
                     description=cluster.description or "",
-                    summary=summary,
+                    criteria=tuple(result.criteria),
+                    summary=cluster.summary,
                     defining_criterion=defining_criterion,
                     min_max=min_max_vm,
                 )

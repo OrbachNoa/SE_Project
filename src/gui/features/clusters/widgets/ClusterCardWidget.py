@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.application.viewmodels.ClusterViewModel import ClusterCardViewModel
+from src.logic.clustering.CriterionDisplay import display_value, label
 from src.gui.features.clusters.widgets.AllMetricsDialog import AllMetricsDialog
 from src.gui.features.clusters.widgets.MetricWidgetFactory import create_metric_widgets
 

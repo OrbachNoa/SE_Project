@@ -189,7 +189,14 @@ class ClusterOverviewPresenter:
         active_k = self._controller.get_active_k()
         self._view.set_k_value(active_k)
         self._view.set_summary(f"{active_k} families")
-        self._view.set_interpretation("")
+        if run.result.requested_k and run.result.requested_k != active_k:
+            notice = (
+                f"Note: only {active_k} families could be formed — "
+                "the data may not vary enough on these criteria."
+            )
+            self._view.set_interpretation(notice)
+        else:
+            self._view.set_interpretation("")
         self._view.render_cards(cards)
         self._view.set_compare_enabled(False)
 

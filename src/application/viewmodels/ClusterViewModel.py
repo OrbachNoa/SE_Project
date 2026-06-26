@@ -27,8 +27,10 @@ class ClusterCardViewModel:
     sampled: bool
     # One-line human description of the family's character.
     description: str = ""
-    # Pre-formatted (criterion_key, label, value) rows summarizing the family's average profile.
-    summary: List[Tuple[str, str, str]] = field(default_factory=list)
+    # Raw criterion ids for this clustering run (drives the display loop).
+    criteria: tuple = field(default_factory=tuple)
+    # Raw average feature values: criterion_id -> float.
+    summary: Dict[str, float] = field(default_factory=dict)
     # The top 5 sorted metrics by goodness score for display on the card.
     best_summary: List[Tuple[str, str, str]] = field(default_factory=list)
     # The key of the defining criterion (the one that stands out the most)
