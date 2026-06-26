@@ -105,10 +105,14 @@ def build_controller() -> AppController:
     )
 
     scheduler = SchedulingService(repository=schedule_repository)
+    # Spawn the persistent worker-process pool now, in the background, so the
+    # OS-process / interpreter cold-start cost lands while the user is loading
+    # files instead of on their first "Generate" click.
+    scheduler.warm_up_async()
     exporter  = ScheduleExportService(writer=TextFileWriter())
     mapper    = ViewModelMapper()
 
-    return AppController(
+    controller = AppController(
         importer=importer,
         scheduler=scheduler,
         exporter=exporter,
@@ -116,6 +120,12 @@ def build_controller() -> AppController:
         input_state=input_state,
         schedule_state=hybrid_state,
     )
+    # Same idea as the scheduler pool warm-up above, applied to the
+    # clustering engine: pre-import it in the background so the Clusters
+    # screen opens instantly later, without paying that cost at launch for
+    # sessions that never open it.
+    controller.warm_up_clustering_async()
+    return controller
 
 
 if __name__ == "__main__":

@@ -7,9 +7,10 @@ select two families to compare.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
-from src.infrastructure.concurrency.ClusterWorker import ClusterWorker
+if TYPE_CHECKING:
+    from src.infrastructure.concurrency.ClusterWorker import ClusterWorker
 
 
 class ClusterOverviewPresenter:
@@ -144,6 +145,13 @@ class ClusterOverviewPresenter:
 
     def _kick_off(self, k: Optional[int], recompute: bool) -> None:
         """Start a ClusterWorker so clustering runs off the GUI thread."""
+        # Imported lazily: ClusterWorker pulls in ClusteringCoordinator ->
+        # ClusteringService -> scikit-learn/scipy/pandas (~2.3s to import).
+        # Importing it at module level would force every app launch to pay
+        # that cost building this screen, even for sessions that never open
+        # clustering at all.
+        from src.infrastructure.concurrency.ClusterWorker import ClusterWorker
+
         self._compare_selection = []
 
         # fresh=True forces a new sample+fit (on_enter); fresh=False reuses
