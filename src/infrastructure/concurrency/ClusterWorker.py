@@ -15,14 +15,22 @@ so it is not garbage-collected while the thread runs.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from src.application.services.ClusteringCoordinator import ClusteringCoordinator, ClusteringRun
-from src.logic.clustering.ClusterConfig import ClusterConfig
 from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory
 from src.application.errors.ExceptionMapper import default_registry
+
+if TYPE_CHECKING:
+    # Only used as type hints below: this module never constructs these
+    # classes itself, just receives already-built instances. Importing them
+    # for real would pull in ClusteringCoordinator -> ClusteringService ->
+    # scikit-learn/scipy/pandas (~2.3s) just to define this QThread's
+    # signature -- and this class is imported every time the cluster screens
+    # are built, regardless of whether clustering is ever used.
+    from src.application.services.ClusteringCoordinator import ClusteringCoordinator, ClusteringRun
+    from src.logic.clustering.ClusterConfig import ClusterConfig
 
 
 class ClusterWorker(QThread):

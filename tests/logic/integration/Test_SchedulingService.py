@@ -163,14 +163,41 @@ def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mo
     service = SchedulingService(mock_repository)
     c = make_course()
     p = make_period()
-    
+
     # Act
     service.generate_async(["83101"], [c], [p], num_processes=1)
-    
+
     # Assert
+    # One persistent worker process is created (not one per run); max_results
+    # and batch_size now flow to it via the control-queue run payload instead
+    # of via Process(args=...).
     assert mock_process_cls.call_count == 1
-    args, kwargs = mock_process_cls.call_args
-    process_args = kwargs.get("args") or args[0]
-    assert process_args[-3] == 1000000
-    assert process_args[-2] == 1000
-    assert process_args[-1] is not None
+    put_calls = mock_queue.return_value.put.call_args_list
+    run_payloads = [c.args[0] for c in put_calls if isinstance(c.args[0], tuple) and len(c.args[0]) == 6]
+    assert run_payloads, "expected a run payload to be queued for the worker"
+    _, _, _, _, max_results, batch_size = run_payloads[0]
+    assert max_results == 1000000
+    assert batch_size == 1000
+
+
+# ===========================================================================
+# TC-SCHED-SVC-009: Test that generate_async reuses the persistent pool
+# (no new processes) across multiple calls on the same service instance.
+# ===========================================================================
+@patch("src.application.services.SchedulingService.Process")
+@patch("src.application.services.SchedulingService.Queue")
+@patch("src.application.services.SchedulingService.Event")
+@patch("src.application.services.SchedulingService.SchedulerWorker")
+def test_generate_async_reuses_pool_across_calls(mock_worker_cls, mock_event, mock_queue, mock_process_cls, make_course, make_period, mock_repository):
+    # Arrange
+    service = SchedulingService(mock_repository)
+    c = make_course()
+    p = make_period()
+
+    # Act
+    service.generate_async(["83101"], [c], [p], num_processes=2)
+    service.generate_async(["83101"], [c], [p], num_processes=2)
+
+    # Assert: processes are spawned once for the pool, not once per call.
+    assert mock_process_cls.call_count == 2
+    assert mock_worker_cls.call_count == 2

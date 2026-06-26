@@ -15,16 +15,12 @@ recomputing anything), which keeps it fast and consistent with how the app ranks
 ``ClusterConfig``. Today that config is filled with defaults (all five criteria,
 automatic K); the future custom-clustering UI and LLM layer will produce the same
 config object from free text, plugging in with no engine change.
-"""
-from src.logic.clustering.ClusterConfig import ClusterConfig
-from src.logic.clustering.Cluster import Cluster, ClusterResult
-from src.logic.clustering.ClusteringService import ClusteringService
-from src.logic.clustering.ScheduleSampler import ScheduleSampler
 
-__all__ = [
-    "ClusterConfig",
-    "Cluster",
-    "ClusterResult",
-    "ClusteringService",
-    "ScheduleSampler",
-]
+Deliberately no eager imports here: this package pulls in scikit-learn/scipy
+(via ClusteringService -> AutoKSelector), which costs ~1.9s to import. Every
+scheduler worker process imports QueueScheduleObserver -> ExtendedFeatureComputer,
+a submodule of this package that has nothing to do with clustering, and previously
+paid that cost on every "Generate" click for every worker process. Import the
+submodules you need directly, e.g. ``from src.logic.clustering.ClusteringService
+import ClusteringService``.
+"""
