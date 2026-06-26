@@ -27,6 +27,11 @@ from gui.features.clusters.widgets.OverlayCalendarWidget import OverlayCalendarW
 from gui.features.output.PeriodNavigator import PeriodNavigator
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 from src.application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
+from gui.core.styles.Palette import ( 
+    COLOR_OVERLAY_A,
+    COLOR_OVERLAY_B,
+    COLOR_OVERLAY_MUTUAL
+)
 
 
 class ClusterCalendarOverlayScreen(Screen):
@@ -60,7 +65,7 @@ class ClusterCalendarOverlayScreen(Screen):
         bar.setObjectName("nav-bar")
         bar.setFixedHeight(64)
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(20, 8, 20, 8)
+        layout.setContentsMargins(24, 8, 24, 8)
 
         # Left: Back to stats
         self._back_btn = QPushButton("← Back to statistics")
@@ -75,50 +80,52 @@ class ClusterCalendarOverlayScreen(Screen):
 
         layout.addStretch()
 
-        # Right: Legend Panel
+        # --- Legend Panel ---
         legend_frame = QFrame()
         legend_frame.setObjectName("legend-panel")
         legend_layout = QHBoxLayout(legend_frame)
-        legend_layout.setContentsMargins(24, 6, 24, 6)
-        legend_layout.setSpacing(16)
+        legend_layout.setContentsMargins(16, 4, 16, 4)
+        legend_layout.setSpacing(12)
 
-        # Family A (Magenta)
-        icon_a = QLabel()
-        icon_a.setStyleSheet("font-size: 13px;")
-        try:
-            family_a_pix = create_scaled_pixmap(self, "data/assets/magenta.png", 16)
-            icon_a.setPixmap(family_a_pix)
-        except Exception:
-            icon_a.setText("🟣")
-        self._lbl_a = QLabel("Family A only")
-        self._lbl_a.setStyleSheet("font-size: 12px; font-weight: 500;")
-        
-        # Family B (Blue)
-        icon_b = QLabel()
-        icon_b.setStyleSheet("font-size: 13px;")
-        try:
-            family_b_pix = create_scaled_pixmap(self, "data/assets/blue.png", 16)
-            icon_b.setPixmap(family_b_pix)
-        except Exception:
-            icon_b.setText("🔵")
-        self._lbl_b = QLabel("Family B only")
-        self._lbl_b.setStyleSheet("font-size: 12px; font-weight: 500;")
+        # Helper function to create standard 12x12px solid color blocks
+        def create_color_block(color_hex: str) -> QLabel:
+            block = QLabel()
+            block.setFixedSize(12, 12)
+            block.setStyleSheet(f"background-color: {color_hex}; border-radius: 2px;")
+            return block
 
-        # Mutual (Cream / gold / star)
-        icon_mutual = QLabel()
-        icon_mutual.setStyleSheet("font-size: 13px;")
-        try:
-            mutual_pix = create_scaled_pixmap(self, "data/assets/gold.png", 16)
-            icon_mutual.setPixmap(mutual_pix)
-        except Exception:
-            icon_mutual.setText("🟡")
+        # Family 1 (Using your clean blue color from the image)
+        icon_a = create_color_block(COLOR_OVERLAY_A) 
+        self._lbl_a = QLabel("Family 1 only")
+        self._lbl_a.setStyleSheet("font-size: 12px; font-weight: 500; color: #374151;")
+
+        # Family 2 (Using your gold color from the image)
+        icon_b = create_color_block(COLOR_OVERLAY_B)
+        self._lbl_b = QLabel("Family 2 only")
+        self._lbl_b.setStyleSheet("font-size: 12px; font-weight: 500; color: #374151;")
+
+        # Mutual
+        icon_mutual = create_color_block(COLOR_OVERLAY_MUTUAL)
         lbl_mutual = QLabel("Mutual")
-        lbl_mutual.setStyleSheet("font-size: 12px; font-weight: 500;")
+        lbl_mutual.setStyleSheet("font-size: 12px; font-weight: 500; color: #374151;")
 
+        # helper to create a vertical divider
+        def create_vertical_divider() -> QFrame:
+            divider = QFrame()
+            divider.setFrameShape(QFrame.Shape.VLine)
+            divider.setFrameShadow(QFrame.Shadow.Sunken)
+            divider.setFixedWidth(2)
+            return divider
+
+        # Add to layout in structured pairs
         legend_layout.addWidget(icon_a)
         legend_layout.addWidget(self._lbl_a)
+        
+        legend_layout.addWidget(create_vertical_divider())
         legend_layout.addWidget(icon_b)
         legend_layout.addWidget(self._lbl_b)
+
+        legend_layout.addWidget(create_vertical_divider())
         legend_layout.addWidget(icon_mutual)
         legend_layout.addWidget(lbl_mutual)
 
