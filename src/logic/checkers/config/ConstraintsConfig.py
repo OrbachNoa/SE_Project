@@ -21,3 +21,27 @@ class ConstraintsConfig:
     exam_span: Optional[int] = None
     # 2.5 - Maximum number of exams allowed on the same day.
     max_exams_per_day: Optional[int] = None
+
+    def validate(self) -> None:
+        """Raise ValueError if any enabled rule has an out-of-range k value.
+
+        None always means "disabled" and is always valid. Every rule except
+        elective_conflict_cap must be a positive integer when enabled;
+        elective_conflict_cap may be 0 (a program may not have any same-day
+        elective pair). Checkers otherwise silently disable on k <= 0, which
+        hides a misconfiguration instead of rejecting it.
+        """
+        positive_fields = {
+            "min_gap_obligatory": self.min_gap_obligatory,
+            "min_gap_any": self.min_gap_any,
+            "exam_span": self.exam_span,
+            "max_exams_per_day": self.max_exams_per_day,
+        }
+        invalid = [name for name, value in positive_fields.items() if value is not None and value < 1]
+        if self.elective_conflict_cap is not None and self.elective_conflict_cap < 0:
+            invalid.append("elective_conflict_cap")
+        if invalid:
+            raise ValueError(
+                f"Invalid constraint value(s): {', '.join(invalid)}. "
+                "Must be a positive integer (elective_conflict_cap may be 0)."
+            )

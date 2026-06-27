@@ -1,6 +1,7 @@
 """Service for launching schedule generation across one or more background processes."""
 from __future__ import annotations
 
+import itertools
 import os
 import queue
 import threading
@@ -52,9 +53,9 @@ def _default_num_processes() -> int:
     return max(1, (os.cpu_count() or 2) // 2)
 
 
-def _feed_work_queue(config, courses, selected_programs, slots, num_processes, work_queue, cancel_event, result_queue):
-    """This runs in its own background thread. 
-    Its only job is to break the massive scheduling problem into smaller, manageable 
+def _feed_work_queue(config, courses, selected_programs, slots, num_processes, work_queue, cancel_event, result_queue, run_id=None):
+    """This runs in its own background thread.
+    Its only job is to break the massive scheduling problem into smaller, manageable
     chunks (called 'work units') and push them into the shared work queue for the workers to grab.
     """
     try:
@@ -73,7 +74,10 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
             work_queue.put(unit)
     except Exception as e:
         # If something breaks while slicing the problem, let the main system know.
-        result_queue.put(("ERROR", build_process_error_payload(e, "work partitioning")))
+        # Wrapped with run_id (when given) so SchedulerWorker can tell this
+        # apart from a stale error left over from a just-cancelled run.
+        error_payload = build_process_error_payload(e, "work partitioning")
+        result_queue.put(("ERROR", error_payload if run_id is None else (run_id, error_payload)))
     finally:
         # We put one 'None' into the queue for every worker process.
         # When a worker pulls a 'None', it knows there is no more work left and it can shut down.
@@ -84,16 +88,17 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
         work_queue.cancel_join_thread()
 
 
-def _run_scheduler_process(slots, 
-                           courses, 
-                           selected_programs, 
-                           queue, 
-                           cancel_event, 
-                           max_results, 
-                           batch_size, 
-                           work_source, 
-                           config=None, 
-                           result_counter=None
+def _run_scheduler_process(slots,
+                           courses,
+                           selected_programs,
+                           queue,
+                           cancel_event,
+                           max_results,
+                           batch_size,
+                           work_source,
+                           config=None,
+                           result_counter=None,
+                           run_id=None,
                            ):
     """
     This is the actual code that runs INSIDE each independent background worker.
@@ -104,7 +109,7 @@ def _run_scheduler_process(slots,
         # We do this here inside the worker to avoid passing heavy objects between processes.
         selected_index = SelectedProgramIndex(courses, selected_programs, slots)
         checkers = build_checkers(config, courses, selected_programs, slots, selected_index)
-        scorer = ScheduleScorer(courses, selected_programs, selected_index)
+        scorer = ScheduleScorer(courses, selected_programs, selected_index, slots=slots)
 
         # Start the runner. It will automatically ask the 'work_source' for units of work,
         # find schedules, and push the results into the 'queue'.
@@ -118,12 +123,16 @@ def _run_scheduler_process(slots,
             work_source,
             scorer=scorer,
             result_counter=result_counter,
+            run_id=run_id,
         )
         runner.run()
     except Exception as e:
         # If the worker crashes, send an error message back to the main app.
+        # Wrapped with run_id (when given) so SchedulerWorker can tell this
+        # apart from a stale error left over from a just-cancelled run.
         if queue is not None:
-            queue.put(("ERROR", build_process_error_payload(e, "scheduling")))
+            error_payload = build_process_error_payload(e, "scheduling")
+            queue.put(("ERROR", error_payload if run_id is None else (run_id, error_payload)))
 
 
 def _drain_queue(q) -> None:
@@ -135,7 +144,7 @@ def _drain_queue(q) -> None:
         pass
 
 
-def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter):
+def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter, run_id_holder):
     """Runs inside a long-lived worker process owned by the pool.
 
     Spawning a fresh OS process (and re-importing this whole module) on every
@@ -144,6 +153,10 @@ def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue
     on 'control_queue' for the parameters of a new run, executes it via the
     existing one-shot '_run_scheduler_process' helper, then loops back and
     waits for the next run instead of exiting.
+
+    'run_id_holder' is a separate shared Value (not part of the control
+    payload tuple itself) so each worker can tag its outgoing messages with
+    the active run id without changing the payload's shape.
     """
     work_source = QueueWorkSource(work_queue, cancel_event=cancel_event)
     while True:
@@ -156,10 +169,11 @@ def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue
         if payload is None:
             break
         courses, selected_programs, slots, config, max_results, batch_size = payload
+        run_id = run_id_holder.value
         _run_scheduler_process(
             slots, courses, selected_programs, result_queue, cancel_event,
             max_results, batch_size, work_source,
-            config=config, result_counter=result_counter,
+            config=config, result_counter=result_counter, run_id=run_id,
         )
 
 
@@ -185,7 +199,13 @@ class SchedulingService:
         self._pool_result_queue: Optional[Queue] = None
         self._pool_cancel_event = None
         self._pool_result_counter = None
+        self._pool_run_id_holder = None
         self._pool_num_processes: Optional[int] = None
+
+        # Monotonic id for each generate_async() call, used to tell a stale
+        # message from a just-cancelled run apart from the current run's
+        # messages on the shared, cross-run result queue.
+        self._run_id_counter = itertools.count(1)
 
     def warm_up_async(self, num_processes: Optional[int] = None) -> None:
         """Start the persistent worker pool on a background thread.
@@ -210,6 +230,9 @@ class SchedulingService:
             cancel_event = Event()
             # "q" means the value is a big number
             result_counter = Value("q", 0)
+            # Holds the active run's id, separate from the control payload so
+            # the payload's own shape never changes between runs.
+            run_id_holder = Value("q", 0)
             # Workers send found schedules here. maxsize counts pending result
             # batches, not individual schedules.
             result_queue: Queue = Queue(maxsize=max(1, num_processes * RESULT_QUEUE_BATCHES_PER_WORKER))
@@ -224,7 +247,7 @@ class SchedulingService:
             for _ in range(num_processes):
                 process = Process(
                     target=_persistent_worker_loop,
-                    args=(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter),
+                    args=(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter, run_id_holder),
                     daemon=True,  # Daemon means they will automatically die if the main app closes.
                 )
                 processes.append(process)
@@ -234,13 +257,14 @@ class SchedulingService:
             self._pool_num_processes = num_processes
             self._pool_cancel_event = cancel_event
             self._pool_result_counter = result_counter
+            self._pool_run_id_holder = run_id_holder
             self._pool_result_queue = result_queue
             self._pool_work_queue = work_queue
             self._pool_control_queue = control_queue
             self._pool_ready_queue = ready_queue
             self._pool_processes = processes
 
-    def _pool_start_run(self, courses, selected_programs, slots, config, max_results, batch_size) -> None:
+    def _pool_start_run(self, courses, selected_programs, slots, config, max_results, batch_size, run_id) -> None:
         """Reset the shared pool state for a new run and hand it to every worker.
 
         Blocks until every worker has returned to idle from any previous run
@@ -259,6 +283,9 @@ class SchedulingService:
         self._pool_cancel_event.clear()
         with self._pool_result_counter.get_lock():
             self._pool_result_counter.value = 0
+        # Set before the control payload is queued, so every worker reads the
+        # new run's id as soon as it picks up that payload.
+        self._pool_run_id_holder.value = run_id
         _drain_queue(self._pool_work_queue)
         _drain_queue(self._pool_result_queue)
 
@@ -304,9 +331,23 @@ class SchedulingService:
         This is the main engine starter. It sets up the parallel processing environment
         and starts the whole operation in the background
         """
+        # Identifies this run on the shared, cross-run result queue so a
+        # message left over from a just-cancelled run can be told apart from
+        # this run's own messages.
+        run_id = next(self._run_id_counter)
+
+        # Reject an invalid config before it can reach the checkers, where an
+        # out-of-range k would otherwise just silently disable the rule.
+        if config is not None:
+            config.validate()
+
         # Build the slot list and give it to the repository for decoding packed results later.
         slots = self.build_slots(program_ids, courses, periods)
         self._repository.configure_slots(slots)
+
+        # This service starts the run, so it also owns clearing previous
+        # results -- independent of whether the GUI controller already did.
+        self._repository.clear()
 
         # Before we waste CPU time, we make sure the schedule isnt mathematically impossible
         errors = ScheduleFeasibilityValidator().validate(
@@ -323,7 +364,7 @@ class SchedulingService:
 
         # Reset the pool's shared state for this run and hand it to every
         # already-running worker -- no new OS process is created here.
-        self._pool_start_run(courses, program_ids, slots, config, max_results, DEFAULT_BATCH_SIZE)
+        self._pool_start_run(courses, program_ids, slots, config, max_results, DEFAULT_BATCH_SIZE, run_id)
 
         # This is a special worker that just watches the 'queue' and brings results to the user interface.
         self._worker = SchedulerWorker(
@@ -333,6 +374,7 @@ class SchedulingService:
             repository=self._repository,
             max_results=max_results,
             owns_processes=False,
+            expected_run_id=run_id,
         )
         self._worker.start()
 
@@ -341,7 +383,7 @@ class SchedulingService:
         feeder = threading.Thread(
             target=_feed_work_queue,
             args=(config, courses, program_ids, slots, active_num_processes,
-                  self._pool_work_queue, self._pool_cancel_event, self._pool_result_queue),
+                  self._pool_work_queue, self._pool_cancel_event, self._pool_result_queue, run_id),
             daemon=True,
         )
         feeder.start()

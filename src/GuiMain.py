@@ -29,6 +29,7 @@ from src.application.services.ScheduleExportService import ScheduleExportService
 from src.application.services.ViewModelMapper import ViewModelMapper
 from src.application.state.HybridScheduleResultState import HybridScheduleResultState
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 from src.infrastructure.cache.DiskCacheRepository import DiskCacheRepository
 from src.infrastructure.cache.FileChangeDetector import FileChangeDetector
 from src.file_io.parsers.ParserFactory import ParserFactory
@@ -90,7 +91,9 @@ def build_controller() -> AppController:
     This function is the main entry point for the application's dependency injection.
     It creates all the necessary services and wires them together to form the AppController.
     """
-    schedule_repository = SQLiteScheduleRepository()
+    # Clustering's extra score columns are wired in here, at the composition
+    # root, rather than imported inside the repository itself.
+    schedule_repository = SQLiteScheduleRepository(extra_score_criteria=ALL_EXTENDED_FEATURES)
     hybrid_state = HybridScheduleResultState(repository=schedule_repository)
     input_state = InputDataState()
 

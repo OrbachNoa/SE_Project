@@ -33,7 +33,7 @@ class SchedulerWorker(QThread):
     search_finished       = pyqtSignal()
     error_occurred        = pyqtSignal(str)
 
-    def __init__(self, queue: Queue, cancel_event: Event, processes: List[Process], repository: SQLiteScheduleRepository, max_results: int = None, owns_processes: bool = True) -> None:
+    def __init__(self, queue: Queue, cancel_event: Event, processes: List[Process], repository: SQLiteScheduleRepository, max_results: int = None, owns_processes: bool = True, expected_run_id=None) -> None:
         super().__init__()
 
         # Shared queue used by all scheduler processes to send messages to this worker.
@@ -44,6 +44,13 @@ class SchedulerWorker(QThread):
         self._processes = processes
         # Repository used to save compressed schedule batches to SQLite.
         self._repository = repository
+        # When set, every message is expected to be wrapped as (run_id, payload)
+        # by the producing QueueScheduleObserver; messages tagged with a
+        # different run_id are stale leftovers from a just-cancelled run on
+        # the shared, cross-run result queue and are dropped. None (the
+        # default, used by every caller that does not pass one) disables this
+        # check entirely and reads every message in its old, unwrapped shape.
+        self._expected_run_id = expected_run_id
         # False when `processes` are persistent workers owned by a long-lived
         # pool (SchedulingService): this worker must then never start, join,
         # or terminate them -- only the (per-run) cancel_event may signal them
@@ -126,6 +133,14 @@ class SchedulerWorker(QThread):
                     })
                     self._emit_error(info)
                     break
+
+                if self._expected_run_id is not None:
+                    # Producer wraps every message as (run_id, payload) when
+                    # given a run_id; drop anything tagged for a different
+                    # (stale) run instead of acting on it.
+                    run_id, payload = payload
+                    if run_id != self._expected_run_id:
+                        continue
 
                 # Choose the correct handler according to the message type.
                 handler = self._dispatch.get(msg_type)

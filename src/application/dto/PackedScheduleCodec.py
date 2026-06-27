@@ -12,6 +12,10 @@ _UINT16 = struct.Struct("<H")
 
 def pack_rows(rows: Iterable[bytes], slot_count: int, row_count: int) -> bytes:
     """Pack already encoded schedule rows into one compact batch blob."""
+    if slot_count > 65535:
+        raise ValueError(f"slot_count {slot_count} exceeds the 16-bit packed format limit (65535).")
+    if row_count > 65535:
+        raise ValueError(f"row_count {row_count} exceeds the 16-bit packed format limit (65535).")
     return _HEADER.pack(MAGIC, slot_count, row_count) + b"".join(rows)
 
 

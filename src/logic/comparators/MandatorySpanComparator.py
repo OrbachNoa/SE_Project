@@ -9,9 +9,10 @@ from src.logic.comparators.Metrics import Cohort
 
 class MandatorySpanComparator:
     """Sorts by how spread out the mandatory exams are. For each
-    (program, year, moed) group we take the days between its earliest and latest
-    mandatory exam, and use the largest such spread as the schedule's score. A
-    wider spread is better, so those schedules rank higher. Descending order.
+    (program, year, semester, moed) group we take the days between its
+    earliest and latest mandatory exam, and use the largest such spread as
+    the schedule's score. A wider spread is better, so those schedules rank
+    higher. Descending order.
     """
 
     criterion_id = "MANDATORY_SPAN"

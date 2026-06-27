@@ -19,25 +19,21 @@ import numpy as np
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.application.dto.PackedScheduleCodec import is_packed_blob, row_to_dto, unpack_rows
 from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
-from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 
 
 # Default place for the overflow database.
 # We use the temp folder because this DB is only for generated results.
 _DEFAULT_DB = os.path.join(tempfile.gettempdir(), "exam_scheduler_overflow.sqlite")
 
-# Map every score criterion to a short SQLite column name.
-# This keeps the score table simple and generic.
+# Map every core score criterion to a short SQLite column name. This never
+# depends on clustering, so it stays a module constant.
 _SCORE_COLS = {cid: f"s_{i}" for i, cid in enumerate(ALL_CRITERIA)}
-_EXT_FEATURE_COLS = {fid: f"f_{i}" for i, fid in enumerate(ALL_EXTENDED_FEATURES)}
-_ALL_SCORE_CRITERIA = list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES)
-_ALL_SCORE_COLS = list(_SCORE_COLS.values()) + list(_EXT_FEATURE_COLS.values())
 
 
 class SQLiteScheduleRepository:
     """Stores generated schedules in SQLite so the GUI can browse large result sets."""
 
-    def __init__(self, db_path: str = _DEFAULT_DB) -> None:
+    def __init__(self, db_path: str = _DEFAULT_DB, extra_score_criteria: "list[str] | None" = None) -> None:
         # Save the DB path so we can open the same database again.
         self._db_path = db_path
 
@@ -52,6 +48,14 @@ class SQLiteScheduleRepository:
 
         # Slots are needed later to rebuild packed schedules back into DTOs.
         self._slots = None
+
+        # Extra score criteria (e.g. clustering features) are supplied by the
+        # caller instead of imported here, so the repository never depends on
+        # the clustering module directly.
+        extra_score_criteria = list(extra_score_criteria or [])
+        self._ext_feature_cols = {fid: f"f_{i}" for i, fid in enumerate(extra_score_criteria)}
+        self._all_score_criteria = list(ALL_CRITERIA) + extra_score_criteria
+        self._all_score_cols = list(_SCORE_COLS.values()) + list(self._ext_feature_cols.values())
 
         self._init_db()
 
@@ -104,7 +108,7 @@ class SQLiteScheduleRepository:
                 row[1]
                 for row in self._conn.execute("PRAGMA table_info(schedule_scores)").fetchall()
             }
-            for col in _EXT_FEATURE_COLS.values():
+            for col in self._ext_feature_cols.values():
                 if col not in existing:
                     self._conn.execute(
                         f"ALTER TABLE schedule_scores ADD COLUMN {col} REAL"
@@ -134,15 +138,15 @@ class SQLiteScheduleRepository:
 
             # If scores were already calculated, save them in the score table too.
             if batch_scores:
-                col_list = ", ".join(_ALL_SCORE_COLS)
-                placeholders = ", ".join(["?"] * (1 + len(_ALL_SCORE_CRITERIA)))
+                col_list = ", ".join(self._all_score_cols)
+                placeholders = ", ".join(["?"] * (1 + len(self._all_score_criteria)))
                 rows = []
                 for i, scores in enumerate(batch_scores):
                     ext = extended_scores[i] if extended_scores and i < len(extended_scores) else {}
                     merged = {**scores, **ext}
                     rows.append((
                         first_offset + i,
-                        *[merged.get(cid, 0.0) for cid in _ALL_SCORE_CRITERIA],
+                        *[merged.get(cid, 0.0) for cid in self._all_score_criteria],
                     ))
                 self._conn.executemany(
                     f"INSERT OR REPLACE INTO schedule_scores (gidx, {col_list}) VALUES ({placeholders})",
@@ -193,8 +197,8 @@ class SQLiteScheduleRepository:
         """Read score vectors for clustering without loading full schedules."""
         if not gidxs or not criteria:
             return [], np.empty((0, len(criteria)), dtype=float)
-        _col_map = {**_SCORE_COLS, **_EXT_FEATURE_COLS}
-        cols = ", ".join(_col_map[c] for c in criteria)
+        col_map = {**_SCORE_COLS, **self._ext_feature_cols}
+        cols = ", ".join(col_map[c] for c in criteria)
         all_rows: list = []
 
         with self._lock:
@@ -330,6 +334,14 @@ class SQLiteScheduleRepository:
         limit: int,
     ) -> List[int]:
         """Return only one page of sorted ids using SQL LIMIT and OFFSET."""
+        if priority:
+            unknown = [c for c in priority if c not in _SCORE_COLS]
+            if unknown:
+                raise ValueError(
+                    f"Unknown sort criteria: {', '.join(unknown)}. "
+                    f"Valid criteria are: {', '.join(_SCORE_COLS)}."
+                )
+
         with self._lock:
             if not priority:
                 # No priority means regular order, but still only for this page.

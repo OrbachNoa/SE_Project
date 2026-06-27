@@ -153,7 +153,7 @@ class ElectiveConflictCapChecker(IConflictChecker):
             requirement=Requirement.ELECTIVE
         )
 
-        # Save the messege if we get impossible assigmnet
+        # Collect feasibility errors so the UI can show all problems at once.
         errors = []
 
         for program_id, program_slots in by_program.items():

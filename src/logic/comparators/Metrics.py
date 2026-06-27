@@ -7,6 +7,10 @@ checkers, so filtering and sorting always agree.
 
 A "cohort" is one (program, year). Whether a course is obligatory or elective
 is decided per program-entry.
+
+ScheduleScorer mirrors the grouping logic below inline, for performance
+(its hot path must not rebuild these dict-based indices per schedule) — keep
+both in sync if a grouping key changes here.
 """
 from __future__ import annotations
 
@@ -18,8 +22,8 @@ from src.models.Enums import Requirement
 
 # One (program, year).
 Cohort = Tuple[str, int]
-# One (program, year, moed).
-MoedCohort = Tuple[str, int, object]
+# One (program, year, semester).
+SpanCohort = Tuple[str, int, object]
 
 
 # ── Cohort eligibility (same rule the checkers use in prepare()) ────────────
@@ -37,7 +41,7 @@ def build_cohort_index(
     average-gap metric (2). When selected_programs is given, only those programs
     are counted.
     """
-    obligatory, any_req, _, _ = build_metric_indices(
+    obligatory, any_req, _ = build_metric_indices(
         courses,
         selected_programs,
         selected_index,
@@ -47,33 +51,43 @@ def build_cohort_index(
 
 def build_span_index(
     courses: list,
+    slots: Optional[list] = None,
     selected_programs: Optional[list] = None,
     selected_index: Optional[SelectedProgramIndex] = None,
-) -> Dict[str, Set[Cohort]]:
-    """Index for the span metric (4): the obligatory cohorts each course is in.
+) -> Dict[str, Set[SpanCohort]]:
+    """Index for the span metric (4): the (program, year, semester) groups each
+    course is obligatory in.
 
-    It only knows (program, year). The moed is added later, by the span metric
-    itself, from each exam's own moed.
+    Semester is part of the key because every semester has its own exam
+    period (mirrors ExamSpanChecker.prepare(), which groups by
+    (program, year, semester, moed) for the same reason). The moed is added
+    later, by the span metric itself, from each exam's own moed.
+
+    Pass real slots so semester correctly participates in the key — production
+    callers (ScheduleScorer) must do this. Without slots, every group falls
+    back to a single semester=None bucket, which only degrades to "no
+    semester split" rather than failing; this fallback exists so existing
+    single-semester callers don't need to construct full Slot objects.
     """
-    obligatory, _ = build_cohort_index(courses, selected_programs, selected_index)
-    return obligatory
+    selected_index = selected_index or SelectedProgramIndex(courses, selected_programs, slots)
 
+    if not slots:
+        obligatory, _ = build_cohort_index(courses, selected_programs, selected_index)
+        return {
+            course_id: {(program_id, year, None) for (program_id, year) in cohorts}
+            for course_id, cohorts in obligatory.items()
+        }
 
-def build_program_index(
-    courses: list,
-    selected_programs: Optional[list] = None,
-    selected_index: Optional[SelectedProgramIndex] = None,
-) -> Dict[str, Set[str]]:
-    """Index for the exams-per-day metric (5): the programs each course is in.
-
-    Grouped by program, across all years and any requirement.
-    """
-    _, _, course_programs, _ = build_metric_indices(
-        courses,
-        selected_programs,
-        selected_index,
-    )
-    return course_programs
+    result: Dict[str, Set[SpanCohort]] = {}
+    for slot in slots:
+        course = slot.course
+        for entry in selected_index.entries_for_slot(slot):
+            if entry.requirement is not Requirement.OBLIGATORY:
+                continue
+            result.setdefault(course.courseId, set()).add(
+                (entry.programId, entry.year, slot.semester)
+            )
+    return result
 
 
 def build_elective_index(
@@ -87,12 +101,31 @@ def build_elective_index(
     Built once per run so the metric does not have to re-scan the course list on
     every schedule.
     """
-    _, _, _, elective = build_metric_indices(
+    _, _, elective = build_metric_indices(
         courses,
         selected_programs,
         selected_index,
     )
     return elective
+
+
+def build_elective_program_index(
+    courses: list,
+    selected_programs: Optional[list] = None,
+    selected_index: Optional[SelectedProgramIndex] = None,
+) -> Dict[str, Set[str]]:
+    """Index for the elective-conflict metric (3): the programs where each
+    course is elective, dropping the year.
+
+    Mirrors ElectiveConflictCapChecker.prepare(), which groups by program only
+    ("per program", not "per program and year") — years are ignored here on
+    purpose so the metric agrees with the checker.
+    """
+    elective_cohorts = build_elective_index(courses, selected_programs, selected_index)
+    return {
+        course_id: {program_id for (program_id, _year) in cohorts}
+        for course_id, cohorts in elective_cohorts.items()
+    }
 
 
 def build_metric_indices(
@@ -102,7 +135,6 @@ def build_metric_indices(
 ) -> Tuple[
     Dict[str, Set[Cohort]],
     Dict[str, Set[Cohort]],
-    Dict[str, Set[str]],
     Dict[str, Set[Cohort]],
 ]:
     """Build all metric indices from one selected-program entry scan."""
@@ -110,20 +142,18 @@ def build_metric_indices(
     selected_index = selected_index or SelectedProgramIndex(courses, selected_programs)
     obligatory: Dict[str, Set[Cohort]] = {}
     any_req: Dict[str, Set[Cohort]] = {}
-    course_programs: Dict[str, Set[str]] = {}
     elective: Dict[str, Set[Cohort]] = {}
 
     for course in courses:
         for entry in selected_index.entries_for_course(course.courseId):
             cohort = (entry.programId, entry.year)
             any_req.setdefault(course.courseId, set()).add(cohort)
-            course_programs.setdefault(course.courseId, set()).add(entry.programId)
             if entry.requirement is Requirement.OBLIGATORY:
                 obligatory.setdefault(course.courseId, set()).add(cohort)
             elif entry.requirement is Requirement.ELECTIVE:
                 elective.setdefault(course.courseId, set()).add(cohort)
 
-    return obligatory, any_req, course_programs, elective
+    return obligatory, any_req, elective
 
 
 def _dates_by_cohort(
@@ -186,50 +216,53 @@ def avg_all_courses_gap(schedule, any_cohorts: Dict[str, Set[Cohort]]) -> float:
     return (total / count) if count else 0.0
 
 
-def peak_elective_conflict(
+def elective_conflict_pairs(
     schedule,
-    elective_cohorts: Dict[str, Set[Cohort]],
+    elective_programs: Dict[str, Set[str]],
 ) -> int:
-    """Metric 3: the worst single-day elective crowding, counted as the number
-    of electives beyond the first.
+    """Metric 3: the worst per-program elective same-day pair-conflict total.
 
-    For each cohort and each day, count how many of that cohort's elective exams
-    fall on that day; the score is the worst such pile-up anywhere, minus one.
-    So one day with 4 electives (score 3) is rated worse than two days of 2
-    (score 1) — the worst pile-up matters, not the total. Fewer is better, so
-    callers negate it. Returns 0 when no day has more than one elective.
+    For each program and each day, count how many of that program's elective
+    exams fall on that day; n electives on one day make n*(n-1)//2 conflict
+    pairs. The score is the total pairs for the worst program, summed across
+    all its days. Mirrors ElectiveConflictCapChecker's own pair-conflict
+    formula and program-only grouping (year is ignored on purpose), so
+    filtering and sorting agree. Fewer is better, so callers negate it.
 
-    Pass the index from build_elective_index (built once per run).
+    Pass the index from build_elective_program_index (built once per run).
     """
-    # How many of a cohort's electives fall on each day.
-    crowding: Dict[Tuple[Cohort, date], int] = {}
+    counts: Dict[Tuple[str, date], int] = {}
     for a in schedule.assignments:
-        cohorts = elective_cohorts.get(a.course.courseId)
-        if not cohorts:
+        programs = elective_programs.get(a.course.courseId)
+        if not programs:
             continue
-        for cohort in cohorts:
-            crowding[(cohort, a.date)] = crowding.get((cohort, a.date), 0) + 1
+        for program in programs:
+            counts[(program, a.date)] = counts.get((program, a.date), 0) + 1
 
-    peak = max(crowding.values(), default=0)
-    return max(0, peak - 1)
+    per_program_total: Dict[str, int] = {}
+    for (program, _day), n in counts.items():
+        per_program_total[program] = per_program_total.get(program, 0) + n * (n - 1) // 2
+    return max(per_program_total.values(), default=0)
 
 
-def mandatory_span(schedule, obligatory_cohorts: Dict[str, Set[Cohort]]) -> int:
+def mandatory_span(schedule, obligatory_span_cohorts: Dict[str, Set[SpanCohort]]) -> int:
     """Metric 4: the widest spread, in days, from the first to the last
-    mandatory exam within one (program, year, moed) group.
+    mandatory exam within one (program, year, semester, moed) group.
 
-    Pass the obligatory index from build_span_index; the moed of each group is
-    taken here from each exam's own moed. More spread is better, so higher is
-    better. Returns 0 when no group has at least two mandatory exams.
+    Pass the index from build_span_index; the moed of each group is taken
+    here from each exam's own moed. Semester is part of the key (mirrors
+    ExamSpanChecker) so two different semesters' exams never get merged into
+    one span. More spread is better, so higher is better. Returns 0 when no
+    group has at least two mandatory exams.
     """
-    # The dates of each group's mandatory exams, keyed by (program, year, moed).
-    by_group: Dict[MoedCohort, List[date]] = {}
+    # The dates of each group's mandatory exams, keyed by (program, year, semester, moed).
+    by_group: Dict[Tuple[str, int, object, object], List[date]] = {}
     for a in schedule.assignments:
-        cohorts = obligatory_cohorts.get(a.course.courseId)
+        cohorts = obligatory_span_cohorts.get(a.course.courseId)
         if not cohorts:
             continue
-        for (program_id, year) in cohorts:
-            by_group.setdefault((program_id, year, a.moed), []).append(a.date)
+        for (program_id, year, semester) in cohorts:
+            by_group.setdefault((program_id, year, semester, a.moed), []).append(a.date)
 
     best = 0
     for dates in by_group.values():
@@ -241,19 +274,17 @@ def mandatory_span(schedule, obligatory_cohorts: Dict[str, Set[Cohort]]) -> int:
     return best
 
 
-def max_exams_per_day(schedule, course_programs: Dict[str, Set[str]]) -> int:
-    """Metric 5: the most exams any single program has on any single day.
+def max_exams_per_day(schedule) -> int:
+    """Metric 5: the most exams scheduled on any single day, across the whole
+    schedule.
 
-    Counted per program, across all years, one exam per course per day. Pass the
-    index from build_program_index. Fewer is better, so callers negate it.
+    Mirrors MaxExamsPerDayChecker, which counts every exam on a date globally
+    with no program grouping — so every assignment counts once toward its
+    date, full stop. Fewer is better, so callers negate it.
     """
-    counts: Dict[Tuple[str, date], int] = {}
+    counts: Dict[date, int] = {}
     for a in schedule.assignments:
-        programs = course_programs.get(a.course.courseId)
-        if not programs:
-            continue
-        for program in programs:
-            counts[(program, a.date)] = counts.get((program, a.date), 0) + 1
+        counts[a.date] = counts.get(a.date, 0) + 1
     return max(counts.values()) if counts else 0
 
 # Sentinel for "no pair exists" in the min-gap metric: a schedule with nothing

@@ -99,3 +99,18 @@ class ExtendedFeatureComputer:
         result[MANDATORY_CONSEC] = -float(consec)
 
         return result
+
+
+class ExtendedFeatureComputerProvider:
+    """Adapts ExtendedFeatureComputer to IExtensionScoreProvider.
+
+    Wires the clustering feature set into the core engine's observer without
+    the observer importing this module directly -- the caller that wants
+    clustering features passes an instance of this class in.
+    """
+
+    def compute(self, dto) -> Dict[str, float]:
+        return ExtendedFeatureComputer.compute(dto)
+
+    def feature_ids(self) -> list:
+        return list(ALL_EXTENDED_FEATURES)

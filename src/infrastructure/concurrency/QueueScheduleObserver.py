@@ -12,9 +12,9 @@ import pickle
 import queue as _queue_mod
 import zlib
 from src.logic.observers.IScheduleObserver import IScheduleObserver
+from src.logic.observers.IExtensionScoreProvider import NullExtensionScoreProvider
 from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
 from src.application.dto.PackedScheduleCodec import encode_schedule, pack_rows
-from src.logic.clustering.ExtendedFeatureComputer import ExtendedFeatureComputer
 
 
 class QueueScheduleObserver(IScheduleObserver):
@@ -34,6 +34,8 @@ class QueueScheduleObserver(IScheduleObserver):
         result_counter=None,
         result_limit: "int | None" = None,
         slots: list | None = None,
+        extension_provider=None,
+        run_id=None,
     ) -> None:
        # Queue used to send messages back to the main process.
         self._queue = queue
@@ -41,8 +43,18 @@ class QueueScheduleObserver(IScheduleObserver):
         self._cancel_event = cancel_event
         # Number of schedules to collect before sending one batch.
         self._batch_size = batch_size
+        # Identifies which generation run this observer belongs to. None
+        # (the default, used by every caller that does not pass one) keeps
+        # every outgoing message in its old, unwrapped shape -- only callers
+        # that opt in by passing a real run_id get the wrapped
+        # (run_id, payload) shape that SchedulerWorker can use to drop stale
+        # messages from a previous run on the shared result queue.
+        self._run_id = run_id
         # Optional scorer used to attach scores to each schedule.
         self._scorer = scorer
+        # Optional extra score source (e.g. clustering features). Defaults to
+        # a no-op so this observer never needs to import clustering code.
+        self._extension_provider = extension_provider or NullExtensionScoreProvider()
         # Shared counter used to keep the total result count under the global limit.
         self._result_counter = result_counter
         self._result_limit = result_limit
@@ -89,6 +101,10 @@ class QueueScheduleObserver(IScheduleObserver):
                 self._cancel_event.set()
         return True
 
+    def _wrap(self, payload):
+        """Attach this observer's run_id to a payload, unless none was given."""
+        return payload if self._run_id is None else (self._run_id, payload)
+
     def _put_to_queue(self, message) -> None:
         """Send one message to the result queue."""
         try:
@@ -101,7 +117,7 @@ class QueueScheduleObserver(IScheduleObserver):
     def on_schedule_found(self, schedule: Any) -> None:
         # Score the schedule if needed, then add it to the current batch.
         scores = self._scorer.score(schedule) if self._scorer is not None else {}
-        ext = ExtendedFeatureComputer.compute(self._to_schedule_dto(schedule))
+        ext = self._extension_provider.compute(self._to_schedule_dto(schedule))
         scores.update(ext)
         self._record_schedule(schedule, scores)
 
@@ -150,7 +166,7 @@ class QueueScheduleObserver(IScheduleObserver):
             # Compress with level 1 to reduce data size without spending too much CPU.
             data = zlib.compress(packed, level=1)
              # Send one batch message to the main process.
-            self._put_to_queue(("SCHEDULE_BATCH", (data, len(self._packed_rows), self._batch_scores)))
+            self._put_to_queue(("SCHEDULE_BATCH", self._wrap((data, len(self._packed_rows), self._batch_scores))))
             # Clear the packed buffers after sending.
             self._packed_rows = []
             self._batch_scores = []
@@ -162,7 +178,7 @@ class QueueScheduleObserver(IScheduleObserver):
             # Send scores next to the schedules when scoring is active.
             batch_scores = [dto.scores for dto in self._buffer] if self._scorer is not None else []
             # Send one batch message to the main process.
-            self._put_to_queue(("SCHEDULE_BATCH", (data, len(self._buffer), batch_scores)))
+            self._put_to_queue(("SCHEDULE_BATCH", self._wrap((data, len(self._buffer), batch_scores))))
             # Clear the DTO buffer after sending.
             self._buffer = []
 
@@ -172,7 +188,7 @@ class QueueScheduleObserver(IScheduleObserver):
         # Send progress only when the value actually changed.
         if value != self._last_progress_sent:
             self._last_progress_sent = value
-            self._put_to_queue(("PROGRESS", value))
+            self._put_to_queue(("PROGRESS", self._wrap(value)))
 
     def should_cancel(self) -> bool:
         """Return True when the scheduler should stop searching."""
@@ -183,7 +199,7 @@ class QueueScheduleObserver(IScheduleObserver):
 
         # Flush the last partial batch before telling the main process we are done.
         self._flush_buffer()
-        self._queue.put(("FINISHED", None))
+        self._queue.put(("FINISHED", self._wrap(None)))
 
     def on_error(self, message) -> None:
         """Send an error to the main process.
@@ -193,7 +209,7 @@ class QueueScheduleObserver(IScheduleObserver):
         ``build_process_error_payload``) — either is just forwarded as-is;
         ``SchedulerWorker`` on the receiving end knows how to unpack both.
         """
-        self._put_to_queue(("ERROR", message))
+        self._put_to_queue(("ERROR", self._wrap(message)))
 
     def _to_schedule_dto(self, schedule: Any) -> ScheduleDTO:
         """Convert a domain schedule into a simple DTO for the queue."""
