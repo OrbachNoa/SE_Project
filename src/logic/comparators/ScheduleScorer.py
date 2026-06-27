@@ -40,7 +40,7 @@ ALL_CRITERIA = (
 
 
 class ScheduleScorer:
-    """Computes all five sort scores for a schedule. Built once per run."""
+    """Computes all sort scores for a schedule. Built once per run."""
 
     def __init__(self, courses: list, selected_programs: Optional[list] = None, selected_index: Optional[SelectedProgramIndex] = None):
         # Build every index once, the same way the checkers prepare once.
@@ -84,7 +84,11 @@ class ScheduleScorer:
         self._any_dates = [[] for _ in range(len(cohort_ids))]
 
     def create_state(self):
-        return _IncrementalScoreState(self._course_data, len(self._obligatory_dates), len(self._any_dates))
+        return _IncrementalScoreState(
+            self._course_data,
+            len(self._obligatory_dates),
+            len(self._any_dates),
+        )
 
     def score(self, schedule) -> Dict[str, float]:
         """Return one score per criterion, higher is better for every entry.
@@ -188,7 +192,7 @@ class ScheduleScorer:
                 if span > mandatory_span:
                     mandatory_span = span
 
-        return {
+        scores = {
             MIN_MANDATORY_GAP: float(
                 min_mandatory_gap if min_mandatory_gap is not None else 10_000
             ),
@@ -201,6 +205,7 @@ class ScheduleScorer:
             # Fewer exams on the busiest day is better, so negate.
             MAX_EXAMS_PER_DAY: -float(max_per_day),
         }
+        return scores
 
 
 class _GapTracker:
@@ -272,7 +277,8 @@ class _GapTracker:
 
 
 class _IncrementalScoreState:
-    def __init__(self, course_data: dict, obligatory_group_count: int, any_group_count: int):
+    def __init__(self, course_data: dict, obligatory_group_count: int, any_group_count: int,
+                 allowed_window_size: int = 21, has_slots: bool = False):
         self._course_data = course_data
         self._mandatory_gaps = _GapTracker(obligatory_group_count)
         self._any_gaps = _GapTracker(any_group_count)
@@ -283,8 +289,12 @@ class _IncrementalScoreState:
         self._max_per_day = 0
         self._stack = []
         self._key_factor = 1_000_000
+        self._allowed_window_size = allowed_window_size
+        self._has_slots = has_slots
+        self._assignments = []
 
     def add_assignment(self, assignment) -> None:
+        self._assignments.append(assignment)
         course_data = self._course_data.get(assignment.course)
         if course_data is None:
             self._stack.append(None)
@@ -341,6 +351,8 @@ class _IncrementalScoreState:
         self._stack.append(undo)
 
     def pop_assignment(self) -> None:
+        if self._assignments:
+            self._assignments.pop()
         undo = self._stack.pop()
         if undo is None:
             return
@@ -381,12 +393,13 @@ class _IncrementalScoreState:
                 if span > mandatory_span:
                     mandatory_span = span
 
-        return {
+        scores = {
             MIN_MANDATORY_GAP: float(
-                min_mandatory_gap if min_mandatory_gap is not None else 10_000
+                min_mandatory_gap if min_mandatory_gap is not None else (self._allowed_window_size if self._has_slots else 10_000)
             ),
             AVG_ALL_COURSES_GAP: float(self._any_gaps.avg_gap()),
             ELECTIVE_CONFLICTS: -float(max(0, self._elective_peak - 1)),
             MANDATORY_SPAN: float(mandatory_span),
             MAX_EXAMS_PER_DAY: -float(self._max_per_day),
         }
+        return scores

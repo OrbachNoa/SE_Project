@@ -25,6 +25,19 @@ from src.logic.comparators.ScheduleScorer import (
     MAX_EXAMS_PER_DAY,
     MIN_MANDATORY_GAP,
 )
+from src.logic.clustering.ExtendedFeatureComputer import (
+    AVG_MOED_GAP,
+    MIN_MOED_GAP,
+    GAP_STD_DEV,
+    AVG_PREP_DAYS,
+    DOUBLE_EXAM_DAYS,
+    BUSIEST_WEEK_COUNT,
+    MAX_REST_DAYS,
+    B2B_EXAM_INCIDENCE,
+    DEPT_EXAM_CONCURRENCY,
+    INSTRUCTOR_EXAM_GAP,
+    MANDATORY_CONSEC,
+)
 
 
 # Plain-language phrases for "this cluster scores notably high / low on X".
@@ -32,24 +45,72 @@ from src.logic.comparators.ScheduleScorer import (
 # so "high" always reads as the nicer end.
 _PHRASES = {
     MIN_MANDATORY_GAP: (
-        "more breathing room between mandatory exams",
-        "mandatory exams packed close together",
+        "More breathing room between mandatory exams",
+        "Mandatory exams packed close together",
     ),
     AVG_ALL_COURSES_GAP: (
-        "exams spread out across the period",
-        "exams bunched closely in time",
+        "Exams spread out across the period",
+        "Exams bunched closely in time",
     ),
     ELECTIVE_CONFLICTS: (
-        "few elective clashes",
-        "more elective clashes",
+        "Few elective clashes",
+        "More elective clashes",
     ),
     MANDATORY_SPAN: (
-        "mandatory exams span a wide window",
-        "mandatory exams kept within a short window",
+        "Mandatory exams span a wide window",
+        "Mandatory exams kept within a short window",
     ),
     MAX_EXAMS_PER_DAY: (
-        "a light busiest-day load",
-        "a heavy busiest-day load",
+        "A light busiest-day load",
+        "A heavy busiest-day load",
+    ),
+    AVG_MOED_GAP: (
+        "Longer Moed A to B grading gaps",
+        "Shorter Moed A to B grading gaps",
+    ),
+    MIN_MOED_GAP: (
+        "A generous minimum Moed A to B gap",
+        "A tight minimum Moed A to B gap",
+    ),
+    GAP_STD_DEV: (
+        "Highly consistent study gaps",
+        "Unevenly distributed study gaps",
+    ),
+    AVG_PREP_DAYS: (
+        "Abundant study prep days before mandatory exams",
+        "Limited study prep days before mandatory exams",
+    ),
+    MAX_REST_DAYS: (
+        "Generous max rest gaps between exams",
+        "Compact exam spacing",
+    ),
+    DOUBLE_EXAM_DAYS: (
+        "Fewer days with multiple exams",
+        "More days with multiple exams",
+    ),
+    B2B_EXAM_INCIDENCE: (
+        "Fewer consecutive days with exams",
+        "More consecutive days with exams",
+    ),
+    BUSIEST_WEEK_COUNT: (
+        "A lighter busiest-week exam load",
+        "A heavier busiest-week exam load",
+    ),
+    DEPT_EXAM_CONCURRENCY: (
+        "Low department-specific exam concurrency",
+        "High department-specific exam concurrency",
+    ),
+    MAX_REST_DAYS: (
+        "Longer recovery windows between exams",
+        "Compact exam spacing overall",
+    ),
+    INSTRUCTOR_EXAM_GAP: (
+        "Excellent instructor grading gaps",
+        "Tight grading windows for instructors",
+    ),
+    MANDATORY_CONSEC: (
+        "Fewer back-to-back mandatory exams",
+        "More back-to-back mandatory exams",
     ),
 }
 

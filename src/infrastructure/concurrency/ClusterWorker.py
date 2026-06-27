@@ -15,8 +15,9 @@ so it is not garbage-collected while the thread runs.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING, Optional, List
+import warnings
+from sklearn.exceptions import ConvergenceWarning
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory
@@ -52,12 +53,19 @@ class ClusterWorker(QThread):
         self._errors = default_registry()
         # The structured form of the last failure; failed stays a str signal.
         self.last_error: AppErrorInfo = None
+        self.warnings: List[str] = []
 
     def run(self) -> None:
         try:
-            if not self._coordinator.is_prepared:
-                self._coordinator.prepare(self._config)
-            run = self._coordinator.cluster(self._k)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", category=ConvergenceWarning)
+
+                if not self._coordinator.is_prepared:
+                    self._coordinator.prepare(self._config)
+                run = self._coordinator.cluster(self._k)
+
+                self.warnings = [str(w.message) for w in caught if issubclass(w.category, ConvergenceWarning)]
+
             self.finished.emit(run)
         except Exception as exc:
             info = self._errors.map(exc, {

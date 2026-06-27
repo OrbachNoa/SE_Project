@@ -179,4 +179,25 @@ QGroupBox::title {{
     left: 12px;
     padding: 0 4px;
 }}
+
+/* ── Menu (Dropdowns) ────────────────────────────────────────────── */
+QMenu {{
+    background-color: #FFFFFF;
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 8px;
+    padding: 4px 0px;
+}}
+QMenu::item {{
+    background-color: transparent;
+    padding: 6px 20px;
+    color: {COLOR_TEXT};
+    font-size: 13px;
+}}
+QMenu::item:selected {{
+    background-color: #E6F4F8;
+    color: {COLOR_PRIMARY};
+}}
+QMenu::item:disabled {{
+    color: {COLOR_MUTED};
+}}
 """

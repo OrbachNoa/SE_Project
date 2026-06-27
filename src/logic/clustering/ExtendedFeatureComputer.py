@@ -8,19 +8,39 @@ from typing import Dict
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
 
-AVG_MOED_GAP       = "AVG_MOED_GAP"        # f_0
-MIN_MOED_GAP       = "MIN_MOED_GAP"         # f_1
-GAP_STD_DEV        = "GAP_STD_DEV"          # f_2 — negated
-AVG_PREP_DAYS      = "AVG_PREP_DAYS"        # f_3
-DOUBLE_EXAM_DAYS   = "DOUBLE_EXAM_DAYS"     # f_4 — negated
-BUSIEST_WEEK_COUNT = "BUSIEST_WEEK_COUNT"   # f_5 — negated
-MAX_REST_DAYS      = "MAX_REST_DAYS"        # f_6
-MANDATORY_CONSEC   = "MANDATORY_CONSEC"     # f_7 — negated
+# LLM-only extended features
+AVG_MOED_GAP          = "AVG_MOED_GAP"
+MIN_MOED_GAP          = "MIN_MOED_GAP"
+DOUBLE_EXAM_DAYS      = "DOUBLE_EXAM_DAYS"
+BUSIEST_WEEK_COUNT    = "BUSIEST_WEEK_COUNT"
+MANDATORY_CONSEC      = "MANDATORY_CONSEC"
 
-ALL_EXTENDED_FEATURES = (
-    AVG_MOED_GAP, MIN_MOED_GAP, GAP_STD_DEV, AVG_PREP_DAYS,
-    DOUBLE_EXAM_DAYS, BUSIEST_WEEK_COUNT, MAX_REST_DAYS, MANDATORY_CONSEC,
+# Default extended features
+GAP_STD_DEV           = "GAP_STD_DEV"
+AVG_PREP_DAYS         = "AVG_PREP_DAYS"
+MAX_REST_DAYS         = "MAX_REST_DAYS"
+B2B_EXAM_INCIDENCE    = "B2B_EXAM_INCIDENCE"
+DEPT_EXAM_CONCURRENCY = "DEPT_EXAM_CONCURRENCY"
+INSTRUCTOR_EXAM_GAP   = "INSTRUCTOR_EXAM_GAP"
+
+DEFAULT_EXTENDED_FEATURES = (
+    GAP_STD_DEV,
+    AVG_PREP_DAYS,
+    MAX_REST_DAYS,
+    B2B_EXAM_INCIDENCE,
+    DEPT_EXAM_CONCURRENCY,
+    INSTRUCTOR_EXAM_GAP,
 )
+
+LLM_EXTENDED_FEATURES = (
+    AVG_MOED_GAP,
+    MIN_MOED_GAP,
+    DOUBLE_EXAM_DAYS,
+    BUSIEST_WEEK_COUNT,
+    MANDATORY_CONSEC,
+)
+
+ALL_EXTENDED_FEATURES = DEFAULT_EXTENDED_FEATURES + LLM_EXTENDED_FEATURES
 
 
 class ExtendedFeatureComputer:
@@ -50,16 +70,16 @@ class ExtendedFeatureComputer:
 
         result: Dict[str, float] = {}
 
-        # f_0: AVG_MOED_GAP, f_1: MIN_MOED_GAP
+        # 1. Moed Gaps (LLM only)
         moed_gaps = [
-            abs((moeds["BETH"] - moeds["ALEPH"]).days)
+            abs((moeds["BET"] - moeds["ALEPH"]).days)
             for moeds in dates_by_course.values()
-            if "ALEPH" in moeds and "BETH" in moeds
+            if "ALEPH" in moeds and "BET" in moeds
         ]
         result[AVG_MOED_GAP] = statistics.mean(moed_gaps) if moed_gaps else 0.0
         result[MIN_MOED_GAP] = float(min(moed_gaps)) if moed_gaps else 0.0
 
-        # f_2: GAP_STD_DEV (negated), f_6: MAX_REST_DAYS
+        # 2. GAP_STD_DEV, MAX_REST_DAYS
         sorted_dates = sorted(dates_set)
         if len(sorted_dates) >= 2:
             gaps = [(sorted_dates[i + 1] - sorted_dates[i]).days
@@ -70,7 +90,7 @@ class ExtendedFeatureComputer:
             result[GAP_STD_DEV] = 0.0
             result[MAX_REST_DAYS] = 0.0
 
-        # f_3: AVG_PREP_DAYS — mean gap-before-exam for mandatory exams
+        # 3. AVG_PREP_DAYS
         if mandatory_dates:
             prep_days = []
             for d in mandatory_dates:
@@ -81,21 +101,75 @@ class ExtendedFeatureComputer:
         else:
             result[AVG_PREP_DAYS] = 0.0
 
-        # f_4: DOUBLE_EXAM_DAYS (negated)
+        # 4. DOUBLE_EXAM_DAYS (LLM only)
         result[DOUBLE_EXAM_DAYS] = -float(sum(1 for cnt in date_counts.values() if cnt >= 2))
 
-        # f_5: BUSIEST_WEEK_COUNT (negated) — counts assignments, not unique dates
+        # 5. BUSIEST_WEEK_COUNT (LLM only)
         week_counts: dict = defaultdict(int)
         for d in dates_all:
             week_counts[d.isocalendar()[:2]] += 1
         result[BUSIEST_WEEK_COUNT] = -float(max(week_counts.values())) if week_counts else 0.0
 
-        # f_7: MANDATORY_CONSEC (negated)
+        # 6. MANDATORY_CONSEC (LLM only)
         sorted_mandatory = sorted(mandatory_dates)
         consec = sum(
             1 for i in range(len(sorted_mandatory) - 1)
             if (sorted_mandatory[i + 1] - sorted_mandatory[i]).days == 1
         )
         result[MANDATORY_CONSEC] = -float(consec)
+
+        # 7. B2B_EXAM_INCIDENCE
+        cohort_dates = defaultdict(list)
+        for a in schedule_dto.assignments:
+            try:
+                d = datetime.date.fromisoformat(a.date)
+            except (ValueError, TypeError, AttributeError):
+                continue
+            day = d.toordinal()
+            for prog_id, _ in (a.program_requirements or []):
+                cohort_dates[prog_id].append(day)
+
+        all_gaps = []
+        for dates in cohort_dates.values():
+            if len(dates) < 2:
+                continue
+            dates.sort()
+            for i in range(1, len(dates)):
+                all_gaps.append(dates[i] - dates[i - 1])
+
+        b2b_count = sum(1 for g in all_gaps if g == 1)
+        result[B2B_EXAM_INCIDENCE] = -float(b2b_count / len(all_gaps) if all_gaps else 0.0)
+
+        # 8. DEPT_EXAM_CONCURRENCY
+        dept_day_counts = defaultdict(int)
+        for a in schedule_dto.assignments:
+            try:
+                d = datetime.date.fromisoformat(a.date)
+            except (ValueError, TypeError, AttributeError):
+                continue
+            dept = a.course_id[:2]
+            dept_day_counts[(dept, d)] += 1
+        max_dept = max(dept_day_counts.values()) if dept_day_counts else 0.0
+        result[DEPT_EXAM_CONCURRENCY] = -float(max_dept)
+
+        # 9. INSTRUCTOR_EXAM_GAP
+        prof_dates = defaultdict(list)
+        for a in schedule_dto.assignments:
+            try:
+                d = datetime.date.fromisoformat(a.date)
+            except (ValueError, TypeError, AttributeError):
+                continue
+            if a.instructor:
+                prof_dates[a.instructor].append(d.toordinal())
+        min_prof_gap = None
+        for dates in prof_dates.values():
+            if len(dates) < 2:
+                continue
+            dates.sort()
+            for i in range(1, len(dates)):
+                gap = dates[i] - dates[i - 1]
+                if min_prof_gap is None or gap < min_prof_gap:
+                    min_prof_gap = gap
+        result[INSTRUCTOR_EXAM_GAP] = float(min_prof_gap if min_prof_gap is not None else 21.0)
 
         return result

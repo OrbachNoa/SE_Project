@@ -20,6 +20,19 @@ from src.logic.comparators.ScheduleScorer import (
     MAX_EXAMS_PER_DAY,
     MIN_MANDATORY_GAP,
 )
+from src.logic.clustering.ExtendedFeatureComputer import (
+    GAP_STD_DEV,
+    AVG_PREP_DAYS,
+    AVG_MOED_GAP,
+    MIN_MOED_GAP,
+    DOUBLE_EXAM_DAYS,
+    BUSIEST_WEEK_COUNT,
+    MANDATORY_CONSEC,
+    MAX_REST_DAYS,
+    B2B_EXAM_INCIDENCE,
+    DEPT_EXAM_CONCURRENCY,
+    INSTRUCTOR_EXAM_GAP,
+)
 
 # Substrings (lower-cased) that point at each criterion, English + Hebrew.
 _CRITERION_KEYWORDS: Dict[str, List[str]] = {
@@ -44,6 +57,51 @@ _CRITERION_KEYWORDS: Dict[str, List[str]] = {
         "exam day", "exam days", "exams per day", "lightest day", "light day", "heavy day",
         "ביום", "באותו יום", "עומס", "ביום אחד", "מבחנים ביום", "בחינות ביום",
     ],
+    GAP_STD_DEV: [
+        "gap stddev", "gap variance", "gap uniformity", "uniform gaps",
+        "סטיית תקן של רווחים", "אחידות",
+    ],
+    AVG_PREP_DAYS: [
+        "prep", "preparation", "study time", "days to study",
+        "הכנה", "זמן הכנה", "ללמוד",
+    ],
+    MAX_REST_DAYS: [
+        "max rest", "max gap", "maximum spacing",
+        "מרווח מקסימלי", "הכי הרבה מנוחה",
+    ],
+    B2B_EXAM_INCIDENCE: [
+        "back to back", "back-to-back", "consecutive", "b2b",
+        "עוקבים", "ימים עוקבים", "גב אל גב",
+    ],
+    DEPT_EXAM_CONCURRENCY: [
+        "departmental concurrency", "department concurrency", "dept concurrency",
+        "חפיפה מחלקתית", "מחלקה",
+    ],
+    INSTRUCTOR_EXAM_GAP: [
+        "instructor gap", "professor gap", "lecturer gap", "faculty spacing",
+        "מרווח מרצים", "מרצה", "פרופסור",
+    ],
+    AVG_MOED_GAP: [
+        "average moed gap", "average exam gap", "average spacing",
+        "מרווח ממוצע", "מרווח בחינות ממוצע",
+    ],
+    MIN_MOED_GAP: [
+        "minimum moed gap", "minimum exam gap", "tightest moed spacing",
+        "מרווח מינימלי", "מרווח בחינות מינימלי",
+    ],
+    
+    DOUBLE_EXAM_DAYS: [
+        "double exam days", "two exams in one day", "same day exams",
+        "ימים עם שתי בחינות", "מבחנים באותו יום",
+    ],
+    BUSIEST_WEEK_COUNT: [
+        "busiest week", "busiest week count", "most exams in a week",
+        "שבוע עמוס ביותר", "השבוע הכי עמוס",
+    ],
+    MANDATORY_CONSEC: [
+        "mandatory consecutive", "consecutive mandatory", "consecutive exams",
+        "חובה עוקבות", "מבחנים עוקבים", "עוקבות",
+    ],
 }
 
 _EMPHASIS_WORDS = [
@@ -63,6 +121,26 @@ _HE_NUMBERS = {
     "אחת": 1, "שתיים": 2, "שתי": 2, "שניים": 2, "שני": 2, "שלוש": 3, "שלושה": 3,
     "ארבע": 4, "ארבעה": 4, "חמש": 5, "חמישה": 5, "שש": 6, "שישה": 6,
     "שבע": 7, "שבעה": 7, "שמונה": 8, "תשע": 9, "תשעה": 9, "עשר": 10, "עשרה": 10,
+}
+
+
+_INTENT_PHRASES: Dict[str, Tuple[str, str]] = {
+    MIN_MANDATORY_GAP:      ("rest between exams",                      "מנוחה בין בחינות"),
+    AVG_ALL_COURSES_GAP:    ("even spacing",                            "מרווח אחיד בין בחינות"),
+    ELECTIVE_CONFLICTS:     ("fewer elective clashes",                  "פחות התנגשויות בחירה"),
+    MANDATORY_SPAN:         ("exam span control",                       "שליטה בפיזור הבחינות"),
+    MAX_EXAMS_PER_DAY:      ("lighter exam days",                       "ימים עם פחות בחינות"),
+    GAP_STD_DEV:            ("consistent gaps",                         "רווחים עקביים"),
+    AVG_PREP_DAYS:          ("prep time before exams",                  "זמן הכנה לפני בחינות"),
+    MAX_REST_DAYS:          ("rest windows",                            "חלונות מנוחה"),
+    B2B_EXAM_INCIDENCE:     ("fewer back-to-back days",                 "פחות ימים עוקבים"),
+    DEPT_EXAM_CONCURRENCY:  ("department load",                         "עומס מחלקתי"),
+    INSTRUCTOR_EXAM_GAP:    ("instructor spacing",                      "מרווח למרצים"),
+    AVG_MOED_GAP:           ("retake spacing",                          "מרווח בין מועדים"),
+    MIN_MOED_GAP:           ("retake spacing",                          "מרווח בין מועדים"),
+    DOUBLE_EXAM_DAYS:       ("no double-exam days",                     "בלי יומיים כפולים"),
+    BUSIEST_WEEK_COUNT:     ("lighter weeks",                           "שבועות קלים יותר"),
+    MANDATORY_CONSEC:       ("fewer consecutive mandatory days",        "פחות ימי חובה רצופים"),
 }
 
 
@@ -99,7 +177,7 @@ class HeuristicRequestParser:
         except ValueError:
             config = ClusterConfig.default()
 
-        return config, self._interpretation(config, emphasised, k)
+        return config, self._interpretation(config, emphasised, k, raw)
 
     # ── matching helpers ─────────────────────────────────────────────────────
 
@@ -153,21 +231,49 @@ class HeuristicRequestParser:
 
     # ── interpretation text ──────────────────────────────────────────────────
 
-    def _interpretation(self, config: ClusterConfig, emphasised, k) -> str:
-        from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
+    def _is_hebrew(self, text: str) -> bool:
+        return any('א' <= c <= 'ת' for c in text)
 
-        if tuple(config.criteria) == tuple(ALL_CRITERIA) and not config.weights:
-            base = "Grouping by all criteria"
-        else:
-            if emphasised is not None:
-                others = [CriterionDisplay.label(c) for c in config.criteria if c != emphasised]
-                base = f"Grouping mainly by {CriterionDisplay.label(emphasised)}"
-                if others:
-                    base += f" (also: {', '.join(others)})"
+    def _interpretation(self, config: ClusterConfig, emphasised, k, raw: str = "") -> str:
+        from src.logic.clustering.ClusteringScorer import EXTENDED_CRITERIA
+        he = self._is_hebrew(raw)
+
+        k_part = (
+            f"ל-{config.k} קבוצות"
+            if config.k_mode == K_MODE_FIXED and config.k
+            else "עם מספר קבוצות אוטומטי"
+        )
+        k_tail = (
+            f"into {config.k} families"
+            if config.k_mode == K_MODE_FIXED and config.k
+            else "with an automatic number of families"
+        )
+
+        def _phrase(cid: str) -> str:
+            pair = _INTENT_PHRASES.get(cid)
+            if pair is None:
+                return CriterionDisplay.label(cid)
+            return pair[1] if he else pair[0]
+
+        if tuple(config.criteria) == tuple(EXTENDED_CRITERIA) and not config.weights:
+            if he:
+                return f"קיבוץ לפי כל הקריטריונים, {k_part}"
+            return f"Grouping by overall schedule quality, {k_tail}."
+
+        if emphasised is not None:
+            if he:
+                return f"קיבוץ בעיקר לפי {_phrase(emphasised)}, {k_part}"
+            return f"Grouping mainly by {_phrase(emphasised)}, {k_tail}."
+
+        phrases = [_phrase(c) for c in config.criteria]
+        if len(phrases) > 3:
+            if he:
+                shown = ", ".join(phrases[:3]) + " ועוד גורמים"
             else:
-                names = ", ".join(CriterionDisplay.label(c) for c in config.criteria)
-                base = f"Grouping by {names}"
+                shown = ", ".join(phrases[:3]) + " and more"
+        else:
+            shown = ", ".join(phrases)
 
-        if config.k_mode == K_MODE_FIXED and config.k:
-            return f"{base}, into {config.k} families."
-        return f"{base}, with an automatic number of families."
+        if he:
+            return f"קיבוץ לפי {shown}, {k_part}"
+        return f"Grouping by {shown}, {k_tail}."

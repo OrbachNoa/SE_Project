@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
 from typing import List, Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QSettings
@@ -40,6 +41,14 @@ if TYPE_CHECKING:
     from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
     from src.application.dto.ScheduleDTO import ScheduleDTO
     from src.logic.clustering.llm import ClusterRequestTranslator
+
+
+@dataclass
+class _RequestRunBundle:
+    """Immutable result from build_request_run(); committed on the GUI thread."""
+    coordinator: object  # ClusteringCoordinator
+    run: object          # ClusteringRun
+    interpretation: str
 
 
 class AppController(QObject):
@@ -102,6 +111,8 @@ class AppController(QObject):
         # _get_request_translator) so importing this optional LLM-backed
         # feature doesn't cost every app launch.
         self._request_translator: Optional["ClusterRequestTranslator"] = None
+        # In-memory sorting priority configuration for the current run
+        self._current_sort_priority: List[str] = []
 
     # ------------------------------------------------------------------
     # File loading & input state updates
@@ -156,6 +167,8 @@ class AppController(QObject):
             self._worker.wait(2000)
         self._worker = None
         self._early_nav_fired = False
+
+        self._current_sort_priority = []
 
         # Clear previous run data to ensure a completely clean execution target context
         self._schedule_state.set_schedules([])
@@ -306,8 +319,13 @@ class AppController(QObject):
 
     def save_sort_config(self, priority_list: List[str]) -> None:
         """Saves sort configuration to persistent settings."""
+        self._current_sort_priority = priority_list
         settings = QSettings("SE_Project", "Scheduler")
         settings.setValue("output/sort_priority", priority_list)
+
+    def get_current_sort_priority(self) -> List[str]:
+        """Returns the current active sort configuration for the run."""
+        return self._current_sort_priority
 
     # ------------------------------------------------------------------
     # Clustering (groups the generated schedules into families)
@@ -362,6 +380,76 @@ class AppController(QObject):
     def invalidate_clustering(self):
         """Discard the cached cluster result (e.g. called after generation completes)."""
         self._invalidate_clustering()
+
+    def _prepare_compatible(self, a, b) -> bool:
+        """True iff configs a and b require the same prepare()/fit_vectors() run.
+
+        k and k_mode are consumed only by cluster(), not by prepare(), so they
+        are excluded. Everything else that affects the sampled data or the fitted
+        matrix is compared. If unsure, a field is INCLUDED (safe re-prepare >
+        serving stale vectors).
+        """
+        return (
+            a.criteria   == b.criteria
+            and a.weights    == b.weights
+            and a.normalizer == b.normalizer
+            and a.k_min      == b.k_min
+            and a.k_max      == b.k_max
+            and a.max_sample == b.max_sample
+            and a.seed       == b.seed
+        )
+
+    def build_request_run(self, text: str, k=None) -> "_RequestRunBundle":
+        """Thread-safe: translate + (reuse-or-prepare) + cluster.
+
+        Does NOT mutate any self state. Reads self._cluster_coordinator
+        read-only for the prepare-cache check.
+        """
+        from src.application.services.ClusteringCoordinator import ClusteringCoordinator
+
+        repo = self._get_schedule_repository()
+        if repo is None:
+            raise RuntimeError("clustering requires the SQLite-backed result store")
+
+        translation = self._get_request_translator().translate(text)
+
+        if k is not None:
+            from src.logic.clustering.ClusterConfig import K_MODE_FIXED
+            translation.config.k_mode = K_MODE_FIXED
+            translation.config.k = k
+
+        cached = self._cluster_coordinator
+        from src.logic.clustering.ClusterConfig import K_MODE_FIXED as _K_FIXED
+        if (cached is not None
+                and cached.is_prepared
+                and cached.config is not None
+                and self._prepare_compatible(cached.config, translation.config)):
+            coordinator = cached
+            _explicit_k = (
+                translation.config.k
+                if translation.config.k_mode == _K_FIXED and translation.config.k
+                else None
+            )
+        else:
+            _explicit_k = None
+            coordinator = ClusteringCoordinator(repo)
+            coordinator.prepare(translation.config)
+
+        run = coordinator.cluster(_explicit_k)
+
+        return _RequestRunBundle(
+            coordinator=coordinator,
+            run=run,
+            interpretation=translation.interpretation,
+        )
+
+    def commit_request_run(self, bundle) -> list:
+        """GUI thread only: commit a bundle returned by build_request_run()."""
+        self._cluster_coordinator = bundle.coordinator
+        self._cluster_run = bundle.run
+        self._active_k = bundle.run.result.k
+        self._cluster_interpretation = bundle.interpretation
+        return self._mapper.to_cluster_cards(bundle.run.result)
 
     def cards_from_run(self, run):
         """Store a finished ClusteringRun and return its card view models."""

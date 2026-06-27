@@ -19,6 +19,10 @@ class ScreenRouter:
         self._screens[name] = screen
         self._stack.addWidget(screen)
 
+    def get_screen(self, name: str) -> Screen | None:
+        """Get a registered screen by name."""
+        return self._screens.get(name)
+
     # The main command to jump to a specific screen by its name
     def show(self, name: str) -> None:
         """Show a screen by name."""
