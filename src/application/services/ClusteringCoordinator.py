@@ -47,6 +47,7 @@ class ClusteringCoordinator:
         self._gidx_by_working_index: List[int] = []
         self._population: int = 0
         self._config: Optional[ClusterConfig] = None
+        self._flat_criteria: List[str] = []
 
     # ── stateful path (overview: prepare once, change K cheaply) ─────────────
 
@@ -76,11 +77,28 @@ class ClusteringCoordinator:
         self._service = service
         self._gidx_by_working_index = list(ids)
         self._population = population
+        self._flat_criteria = self._detect_flat_criteria(ids, vectors, list(cfg.criteria))
         return self
 
     @property
     def is_prepared(self) -> bool:
         return self._service is not None and self._service.is_fitted
+
+    @property
+    def flat_criteria(self) -> List[str]:
+        return self._flat_criteria or []
+
+    def _detect_flat_criteria(self, ids, vectors, criteria) -> List[str]:
+        """Return list of criterion IDs with near-zero variance."""
+        import numpy as np
+        if vectors.shape[0] < 2:
+            return []
+        variances = vectors.var(axis=0)
+        flat = []
+        for i, c in enumerate(criteria):
+            if variances[i] < 1e-6:
+                flat.append(c)
+        return flat
 
     def cluster(self, k: Optional[int] = None) -> ClusteringRun:
         """Partition the already-fitted working set into K families.

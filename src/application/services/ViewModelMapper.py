@@ -108,7 +108,7 @@ class ViewModelMapper:
 
         items = [self._item_from_assignment(a, effective_programs) for a in dto.assignments]
         items.sort(key=lambda item: item.date)  # ISO dates sort correctly as text
-        return ScheduleViewModel(items=items, current_index=current_index, total=total)
+        return ScheduleViewModel(items=items, current_index=current_index, total=total, scores=dto.scores)
 
     def to_calendar_vm(self, dto: ScheduleDTO) -> CalendarViewModel:
         """Map a schedule DTO to year-calendar cells (one per exam day, date-sorted)."""
@@ -211,8 +211,47 @@ class ViewModelMapper:
 
     def to_cluster_cards(self, result) -> List[ClusterCardViewModel]:
         """Map a ClusterResult into overview cards (one per family)."""
+        criteria = result.criteria
+        
+        # Calculate stats (mean, std) for each criterion across all clusters
+        stats = {}
+        for crit in criteria:
+            vals = [c.summary.get(crit, 0.0) for c in result.clusters]
+            mean = sum(vals) / len(vals) if vals else 0.0
+            variance = sum((v - mean) ** 2 for v in vals) / len(vals) if vals else 0.0
+            std = variance ** 0.5
+            stats[crit] = (mean, std)
+
         cards: List[ClusterCardViewModel] = []
         for cluster in result.clusters:
+            # Find defining criterion based on largest absolute Z-score deviation
+            defining_criterion = ""
+            max_abs_z = -1.0
+            for crit in criteria:
+                mean, std = stats.get(crit, (0.0, 0.0))
+                val = cluster.summary.get(crit, 0.0)
+                if std > 1e-9:
+                    z = (val - mean) / std
+                    if abs(z) > max_abs_z:
+                        max_abs_z = abs(z)
+                        defining_criterion = crit
+
+            # Format ranges for display
+            min_max_vm = {}
+            for name in criteria:
+                mi, ma = getattr(cluster, "min_max", {}).get(name, (0.0, 0.0))
+                min_max_vm[name] = (
+                    CriterionDisplay.display_value(name, mi),
+                    CriterionDisplay.display_value(name, ma)
+                )
+
+            summary = [
+                (name,
+                 CriterionDisplay.label(name),
+                 CriterionDisplay.display_value(name, cluster.summary.get(name, 0.0)))
+                for name in criteria
+            ]
+            
             cards.append(
                 ClusterCardViewModel(
                     cluster_id=cluster.cluster_id,
@@ -223,6 +262,8 @@ class ViewModelMapper:
                     description=cluster.description or "",
                     criteria=tuple(result.criteria),
                     summary=cluster.summary,
+                    defining_criterion=defining_criterion,
+                    min_max=min_max_vm,
                 )
             )
         return cards
@@ -248,10 +289,18 @@ class ViewModelMapper:
         feats_a = cluster_a.representative_features or {}
         feats_b = cluster_b.representative_features or {}
         rows = []
+        left_features_display = {}
+        right_features_display = {}
         for name in result.criteria:
             la = CriterionDisplay.display_value(name, feats_a.get(name, 0.0))
             lb = CriterionDisplay.display_value(name, feats_b.get(name, 0.0))
-            rows.append((CriterionDisplay.label(name), la, lb, la != lb))
+            rows.append((name, CriterionDisplay.label(name), la, lb, la != lb))
+            left_features_display[name] = la
+            right_features_display[name] = lb
+
+        # Build composite ratings for both families
+        left_labels = self._compute_composite_labels(cluster_a, result.clusters)
+        right_labels = self._compute_composite_labels(cluster_b, result.clusters)
 
         return ClusterComparisonViewModel(
             left_title=f"Family {cluster_a.cluster_id + 1}",
@@ -259,4 +308,72 @@ class ViewModelMapper:
             left_schedule=left_vm,
             right_schedule=right_vm,
             feature_rows=rows,
+            left_student_comfort=left_labels["student_comfort"],
+            left_admin_load=left_labels["admin_load"],
+            left_faculty_impact=left_labels["faculty_impact"],
+            left_schedule_spread=left_labels["schedule_spread"],
+            right_student_comfort=right_labels["student_comfort"],
+            right_admin_load=right_labels["admin_load"],
+            right_faculty_impact=right_labels["faculty_impact"],
+            right_schedule_spread=right_labels["schedule_spread"],
+            left_features=left_features_display,
+            right_features=right_features_display,
         )
+
+    def _compute_composite_labels(self, cluster, all_clusters) -> dict:
+        """Derive human-readable composite quality labels for a cluster.
+
+        Compares this cluster's scores against all others to determine if it
+        ranks High / Medium / Low (or Wide / Balanced / Compressed for spread).
+        """
+        from src.logic.comparators.ScheduleScorer import (
+            MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP, ELECTIVE_CONFLICTS,
+            MANDATORY_SPAN, MAX_EXAMS_PER_DAY,
+        )
+        from src.logic.clustering.CriterionDisplay import display_value_to_percentage
+
+        def _percentile(crit, cluster, all_clusters):
+            """Rank this cluster on crit as a 0-100 percentile vs all clusters."""
+            score = display_value_to_percentage(
+                crit,
+                CriterionDisplay.display_value(crit, cluster.summary.get(crit, 0.0))
+            )
+            return score
+
+        def _hml(score):
+            if score >= 65:
+                return "High"
+            elif score >= 35:
+                return "Medium"
+            return "Low"
+
+        def _spread(score):
+            if score >= 65:
+                return "Wide"
+            elif score >= 35:
+                return "Balanced"
+            return "Compressed"
+
+        # Student Comfort: driven by min mandatory gap + avg gap
+        gap_score = _percentile(MIN_MANDATORY_GAP, cluster, all_clusters)
+        avg_score = _percentile(AVG_ALL_COURSES_GAP, cluster, all_clusters)
+        comfort_score = (gap_score + avg_score) // 2
+
+        # Admin Load: driven by elective conflicts + max exams per day (lower = easier admin)
+        elec_score = _percentile(ELECTIVE_CONFLICTS, cluster, all_clusters)
+        epd_score = _percentile(MAX_EXAMS_PER_DAY, cluster, all_clusters)
+        # High admin load means fewer conflicts/crowding (score inversely)
+        admin_score = (elec_score + epd_score) // 2
+
+        # Faculty Impact: driven by max exams per day (heavier = more faculty load)
+        faculty_score = _percentile(MAX_EXAMS_PER_DAY, cluster, all_clusters)
+
+        # Schedule Spread: driven by mandatory span
+        spread_score = _percentile(MANDATORY_SPAN, cluster, all_clusters)
+
+        return {
+            "student_comfort": _hml(comfort_score),
+            "admin_load": _hml(admin_score),
+            "faculty_impact": _hml(faculty_score),
+            "schedule_spread": _spread(spread_score),
+        }

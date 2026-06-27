@@ -154,6 +154,7 @@ class ClusterOverviewScreen(Screen):
         self._interpretation_label = QLabel("")
         self._interpretation_label.setObjectName("interpretation-label")
         self._interpretation_label.setWordWrap(True)
+        self._interpretation_label.setVisible(False)
         layout.addWidget(self._interpretation_label)
 
         container_layout.addWidget(bar)
@@ -192,6 +193,9 @@ class ClusterOverviewScreen(Screen):
         self._k_spin.setValue(k)
         self._k_spin.blockSignals(False)
 
+    def get_k_value(self) -> int:
+        return self._k_spin.value()
+
     def set_summary(self, text: str) -> None:
         self._summary_label.setText(text)
 
@@ -200,6 +204,7 @@ class ClusterOverviewScreen(Screen):
 
     def set_interpretation(self, text: str) -> None:
         self._interpretation_label.setText(text)
+        self._interpretation_label.setVisible(bool(text.strip()))
 
     def set_busy(self, busy: bool) -> None:
         self._busy_bar.setVisible(busy)

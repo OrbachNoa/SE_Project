@@ -38,6 +38,14 @@ class ClusterComparePresenter:
     def on_back(self) -> None:
         self._router.back()
 
+    def on_view_calendar(self) -> None:
+        """Navigate to the shared calendar overlay screen for the same pair."""
+        from gui.core.app import SCREEN_CLUSTER_CALENDAR_OVERLAY
+        overlay_screen = self._router.get_screen(SCREEN_CLUSTER_CALENDAR_OVERLAY)
+        if overlay_screen:
+            overlay_screen.set_pair(self._cluster_a, self._cluster_b)
+        self._router.show(SCREEN_CLUSTER_CALENDAR_OVERLAY)
+
     def _available_periods(self):
         periods = self._controller.get_loaded_periods()
         mapper = self._controller.get_mapper()

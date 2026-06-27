@@ -5,6 +5,7 @@ from gui.features.output.OutputScreen import OutputScreen
 from gui.features.clusters.ClusterOverviewScreen import ClusterOverviewScreen
 from gui.features.clusters.ClusterDetailScreen import ClusterDetailScreen
 from gui.features.clusters.ClusterCompareScreen import ClusterCompareScreen
+from gui.features.clusters.ClusterCalendarOverlayScreen import ClusterCalendarOverlayScreen
 from gui.core.styles.Theme import APP_STYLESHEET
 from gui.core.styles.DialogStyles import DIALOG_STYLESHEET
 
@@ -14,6 +15,7 @@ SCREEN_OUTPUT          = "output"
 SCREEN_CLUSTERS        = "clusters"
 SCREEN_CLUSTER_DETAIL  = "cluster_detail"
 SCREEN_CLUSTER_COMPARE = "cluster_compare"
+SCREEN_CLUSTER_CALENDAR_OVERLAY = "cluster_calendar_overlay"
 
 # This is the main window of the application that holds everything together
 class App(QMainWindow):
@@ -54,6 +56,9 @@ class App(QMainWindow):
         self._router.register(SCREEN_CLUSTERS,        cluster_overview)
         self._router.register(SCREEN_CLUSTER_DETAIL,  cluster_detail)
         self._router.register(SCREEN_CLUSTER_COMPARE, cluster_compare)
+        
+        cluster_calendar_overlay = ClusterCalendarOverlayScreen(controller, self._router)
+        self._router.register(SCREEN_CLUSTER_CALENDAR_OVERLAY, cluster_calendar_overlay)
 
         # Decide which screen the user should see first when the app opens
         self._router.show(SCREEN_INPUT)

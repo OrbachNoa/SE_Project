@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional
 
+from src.logic.clustering.CriterionDisplay import label as criterion_label
+
 if TYPE_CHECKING:
     from src.infrastructure.concurrency.ClusterWorker import ClusterWorker
 
@@ -26,18 +28,27 @@ class ClusterOverviewPresenter:
         self._compare_selection: List[int] = []
         self._worker: Optional[ClusterWorker] = None
         self._last_request_text: str = ""
+        self._pending_request_text: str = ""
+        self._last_k: Optional[int] = None
 
     # Entry point: compute clusters. Reuse the last active K if one exists so
     # the view stays consistent after a generation run invalidates the cache.
+    # If entering for the first time (no active clusters), use default automatic K.
     def on_enter(self) -> None:
-        # Restore last request text in the input field
-        if self._last_request_text:
-            self._view._request_input.setText(self._last_request_text)
+        if self._controller.has_clusters():
+            # Restore last request text in the input field
+            if self._last_request_text:
+                self._view._request_input.setText(self._last_request_text)
+            else:
+                self._view._request_input.setText("")
+            # Use last active K for consistency
+            prev_k = self._controller.get_active_k()
+            self._kick_off(k=prev_k or None, recompute=False)
         else:
+            self._last_k = None
+            self._last_request_text = ""
             self._view._request_input.setText("")
-        # Use last active K for consistency
-        prev_k = self._controller.get_active_k()
-        self._kick_off(k=prev_k or None, recompute=False)
+            self._kick_off(k=None, recompute=False)
 
     def on_leave(self) -> None:
         pass
@@ -51,41 +62,21 @@ class ClusterOverviewPresenter:
 
     # User typed a free-text request and pressed Apply request.
     def on_apply_request(self, text: str, k: Optional[int] = None) -> None:
+        # Prevent a second concurrent worker if one is already running.
+        if self._worker is not None and self._worker.isRunning():
+            return
         if not (text or "").strip():
             self._controller.invalidate_clustering()
             self._kick_off(k=None, recompute=False)
             return
         self._compare_selection = []
+        self._pending_request_text = text
         self._view.set_busy(True)
-        try:
-            cards = self._controller.cluster_from_request(text, k)
-            interpretation = self._controller.get_cluster_interpretation()
-        except Exception as error:
-            message = self._controller.map_error(
-                error, {"operation": "cluster_from_request", "screen": "clusters"}
-            )
-            self._view.set_busy(False)
-            self._view.render_cards([])
-            self._view.set_summary("")
-            self._view.set_interpretation("")
-            self._view.show_message(f"Could not apply request: {message}")
-            return
-
-        self._view.set_busy(False)
-        if not cards:
-            self._view.render_cards([])
-            self._view.set_summary("")
-            self._view.show_message("No schedules to cluster yet. Generate schedules first.")
-            return
-
-        active_k = self._controller.get_active_k()
-        self._view.set_k_value(active_k)
-        self._view.set_summary(f"{active_k} families")
-        self._view.set_interpretation(interpretation)
-        self._view.render_cards(cards)
-        self._view.set_compare_enabled(False)
-
-        self._last_request_text = text
+        from src.infrastructure.concurrency.ClusterRequestWorker import ClusterRequestWorker
+        self._worker = ClusterRequestWorker(self._controller, text, k)
+        self._worker.finished.connect(self._on_request_worker_finished)
+        self._worker.failed.connect(self._on_worker_failed)
+        self._worker.start()
 
     def on_open_cluster(self, cluster_id: int) -> None:
         self._detail.enter_cluster(cluster_id)
@@ -144,21 +135,31 @@ class ClusterOverviewPresenter:
         self._worker.failed.connect(self._on_worker_failed)
         self._worker.start()
 
+    def _on_request_worker_finished(self, bundle) -> None:
+        """Handler for ClusterRequestWorker.finished — commit + render."""
+        cards = self._controller.commit_request_run(bundle)
+        self._finish_render(bundle.run, cards)
+        self._last_request_text = self._pending_request_text
+        self._last_k = bundle.run.result.k
+
     def _on_worker_finished(self, run) -> None:
-        self._view.set_busy(False)
+        """Handler for ClusterWorker.finished (on_enter / on_apply_k path)."""
         try:
-            # Store the run in the facade (so get_active_k etc. work) and
-            # convert to card view models — both are cheap, GUI thread is fine.
             cards = self._controller.cards_from_run(run)
         except Exception as error:
             message = self._controller.map_error(
                 error, {"operation": "render_cluster_cards", "screen": "clusters"}
             )
+            self._view.set_busy(False)
             self._view.render_cards([])
             self._view.set_summary("")
             self._view.show_message(f"Could not render clusters: {message}")
             return
+        self._finish_render(run, cards)
 
+    def _finish_render(self, run, cards) -> None:
+        """Shared final-render step used by both worker-finished handlers."""
+        self._view.set_busy(False)
         if not cards:
             self._view.render_cards([])
             self._view.set_summary("")
@@ -168,16 +169,41 @@ class ClusterOverviewPresenter:
         active_k = self._controller.get_active_k()
         self._view.set_k_value(active_k)
         self._view.set_summary(f"{active_k} families")
+
+        parts = []
+        interp = self._controller.get_cluster_interpretation()
+        if interp:
+            parts.append(interp)
         if run.result.requested_k and run.result.requested_k != active_k:
-            notice = (
+            parts.append(
                 f"Note: only {active_k} families could be formed — "
                 "the data may not vary enough on these criteria."
             )
-            self._view.set_interpretation(notice)
-        else:
-            self._view.set_interpretation("")
+        coordinator = self._controller.get_cluster_coordinator()
+        if coordinator and coordinator.flat_criteria:
+            _flat = coordinator.flat_criteria
+            _names = [criterion_label(c) for c in _flat]
+            _he = any('א' <= _c <= 'ת' for _c in (parts[0] if parts else ""))
+            if len(_names) > 3:
+                _suffix = f" ועוד {len(_names) - 3}" if _he else f" +{len(_names) - 3} more"
+            else:
+                _suffix = ""
+            _shown = ", ".join(_names[:3])
+            if _he:
+                parts.append(f"ללא השפעה (אין שונות): {_shown}{_suffix}")
+            else:
+                parts.append(f"Unused (no variation): {_shown}{_suffix}")
+        self._view.set_interpretation("\n\n".join(parts))
+
         self._view.render_cards(cards)
         self._view.set_compare_enabled(False)
+
+        custom_warn = (
+            "\n\n".join(dict.fromkeys(self._worker.warnings))
+            if (self._worker and getattr(self._worker, "warnings", None))
+            else None
+        )
+        self._warn_capped_k(run.result.requested_k or active_k, custom_warn)
 
     def _on_worker_failed(self, message: str) -> None:
         self._view.set_busy(False)
@@ -186,3 +212,13 @@ class ClusterOverviewPresenter:
         self._view.show_message(f"Could not compute clusters: {message}")
         if self._worker is not None:
             self._controller.log_worker_error(self._worker.last_error)
+
+    def _warn_capped_k(self, requested_k: Optional[int], custom_warning: Optional[str] = None) -> None:
+        """Alert the user if a ConvergenceWarning fired during clustering."""
+        if custom_warning:
+            msg = (
+                f"Clustering Warning:\n\n{custom_warning}\n\n"
+                f"The engine could not split the schedules into the requested {requested_k} families "
+                f"because they do not have enough distinct score variations."
+            )
+            self._view.show_message(msg)
