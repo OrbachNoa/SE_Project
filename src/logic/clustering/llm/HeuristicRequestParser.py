@@ -124,6 +124,26 @@ _HE_NUMBERS = {
 }
 
 
+_INTENT_PHRASES: Dict[str, Tuple[str, str]] = {
+    MIN_MANDATORY_GAP:      ("rest between exams",                      "מנוחה בין בחינות"),
+    AVG_ALL_COURSES_GAP:    ("even spacing",                            "מרווח אחיד בין בחינות"),
+    ELECTIVE_CONFLICTS:     ("fewer elective clashes",                  "פחות התנגשויות בחירה"),
+    MANDATORY_SPAN:         ("exam span control",                       "שליטה בפיזור הבחינות"),
+    MAX_EXAMS_PER_DAY:      ("lighter exam days",                       "ימים עם פחות בחינות"),
+    GAP_STD_DEV:            ("consistent gaps",                         "רווחים עקביים"),
+    AVG_PREP_DAYS:          ("prep time before exams",                  "זמן הכנה לפני בחינות"),
+    MAX_REST_DAYS:          ("rest windows",                            "חלונות מנוחה"),
+    B2B_EXAM_INCIDENCE:     ("fewer back-to-back days",                 "פחות ימים עוקבים"),
+    DEPT_EXAM_CONCURRENCY:  ("department load",                         "עומס מחלקתי"),
+    INSTRUCTOR_EXAM_GAP:    ("instructor spacing",                      "מרווח למרצים"),
+    AVG_MOED_GAP:           ("retake spacing",                          "מרווח בין מועדים"),
+    MIN_MOED_GAP:           ("retake spacing",                          "מרווח בין מועדים"),
+    DOUBLE_EXAM_DAYS:       ("no double-exam days",                     "בלי יומיים כפולים"),
+    BUSIEST_WEEK_COUNT:     ("lighter weeks",                           "שבועות קלים יותר"),
+    MANDATORY_CONSEC:       ("fewer consecutive mandatory days",        "פחות ימי חובה רצופים"),
+}
+
+
 class HeuristicRequestParser:
     """Maps a free-text clustering request onto a ClusterConfig by keywords."""
 
@@ -157,7 +177,7 @@ class HeuristicRequestParser:
         except ValueError:
             config = ClusterConfig.default()
 
-        return config, self._interpretation(config, emphasised, k)
+        return config, self._interpretation(config, emphasised, k, raw)
 
     # ── matching helpers ─────────────────────────────────────────────────────
 
@@ -211,21 +231,49 @@ class HeuristicRequestParser:
 
     # ── interpretation text ──────────────────────────────────────────────────
 
-    def _interpretation(self, config: ClusterConfig, emphasised, k) -> str:
+    def _is_hebrew(self, text: str) -> bool:
+        return any('א' <= c <= 'ת' for c in text)
+
+    def _interpretation(self, config: ClusterConfig, emphasised, k, raw: str = "") -> str:
         from src.logic.clustering.ClusteringScorer import EXTENDED_CRITERIA
+        he = self._is_hebrew(raw)
+
+        k_part = (
+            f"ל-{config.k} קבוצות"
+            if config.k_mode == K_MODE_FIXED and config.k
+            else "עם מספר קבוצות אוטומטי"
+        )
+        k_tail = (
+            f"into {config.k} families"
+            if config.k_mode == K_MODE_FIXED and config.k
+            else "with an automatic number of families"
+        )
+
+        def _phrase(cid: str) -> str:
+            pair = _INTENT_PHRASES.get(cid)
+            if pair is None:
+                return CriterionDisplay.label(cid)
+            return pair[1] if he else pair[0]
 
         if tuple(config.criteria) == tuple(EXTENDED_CRITERIA) and not config.weights:
-            base = "Grouping by all criteria"
-        else:
-            if emphasised is not None:
-                others = [CriterionDisplay.label(c) for c in config.criteria if c != emphasised]
-                base = f"Grouping mainly by {CriterionDisplay.label(emphasised)}"
-                if others:
-                    base += f" (also: {', '.join(others)})"
-            else:
-                names = ", ".join(CriterionDisplay.label(c) for c in config.criteria)
-                base = f"Grouping by {names}"
+            if he:
+                return f"קיבוץ לפי כל הקריטריונים, {k_part}"
+            return f"Grouping by overall schedule quality, {k_tail}."
 
-        if config.k_mode == K_MODE_FIXED and config.k:
-            return f"{base}, into {config.k} families."
-        return f"{base}, with an automatic number of families."
+        if emphasised is not None:
+            if he:
+                return f"קיבוץ בעיקר לפי {_phrase(emphasised)}, {k_part}"
+            return f"Grouping mainly by {_phrase(emphasised)}, {k_tail}."
+
+        phrases = [_phrase(c) for c in config.criteria]
+        if len(phrases) > 3:
+            if he:
+                shown = ", ".join(phrases[:3]) + " ועוד גורמים"
+            else:
+                shown = ", ".join(phrases[:3]) + " and more"
+        else:
+            shown = ", ".join(phrases)
+
+        if he:
+            return f"קיבוץ לפי {shown}, {k_part}"
+        return f"Grouping by {shown}, {k_tail}."

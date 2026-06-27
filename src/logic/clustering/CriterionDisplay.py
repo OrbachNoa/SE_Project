@@ -45,9 +45,9 @@ CRITERION_LABELS = {
     BUSIEST_WEEK_COUNT:  "Busiest week (exams)",
     MAX_REST_DAYS:       "Max gap between exams (days)",
     MANDATORY_CONSEC:    "Consecutive mandatory days",
-    B2B_EXAM_INCIDENCE: "B2B Exam Incidence",
-    DEPT_EXAM_CONCURRENCY: "Departmental Exam Concurrency",
-    INSTRUCTOR_EXAM_GAP: "Instructor Exam Gap",
+    B2B_EXAM_INCIDENCE:     "Back-to-back exam rate",
+    DEPT_EXAM_CONCURRENCY:  "Dept exam concurrency (peak)",
+    INSTRUCTOR_EXAM_GAP:    "Min instructor gap (days)",
 }
 
 # Detailed summaries describing what each criterion calculates/means.

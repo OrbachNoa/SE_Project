@@ -14,10 +14,13 @@ user how their words were applied. ``validate_config`` is simply
 from __future__ import annotations
 
 import json
+import logging
 import re
 import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
+
+_log = logging.getLogger(__name__)
 
 from src.logic.clustering.ClusterConfig import ClusterConfig, K_MODE_AUTO, K_MODE_FIXED
 from src.logic.clustering.ExtendedFeatureComputer import (
@@ -46,6 +49,8 @@ Choose from these topics ONLY (use exact names):
 - "conflicts"     : user wants fewer elective exam clashes
 - "balance"       : user wants an even, balanced distribution of exams
                     across the period — equal weeks, no overloaded periods
+- "faculty_load"  : user wants enough time between exams for instructors
+                    to grade and prepare — considers per-instructor and per-department load
 - "general"       : general or unclear request — use all criteria
 
 When the request contains multiple conditions joined by AND / ו / גם / and also,
@@ -56,6 +61,7 @@ Output ONLY valid JSON, no prose, no code fences, no <think> tags:
 {
   "topics": [<one or more topic names from the list above>],
   "thresholds": {"<topic>": <number>},
+  "confidence": {"<topic>": <float 0.0-1.0>},   // optional
   "directions": {"span": "compact" | "spread"},
   "k_mode": "auto" | "fixed",
   "k": <integer 2-20, only when k_mode is "fixed">,
@@ -93,6 +99,10 @@ IMPORTANT RULES:
 - For load requests: prefer "daily_load" when the user mentions per-day load,
   prefer "weekly_load" when the user mentions per-week load.
   Use both when the request is general about load.
+- Include 'confidence' scores (0.0–1.0) for each topic when you are not
+  fully certain. High confidence (>0.8) = clear match.
+  Low confidence (<0.5) = weak signal. Omit 'confidence' entirely when
+  all topics are clearly matched (saves tokens).
 
 Examples:
 
@@ -184,14 +194,26 @@ Request: "אני רוצה שכל השבועות שווים"
 Output: {"topics": ["balance"], "k_mode": "auto", "explanation": "קיבוץ לפי איזון עומס הבחינות לאורך התקופה"}
 
 Request: "give me a balanced schedule with even exam distribution"
-Output: {"topics": ["balance"], "k_mode": "auto", "explanation": "Grouping by balanced exam distribution"}"""
+Output: {"topics": ["balance"], "k_mode": "auto", "explanation": "Grouping by balanced exam distribution"}
+
+Request: "give instructors enough time between their exams"
+Output: {"topics": ["faculty_load"], "k_mode": "auto", "explanation": "Grouping by instructor and department exam load"}
+
+Request: "שיהיה למרצים זמן לבדוק בין מבחן למבחן"
+Output: {"topics": ["faculty_load"], "k_mode": "auto", "explanation": "קיבוץ לפי עומס המרצים בין הבחינות"}
+
+Request: "אני רוצה לוחות שנוחים ומאוזנים"
+Output: {"topics": ["rest", "balance"],
+         "confidence": {"rest": 0.7, "balance": 0.6},
+         "k_mode": "auto",
+         "explanation": "קיבוץ לפי מנוחה ואיזון עומס"}"""
 
 _USER_TEMPLATE = "Request:\n{request}\n\nReturn the JSON configuration."
 
 _TOPIC_CRITERIA: Dict[str, Tuple[list, dict]] = {
     "retake_time":  ([AVG_MOED_GAP, MIN_MOED_GAP], {AVG_MOED_GAP: 2.0}),
     "study_prep":   ([AVG_PREP_DAYS, MIN_MANDATORY_GAP], {AVG_PREP_DAYS: 3.0}),
-    "daily_load":   ([MAX_EXAMS_PER_DAY, DOUBLE_EXAM_DAYS, BUSIEST_WEEK_COUNT], {MAX_EXAMS_PER_DAY: 2.0}),
+    "daily_load":   ([MAX_EXAMS_PER_DAY, DOUBLE_EXAM_DAYS, BUSIEST_WEEK_COUNT, DEPT_EXAM_CONCURRENCY], {MAX_EXAMS_PER_DAY: 2.0, DEPT_EXAM_CONCURRENCY: 1.2}),
     "weekly_load":  ([BUSIEST_WEEK_COUNT, MAX_EXAMS_PER_DAY], {BUSIEST_WEEK_COUNT: 2.0}),
     "rest":         ([MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP, MAX_REST_DAYS], {}),
     "consistency":  ([GAP_STD_DEV, AVG_ALL_COURSES_GAP], {GAP_STD_DEV: 2.0}),
@@ -200,6 +222,7 @@ _TOPIC_CRITERIA: Dict[str, Tuple[list, dict]] = {
     "conflicts":    ([ELECTIVE_CONFLICTS, MAX_EXAMS_PER_DAY], {}),
     "balance":      ([BUSIEST_WEEK_COUNT, GAP_STD_DEV, AVG_ALL_COURSES_GAP],
                      {BUSIEST_WEEK_COUNT: 1.5, GAP_STD_DEV: 1.5}),
+    "faculty_load": ([INSTRUCTOR_EXAM_GAP, DEPT_EXAM_CONCURRENCY], {INSTRUCTOR_EXAM_GAP: 2.0}),
     "general":      (list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES), {}),
 }
 
@@ -233,6 +256,29 @@ _FUZZY_TOPIC_MAP: Dict[str, str] = {
     "backtoback":       "consecutive",
     "back2back":        "consecutive",
     "consecutive_days": "consecutive",
+    "faculty":          "faculty_load",
+    "instructor":       "faculty_load",
+    "instructor_time":  "faculty_load",
+    "grading":          "faculty_load",
+    "dept_load":        "faculty_load",
+    "department":       "faculty_load",
+    "מרצה":             "faculty_load",
+    "מרצים":            "faculty_load",
+}
+
+_SMART_K: Dict[str, Optional[int]] = {
+    "retake_time":  2,
+    "daily_load":   4,
+    "weekly_load":  3,
+    "rest":         4,
+    "study_prep":   3,
+    "consistency":  None,
+    "consecutive":  2,
+    "span":         None,
+    "conflicts":    3,
+    "balance":      4,
+    "faculty_load": 3,
+    "general":      None,
 }
 
 
@@ -274,8 +320,8 @@ class ClusterRequestTranslator:
                 config, interpretation = self._config_from_llm(raw)
                 config.validate()
                 result = TranslationResult(config, interpretation, "llm")
-                # DEBUG
-                print(f"[LLM OK] k={config.k_mode}:{config.k} | criteria={config.criteria[:2]}... | '{request[:40]}'")
+                _log.debug("[LLM OK] k=%s:%s | criteria=%s... | '%s'",
+                           config.k_mode, config.k, config.criteria[:2], request[:40])
                 if len(self._cache) >= 20:
                     self._cache.pop(next(iter(self._cache)))
                 self._cache[request] = result
@@ -286,17 +332,14 @@ class ClusterRequestTranslator:
                 )  # fall through to the keyword parser
 
         # 2. Keyword parser (always available).
+        # Not cached — a transient LLM failure must not permanently block LLM for this text.
         config, interpretation = self._parser.parse(request)
-        result = TranslationResult(config, interpretation, "heuristic")
-        if len(self._cache) >= 20:
-            self._cache.pop(next(iter(self._cache)))
-        self._cache[request] = result
-        return result
+        return TranslationResult(config, interpretation, "heuristic")
 
     # ── LLM JSON handling ────────────────────────────────────────────────────
 
     def _config_from_llm(self, raw: str) -> Tuple[ClusterConfig, str]:
-        print(raw)
+        _log.debug("[LLM raw] %s", raw)
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
         data = self._extract_json(raw)
 
@@ -308,18 +351,23 @@ class ClusterRequestTranslator:
                 continue
             topics.append(normalized)
         thresholds: dict = data.get("thresholds") or {}
+        confidence_map = data.get("confidence") or {}
 
         merged_criteria: list = []
         merged_weights: dict = {}
         _DECAY = [1.0, 0.8, 0.6]
         for rank, topic in enumerate(topics):
-            decay = _DECAY[min(rank, len(_DECAY) - 1)]
             crit, weights = _TOPIC_CRITERIA[topic]
+            confidence = confidence_map.get(topic, 1.0)
+            confidence = max(0.1, min(1.0, float(confidence)))
+            rank_decay = _DECAY[min(rank, len(_DECAY) - 1)]
+            effective_multiplier = rank_decay * confidence
             for c in crit:
                 if c not in merged_criteria:
                     merged_criteria.append(c)
             for k, v in weights.items():
-                merged_weights[k] = max(merged_weights.get(k, 1.0), v * decay)
+                scaled = v * effective_multiplier
+                merged_weights[k] = max(merged_weights.get(k, 0.0), scaled)
 
         # Apply threshold-based weight boosts: threshold N → multiplier (1 + N/5).
         for topic, threshold in thresholds.items():
@@ -357,6 +405,14 @@ class ClusterRequestTranslator:
                 kwargs["k_mode"] = K_MODE_AUTO
         else:
             kwargs["k_mode"] = K_MODE_AUTO
+
+        # Apply smart K suggestion only when user did not explicitly set K.
+        if kwargs.get("k_mode") == K_MODE_AUTO and topics:
+            dominant_topic = topics[0]
+            suggested_k = _SMART_K.get(dominant_topic)
+            if suggested_k is not None:
+                kwargs["k_mode"] = K_MODE_FIXED
+                kwargs["k"] = suggested_k
 
         config = ClusterConfig(**kwargs)
         interpretation = (data.get("explanation") or "").strip() or "Custom grouping applied."

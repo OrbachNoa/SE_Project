@@ -24,7 +24,7 @@ from src.logic.clustering.llm.ILLMClient import ILLMClient
 
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_MODEL = "gpt-4o-mini"
-_DEFAULT_TIMEOUT = 20.0
+_DEFAULT_TIMEOUT = 8.0
 
 
 class OpenAICompatibleLLMClient(ILLMClient):
