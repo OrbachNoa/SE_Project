@@ -34,6 +34,7 @@ class OutputScreenPresenter:
         # they are silently discarded when the user is on another screen.
         self._is_active = False
         self._sort_worker = None
+        self._retired_sort_workers = []
 
     @property
     def current_index(self) -> int:
@@ -75,6 +76,9 @@ class OutputScreenPresenter:
 
     # Respond to data updates from the controller, adjusting total counts and page information
     def on_total_count_updated(self, _total: int) -> None:
+        if not self._is_active:
+            return
+
         info = self._controller.get_page_info()
         self._total_found = info["total_count"]
         self._total_pages = info["total_pages"]
@@ -324,8 +328,19 @@ class OutputScreenPresenter:
             except (RuntimeError, TypeError):
                 pass
             _w.quit()
-            _w.wait()
+            self._retired_sort_workers.append(_w)
+            _w.finished.connect(lambda _w=_w: self._cleanup_retired_sort_worker(_w))
         self._sort_worker = None
+
+    def _cleanup_retired_sort_worker(self, worker) -> None:
+        try:
+            self._retired_sort_workers.remove(worker)
+        except ValueError:
+            pass
+        try:
+            worker.deleteLater()
+        except RuntimeError:
+            pass
 
     def on_sort_config_changed(self, priority_list: List[str]) -> None:
         """Called when sorting priority is updated and applied from the SortConfigPanel.

@@ -14,8 +14,6 @@ from src.logic.clustering.ExtendedFeatureComputer import (
     BUSIEST_WEEK_COUNT,
     MAX_REST_DAYS,
     MANDATORY_CONSEC,
-    MAX_REST_DAYS,
-    MIN_MOED_GAP,
     B2B_EXAM_INCIDENCE,
     DEPT_EXAM_CONCURRENCY,
     INSTRUCTOR_EXAM_GAP,

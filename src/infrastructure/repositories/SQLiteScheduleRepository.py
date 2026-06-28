@@ -43,11 +43,21 @@ class SQLiteScheduleRepository:
         # SQLite connection is shared by the worker thread, so we protect it with a lock.
         self._lock = threading.Lock()
 
+        # Separate, cheap lock just for _total_count. count() is polled every
+        # 500ms from the GUI thread while the writer thread holds self._lock for
+        # the whole insert+commit; sharing one lock made that poll block on disk I/O
+        # and stall the GUI. This lock is only ever held for a plain int read/write.
+        self._count_lock = threading.Lock()
+
         # Open the SQLite connection and prepare the tables.
         self._conn: sqlite3.Connection = self._open_connection()
 
         # Slots are needed later to rebuild packed schedules back into DTOs.
         self._slots = None
+
+        # Sort orders we have already built a covering index for, so each
+        # distinct ORDER BY is indexed at most once. Reset on clear().
+        self._sort_index_signatures: set[str] = set()
 
         # Extra score criteria (e.g. clustering features) are supplied by the
         # caller instead of imported here, so the repository never depends on
@@ -126,10 +136,13 @@ class SQLiteScheduleRepository:
     def insert_compressed_batch(self, data: bytes, batch_count: int,
                                 batch_scores: "List[dict] | None" = None,
                                 extended_scores: "List[dict] | None" = None) -> None:
-        with self._lock:
-            # first_offset is the global index of the first schedule in this batch.
-            first_offset = self._total_count
+        # first_offset is the global index of the first schedule in this batch.
+        # Safe to read without self._count_lock: this method is only ever called
+        # from the single background writer thread, so there is no other writer
+        # to race against here -- only count() reads concurrently from the GUI thread.
+        first_offset = self._total_count
 
+        with self._lock:
             # Save the compressed schedules as one blob.
             self._conn.execute(
                 "INSERT INTO schedule_batches (first_offset, batch_count, data) VALUES (?, ?, ?)",
@@ -155,7 +168,10 @@ class SQLiteScheduleRepository:
 
             self._conn.commit()
 
-            # Move the global counter forward by the size of this batch.
+        # Move the global counter forward by the size of this batch. Done under
+        # the dedicated count_lock (not self._lock) so the GUI thread's progress
+        # poll never has to wait on the commit above.
+        with self._count_lock:
             self._total_count += batch_count
 
     def _scores_for_ids(self, gidxs: List[int]) -> dict:
@@ -163,8 +179,8 @@ class SQLiteScheduleRepository:
         if not gidxs:
             return {}
 
-        _col_map = {**_SCORE_COLS, **_EXT_FEATURE_COLS}
-        cols = ", ".join(_col_map[cid] for cid in _ALL_SCORE_CRITERIA)
+        _col_map = {**_SCORE_COLS, **self._ext_feature_cols}
+        cols = ", ".join(_col_map[cid] for cid in self._all_score_criteria)
         rows = []
 
         with self._lock:
@@ -183,7 +199,7 @@ class SQLiteScheduleRepository:
 
         # Convert SQLite rows into {schedule_id: {criterion: score}}.
         return {
-            row[0]: {cid: row[i + 1] for i, cid in enumerate(_ALL_SCORE_CRITERIA)}
+            row[0]: {cid: row[i + 1] for i, cid in enumerate(self._all_score_criteria)}
             for row in rows
         }
 
@@ -193,6 +209,30 @@ class SQLiteScheduleRepository:
             row = self._conn.execute("SELECT COUNT(*) FROM schedule_scores").fetchone()
 
         return int(row[0]) if row else 0
+
+    def update_extended_scores(self, gidxs: List[int], score_rows: List[dict]) -> None:
+        """Update lazily computed extension scores for existing schedules."""
+        if not gidxs or not score_rows or not self._ext_feature_cols:
+            return
+
+        columns = [
+            (feature_id, self._ext_feature_cols[feature_id])
+            for feature_id in self._ext_feature_cols
+        ]
+        set_clause = ", ".join(f"{column} = ?" for _, column in columns)
+        rows = []
+        for gidx, scores in zip(gidxs, score_rows):
+            rows.append((
+                *[float(scores.get(feature_id, 0.0)) for feature_id, _ in columns],
+                int(gidx),
+            ))
+
+        with self._lock:
+            self._conn.executemany(
+                f"UPDATE schedule_scores SET {set_clause} WHERE gidx = ?",
+                rows,
+            )
+            self._conn.commit()
 
     def read_score_vectors(self, criteria: List[str], gidxs: List[int]) -> tuple:
         """Read score vectors for clustering without loading full schedules."""
@@ -277,10 +317,21 @@ class SQLiteScheduleRepository:
     def clear(self) -> None:
         """Delete all saved schedules from the current run."""
         with self._lock:
-            self._total_count = 0
             self._conn.execute("DELETE FROM schedule_batches")
             self._conn.execute("DELETE FROM schedule_scores")
+            # Drop the lazily-built sort indexes too: keeping them would make the
+            # next run's batch inserts pay index-maintenance cost for an order
+            # nobody has asked for yet. They rebuild on the next sorted page.
+            leftover_indexes = self._conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type = 'index' AND name LIKE 'idx_sort_%'"
+            ).fetchall()
+            for (name,) in leftover_indexes:
+                self._conn.execute(f"DROP INDEX IF EXISTS {name}")
             self._conn.commit()
+        self._sort_index_signatures.clear()
+        with self._count_lock:
+            self._total_count = 0
 
     def get_window_raw(self, offset: int, limit: int) -> tuple:
         """Return raw rows for a page, without building full ScheduleDTO objects.
@@ -328,6 +379,37 @@ class SQLiteScheduleRepository:
 
         return raw_map, score_map, self._slots
 
+    def ensure_sort_indexes(self, priority: List[str]) -> None:
+        """Build a covering index matching one sort order, once per order.
+
+        Without an index, get_sorted_ids_page re-runs a full ``ORDER BY`` with a
+        temporary B-tree on every page, which costs ~1s at deep offsets on a
+        large result set. A composite ``DESC`` index on exactly the requested
+        columns turns that into a covering-index scan (gidx is the rowid, so it
+        rides along for free) -- ~60x faster at deep offsets in measurements.
+
+        Built lazily, on the first sorted page for a given priority, so the
+        write-heavy generation path is never slowed by index maintenance. Each
+        distinct sort order is indexed at most once; on-demand index count is
+        therefore bounded by the number of sort orders the user actually picks.
+        """
+        if not priority:
+            return  # No priority sorts by gidx (the primary key) -- already ordered.
+
+        cols = [_SCORE_COLS[c] for c in priority]
+        signature = ",".join(cols)
+        if signature in self._sort_index_signatures:
+            return
+
+        index_name = "idx_sort_" + "_".join(cols)
+        order = ", ".join(f"{col} DESC" for col in cols)
+        with self._lock:
+            self._conn.execute(
+                f"CREATE INDEX IF NOT EXISTS {index_name} ON schedule_scores({order})"
+            )
+            self._conn.commit()
+        self._sort_index_signatures.add(signature)
+
     def get_sorted_ids_page(
         self,
         priority: List[str],
@@ -342,6 +424,9 @@ class SQLiteScheduleRepository:
                     f"Unknown sort criteria: {', '.join(unknown)}. "
                     f"Valid criteria are: {', '.join(_SCORE_COLS)}."
                 )
+
+        # Make sure this sort order has a covering index before paging through it.
+        self.ensure_sort_indexes(priority)
 
         with self._lock:
             if not priority:
@@ -453,5 +538,5 @@ class SQLiteScheduleRepository:
 
     def count(self) -> int:
         """Return how many schedules were saved in the current run."""
-        with self._lock:
+        with self._count_lock:
             return self._total_count

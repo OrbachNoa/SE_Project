@@ -639,17 +639,28 @@ class AppController(QObject):
         self._scheduler.shutdown_pool()
 
     def warm_up_clustering_async(self) -> None:
-        """Pre-import the clustering engine on a background thread.
+        """Pre-import and lightly prime the clustering engine on a background thread.
 
-        ClusteringCoordinator -> ClusteringService pulls in scikit-learn/scipy
-        (~2.3s to import). Nothing is built here -- this only primes Python's
-        module cache, so by the time the user actually opens the Clusters
-        screen (after loading files and generating schedules, which already
-        takes a while), the import is already done and that screen opens
-        instantly. Sessions that never open Clusters never pay this cost.
+        ClusteringCoordinator -> ClusteringService pulls in scikit-learn/scipy,
+        and the first KMeans fit also pays native-library cold-start cost. This
+        tiny run primes both paths so opening the Clusters screen later does not
+        spend that time on the user interaction.
         """
         def _import_clustering_engine() -> None:
             from src.application.services.ClusteringCoordinator import ClusteringCoordinator  # noqa: F401
+            from src.logic.clustering.ScikitLearnKMeansStrategy import ScikitLearnKMeansStrategy
+            import numpy as np
+
+            sample = np.array(
+                [
+                    [0.0, 0.0],
+                    [0.1, 0.2],
+                    [4.0, 4.0],
+                    [4.2, 4.1],
+                ],
+                dtype=float,
+            )
+            ScikitLearnKMeansStrategy(n_init=1, max_iter=5).cluster(sample, 2)
 
         threading.Thread(target=_import_clustering_engine, daemon=True).start()
 

@@ -22,12 +22,19 @@ from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.logic.parallel.SearchSpacePartitioner import SearchSpacePartitioner
 from src.infrastructure.concurrency.QueueWorkSource import QueueWorkSource
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.infrastructure.concurrency.CpuTopology import (
+    performance_core_groups,
+    recommended_worker_count,
+)
 from src.application.errors.ExceptionMapper import build_process_error_payload
 from src.config import (
     DEFAULT_MAX_RESULTS,
     DEFAULT_BATCH_SIZE,
     WORK_UNITS_PER_WORKER,
     RESULT_QUEUE_BATCHES_PER_WORKER,
+    WORKER_PROCESS_COUNT,
+    WORKER_AFFINITY_ENABLED,
+    RESERVED_CORES_FOR_MAIN,
 )
 
 # Used only to read the physical core count.
@@ -36,21 +43,32 @@ import psutil
 
 
 def _default_num_processes() -> int:
-    """Pick a safe number of worker processes.
+    """Resolve the worker count: env override > config constant > CPU topology.
 
-    We use psutil to ask the OS how many physical cores it sees.
-    This helps us avoid using every logical CPU.
-
-    It does not choose P-cores for us.
-    The OS still decides where each process actually runs.
+    On hybrid CPUs the topology default is one worker per physical performance
+    (P) core -- see CpuTopology -- not every physical core, because workers
+    placed on the slow efficiency (E) cores become stragglers and (on laptops)
+    drive thermal throttling, which made the old "all physical cores" default
+    slower under sustained load.
     """
-    # Use logical = false to ask for real CPU cores, not the extra logical threads.
-    physical = psutil.cpu_count(logical=False)
-    # If the OS returned a valid physical core count, use it as the worker count.
-    if physical:
-        return max(1, physical)
-    # os.cpu_count gives logical CPUs, so we use half as a safer number.
-    return max(1, (os.cpu_count() or 2) // 2)
+    # 1. Runtime override, so the count can be tuned without code changes.
+    env_value = os.environ.get("SCHEDULER_WORKER_PROCESSES")
+    if env_value:
+        try:
+            parsed = int(env_value)
+            if parsed > 0:
+                return parsed
+        except ValueError:
+            pass  # Ignore a malformed override and fall through to the defaults.
+
+    # 2. Explicit project config wins over auto-detection.
+    if WORKER_PROCESS_COUNT is not None:
+        return max(1, int(WORKER_PROCESS_COUNT))
+
+    # 3. Auto: one worker per P-core, minus any cores reserved for the main
+    # thread -- the reservation only applies on a detected hybrid CPU; on a
+    # non-hybrid CPU this returns every physical core, unreduced.
+    return recommended_worker_count(reserved_for_main=RESERVED_CORES_FOR_MAIN)
 
 
 def _feed_work_queue(config, courses, selected_programs, slots, num_processes, work_queue, cancel_event, result_queue, run_id=None):
@@ -144,7 +162,39 @@ def _drain_queue(q) -> None:
         pass
 
 
-def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter, run_id_holder):
+# How often an idle worker checks that its parent is still alive while
+# waiting for the next run. Short enough that a killed app does not leave
+# orphans running for long; long enough not to matter for CPU usage.
+_PARENT_LIVENESS_CHECK_SECONDS = 2.0
+
+
+def _parent_is_alive(parent_pid: int, parent_create_time: float) -> bool:
+    """True if the process at parent_pid is still the same one we started under.
+
+    Comparing create_time (not just PID) guards against the OS recycling
+    parent_pid for an unrelated process after the real parent exits.
+    """
+    try:
+        return psutil.Process(parent_pid).create_time() == parent_create_time
+    except psutil.NoSuchProcess:
+        return False
+
+
+def _apply_worker_affinity(affinity_ids) -> None:
+    """Pin this worker to a fixed set of logical CPUs (its assigned P-core).
+
+    Best-effort: any failure (unsupported platform, permission, bad id list)
+    is swallowed so a worker never dies just because it could not be pinned.
+    """
+    if not affinity_ids:
+        return
+    try:
+        psutil.Process().cpu_affinity(list(affinity_ids))
+    except (psutil.Error, OSError, ValueError, AttributeError):
+        pass
+
+
+def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter, run_id_holder, parent_pid, parent_create_time, affinity_ids=None):
     """Runs inside a long-lived worker process owned by the pool.
 
     Spawning a fresh OS process (and re-importing this whole module) on every
@@ -157,7 +207,19 @@ def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue
     'run_id_holder' is a separate shared Value (not part of the control
     payload tuple itself) so each worker can tag its outgoing messages with
     the active run id without changing the payload's shape.
+
+    Normal shutdown (app closes cleanly) sends a None sentinel through
+    control_queue -- see SchedulingService.shutdown_pool(). But if the main
+    process is killed outright (closed console window, taskkill, hard crash)
+    that sentinel never arrives, and daemon=True only auto-kills children
+    during a *normal* Python interpreter shutdown -- not when the parent is
+    killed externally. So while idle, this loop also polls for parent death
+    on its own and exits itself rather than becoming an orphan.
     """
+    # Pin to the assigned P-core once, before any work, so the OS keeps this
+    # CPU-bound worker on a fast core instead of drifting it onto an E-core.
+    _apply_worker_affinity(affinity_ids)
+
     work_source = QueueWorkSource(work_queue, cancel_event=cancel_event)
     while True:
         # Signal idle/ready *before* blocking for the next run, so whoever
@@ -165,7 +227,15 @@ def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue
         # SchedulingService._pool_start_run) is unblocked as soon as this
         # worker is free to take a new assignment.
         ready_queue.put(True)
-        payload = control_queue.get()
+        payload = None
+        got_payload = False
+        while not got_payload:
+            try:
+                payload = control_queue.get(timeout=_PARENT_LIVENESS_CHECK_SECONDS)
+                got_payload = True
+            except queue.Empty:
+                if not _parent_is_alive(parent_pid, parent_create_time):
+                    return
         if payload is None:
             break
         courses, selected_programs, slots, config, max_results, batch_size = payload
@@ -243,12 +313,28 @@ class SchedulingService:
             # Workers post here when they are idle and ready for a new run.
             ready_queue: Queue = Queue()
 
+            # Captured once, here in the main process, so every worker can
+            # later verify the *same* parent is still alive (not just that
+            # some process happens to occupy this pid now).
+            parent_pid = os.getpid()
+            parent_create_time = psutil.Process(parent_pid).create_time()
+
+            # One logical-id group per physical P-core, so worker i can be pinned
+            # to its own fast core. Empty when affinity is off or the CPU has no
+            # P/E split -- in that case no worker is pinned (old behaviour).
+            affinity_groups = performance_core_groups() if WORKER_AFFINITY_ENABLED else []
+
             processes: List[Process] = []
-            for _ in range(num_processes):
+            for worker_index in range(num_processes):
+                affinity_ids = (
+                    affinity_groups[worker_index % len(affinity_groups)]
+                    if affinity_groups
+                    else None
+                )
                 process = Process(
                     target=_persistent_worker_loop,
-                    args=(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter, run_id_holder),
-                    daemon=True,  # Daemon means they will automatically die if the main app closes.
+                    args=(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter, run_id_holder, parent_pid, parent_create_time, affinity_ids),
+                    daemon=True,  # Daemon means they will automatically die if the main app closes normally.
                 )
                 processes.append(process)
             for process in processes:
@@ -357,7 +443,8 @@ class SchedulingService:
             raise InfeasibleScheduleError(errors)
 
         # Make sure the persistent pool exists (no-op if warm_up_async already
-        # started it). The pool's size is fixed the first time it is created;
+        # started it). The pool's size is fixed the first time it is created
+        # (resolved by _default_num_processes: env > config > CPU topology);
         # later calls reuse it regardless of what num_processes they ask for.
         self.ensure_pool_started(num_processes)
         active_num_processes = self._pool_num_processes

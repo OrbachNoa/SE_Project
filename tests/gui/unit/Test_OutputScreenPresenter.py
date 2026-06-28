@@ -341,9 +341,9 @@ def test_presenter_export_pdf_success(mock_controller, mock_router):
     assert view.export_schedule_pdf.call_args[0] == (valid_view, 0)
 
 # ===========================================================================
-# TC-OSP-013: test on_leave disables active state and stops worker.
+# TC-OSP-013: test on_leave disables active state without blocking on worker completion.
 # ===========================================================================
-def test_presenter_on_leave_stops_worker(mock_controller, mock_router):
+def test_presenter_on_leave_retires_running_worker_without_waiting(mock_controller, mock_router):
     # Arrange
     view = MagicMock()
     controller = mock_controller
@@ -362,7 +362,8 @@ def test_presenter_on_leave_stops_worker(mock_controller, mock_router):
     # Assert
     assert presenter._is_active is False
     assert mock_worker.quit.call_count == 1
-    assert mock_worker.wait.call_count == 1
+    assert mock_worker.wait.call_count == 0
+    assert mock_worker in presenter._retired_sort_workers
     assert presenter._sort_worker is None
 
 # ===========================================================================

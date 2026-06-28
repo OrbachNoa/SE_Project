@@ -220,16 +220,9 @@ class ScheduleScorer:
                 if span > mandatory_span:
                     mandatory_span = span
 
-        # Pair-conflict total per program, mirroring ElectiveConflictCapChecker:
-        # n electives on one day make n*(n-1)//2 pairs; the score is the worst
-        # program's total across all its days.
-        elective_pair_totals: Dict[int, int] = {}
-        for key, n in elective_counts.items():
-            program_id = key // key_factor
-            elective_pair_totals[program_id] = (
-                elective_pair_totals.get(program_id, 0) + n * (n - 1) // 2
-            )
-        elective_conflicts = max(elective_pair_totals.values(), default=0)
+        # Sort score uses the legacy "peak crowding minus one" metric. The
+        # threshold checker still enforces pair-conflict caps separately.
+        elective_conflicts = max((n - 1 for n in elective_counts.values()), default=0)
 
         return {
             MIN_MANDATORY_GAP: float(
@@ -448,7 +441,7 @@ class _IncrementalScoreState:
                 min_mandatory_gap if min_mandatory_gap is not None else (self._allowed_window_size if self._has_slots else 10_000)
             ),
             AVG_ALL_COURSES_GAP: float(self._any_gaps.avg_gap()),
-            ELECTIVE_CONFLICTS: -float(max(self._elective_pair_totals.values(), default=0)),
+            ELECTIVE_CONFLICTS: -float(max((n - 1 for n in self._elective_counts.values()), default=0)),
             MANDATORY_SPAN: float(mandatory_span),
             MAX_EXAMS_PER_DAY: -float(self._max_per_day),
         }

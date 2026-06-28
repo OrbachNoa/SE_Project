@@ -55,6 +55,7 @@ class QueueScheduleObserver(IScheduleObserver):
         # Optional extra score source (e.g. clustering features). Defaults to
         # a no-op so this observer never needs to import clustering code.
         self._extension_provider = extension_provider or NullExtensionScoreProvider()
+        self._extension_feature_ids = list(self._extension_provider.feature_ids())
         # Shared counter used to keep the total result count under the global limit.
         self._result_counter = result_counter
         self._result_limit = result_limit
@@ -117,15 +118,19 @@ class QueueScheduleObserver(IScheduleObserver):
     def on_schedule_found(self, schedule: Any) -> None:
         # Score the schedule if needed, then add it to the current batch.
         scores = self._scorer.score(schedule) if self._scorer is not None else {}
-        ext = self._extension_provider.compute(self._to_schedule_dto(schedule))
-        scores.update(ext)
+        scores.update(self._compute_extension_scores(schedule))
         self._record_schedule(schedule, scores)
 
     def on_scored_schedule_found(self, schedule: Any, scores: dict) -> None:
         # Used when the scheduler already calculated the scores.
-        ext = ExtendedFeatureComputer.compute(self._to_schedule_dto(schedule))
-        merged = {**scores, **ext}
+        merged = {**scores, **self._compute_extension_scores(schedule)}
         self._record_schedule(schedule, merged)
+
+    def _compute_extension_scores(self, schedule: Any) -> dict:
+        """Compute optional extension scores only when a real provider exists."""
+        if not self._extension_feature_ids:
+            return {}
+        return self._extension_provider.compute(self._to_schedule_dto(schedule)) or {}
 
     def _record_schedule(self, schedule: Any, scores: "dict | None") -> None:
         """Store one found schedule in the local batch buffer."""

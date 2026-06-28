@@ -19,6 +19,11 @@ class MaxExamsPerDayComparator:
     criterion_id = "MAX_EXAMS_PER_DAY"
     label = "Fewer exams on the busiest day"
 
+    def __init__(self, program_index=None):
+        # program_index is accepted for compatibility with older callers. The
+        # current rule is global, matching MaxExamsPerDayChecker.
+        self._program_index = program_index
+
     def key(self, schedule) -> float:
         # Fewer exams on the busiest day should rank higher, so we negate the raw count.
         return -float(Metrics.max_exams_per_day(schedule))

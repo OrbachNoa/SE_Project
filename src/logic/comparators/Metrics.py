@@ -73,10 +73,7 @@ def build_span_index(
 
     if not slots:
         obligatory, _ = build_cohort_index(courses, selected_programs, selected_index)
-        return {
-            course_id: {(program_id, year, None) for (program_id, year) in cohorts}
-            for course_id, cohorts in obligatory.items()
-        }
+        return obligatory
 
     result: Dict[str, Set[SpanCohort]] = {}
     for slot in slots:
@@ -126,6 +123,25 @@ def build_elective_program_index(
         course_id: {program_id for (program_id, _year) in cohorts}
         for course_id, cohorts in elective_cohorts.items()
     }
+
+
+def build_program_index(
+    courses: list,
+    selected_programs: Optional[list] = None,
+    selected_index: Optional[SelectedProgramIndex] = None,
+) -> Dict[str, Set[str]]:
+    """Index every course to the programs it belongs to.
+
+    This is kept as a compatibility helper for older comparator and metric
+    tests. Current production max-exams-per-day logic is global, but callers
+    that still pass this index can continue to do so harmlessly.
+    """
+    selected_index = selected_index or SelectedProgramIndex(courses, selected_programs)
+    result: Dict[str, Set[str]] = {}
+    for course in courses:
+        for entry in selected_index.entries_for_course(course.courseId):
+            result.setdefault(course.courseId, set()).add(entry.programId)
+    return result
 
 
 def build_metric_indices(
@@ -245,6 +261,27 @@ def elective_conflict_pairs(
     return max(per_program_total.values(), default=0)
 
 
+def peak_elective_conflict(
+    schedule,
+    elective_cohorts: Dict[str, Set[Cohort]],
+) -> int:
+    """Compatibility metric: worst same-day elective pile-up minus one.
+
+    The threshold checker still enforces pair-conflict caps separately. The
+    sorting score uses this peak-minus-one metric.
+    """
+    counts: Dict[Tuple[Cohort, date], int] = {}
+    for a in schedule.assignments:
+        cohorts = elective_cohorts.get(a.course.courseId)
+        if not cohorts:
+            continue
+        for cohort in cohorts:
+            key = (cohort, a.date)
+            counts[key] = counts.get(key, 0) + 1
+    peak = max(counts.values(), default=1)
+    return max(0, peak - 1)
+
+
 def mandatory_span(schedule, obligatory_span_cohorts: Dict[str, Set[SpanCohort]]) -> int:
     """Metric 4: the widest spread, in days, from the first to the last
     mandatory exam within one (program, year, semester, moed) group.
@@ -261,7 +298,12 @@ def mandatory_span(schedule, obligatory_span_cohorts: Dict[str, Set[SpanCohort]]
         cohorts = obligatory_span_cohorts.get(a.course.courseId)
         if not cohorts:
             continue
-        for (program_id, year, semester) in cohorts:
+        for cohort in cohorts:
+            if len(cohort) == 2:
+                program_id, year = cohort
+                semester = None
+            else:
+                program_id, year, semester = cohort
             by_group.setdefault((program_id, year, semester, a.moed), []).append(a.date)
 
     best = 0
@@ -274,7 +316,7 @@ def mandatory_span(schedule, obligatory_span_cohorts: Dict[str, Set[SpanCohort]]
     return best
 
 
-def max_exams_per_day(schedule) -> int:
+def max_exams_per_day(schedule, program_index: Optional[dict] = None) -> int:
     """Metric 5: the most exams scheduled on any single day, across the whole
     schedule.
 

@@ -15,7 +15,6 @@ from src.logic.checkers.IConflictChecker import IConflictChecker
 from src.logic.SlotBuilder import Slot
 from src.models.ExamSchedule import ExamAssignment
 from src.application.errors.ExceptionMapper import build_process_error_payload
-from src.logic.clustering.ExtendedFeatureComputer import ExtendedFeatureComputerProvider
 
 
 class SchedulerProcessRunner:
@@ -120,7 +119,6 @@ class SchedulerProcessRunner:
             result_counter=self._result_counter,
             result_limit=self._max_results,
             slots=self._slots,
-            extension_provider=ExtendedFeatureComputerProvider(),
             run_id=self._run_id,
         )
 

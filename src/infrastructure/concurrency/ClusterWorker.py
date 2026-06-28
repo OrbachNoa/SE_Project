@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, List
 import warnings
-from sklearn.exceptions import ConvergenceWarning
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory
@@ -57,6 +56,8 @@ class ClusterWorker(QThread):
 
     def run(self) -> None:
         try:
+            from sklearn.exceptions import ConvergenceWarning
+
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always", category=ConvergenceWarning)
 

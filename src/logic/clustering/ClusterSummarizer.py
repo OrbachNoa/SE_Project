@@ -80,10 +80,6 @@ _PHRASES = {
         "Abundant study prep days before mandatory exams",
         "Limited study prep days before mandatory exams",
     ),
-    MAX_REST_DAYS: (
-        "Generous max rest gaps between exams",
-        "Compact exam spacing",
-    ),
     DOUBLE_EXAM_DAYS: (
         "Fewer days with multiple exams",
         "More days with multiple exams",
