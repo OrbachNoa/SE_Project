@@ -6,7 +6,7 @@ from typing import Dict, List
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
-    QFrame, QWidget, QMessageBox, QSizePolicy,
+    QFrame, QMessageBox,
 )
 from gui.core.styles.Theme import APP_STYLESHEET
 from gui.core.styles.DialogStyles import DIALOG_STYLESHEET

@@ -2,6 +2,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from src.logic.checkers.config.ConstraintMetadata import CONSTRAINTS
+
 
 @dataclass(frozen=True)
 class ConstraintsConfig:
@@ -31,15 +33,12 @@ class ConstraintsConfig:
         elective pair). Checkers otherwise silently disable on k <= 0, which
         hides a misconfiguration instead of rejecting it.
         """
-        positive_fields = {
-            "min_gap_obligatory": self.min_gap_obligatory,
-            "min_gap_any": self.min_gap_any,
-            "exam_span": self.exam_span,
-            "max_exams_per_day": self.max_exams_per_day,
-        }
-        invalid = [name for name, value in positive_fields.items() if value is not None and value < 1]
-        if self.elective_conflict_cap is not None and self.elective_conflict_cap < 0:
-            invalid.append("elective_conflict_cap")
+        invalid = [
+            meta.field_name
+            for meta in CONSTRAINTS
+            if (value := getattr(self, meta.field_name)) is not None
+            and value < meta.min_k
+        ]
         if invalid:
             raise ValueError(
                 f"Invalid constraint value(s): {', '.join(invalid)}. "

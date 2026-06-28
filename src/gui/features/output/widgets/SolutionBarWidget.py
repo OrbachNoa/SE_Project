@@ -5,6 +5,8 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QLabel, QGroupBox,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence, QIntValidator
 
+from src.config import WINDOW_SIZE
+
 # Encapsulates the navigation, export and double-deck database paging toolbar
 # This class builds the top navigation bar for the results screen, 
 # allowing users to move between exam schedules and save them as PDFs.
@@ -71,15 +73,17 @@ class SolutionBarWidget(QFrame):
 
         # Input field to jump directly to a specific solution number
         self.solution_input = QLineEdit()
-        self.solution_input.setValidator(QIntValidator(1, 10_000))
+        self.solution_input.setValidator(QIntValidator(1, WINDOW_SIZE))
         self.solution_input.setPlaceholderText("Solution number")
-        self.solution_input.setToolTip("Current solution number - Enter a number (1-10000) and press Enter to jump")
+        self.solution_input.setToolTip(
+            f"Current solution number - Enter a number (1-{WINDOW_SIZE:,}) and press Enter to jump"
+        )
         self.solution_input.setFixedWidth(80)
         self.solution_input.setFixedHeight(28)
         self.solution_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Label showing total available solutions in this view
-        self.total_solutions_label = QLabel("/ 10,000")
+        self.total_solutions_label = QLabel(f"/ {WINDOW_SIZE:,}")
         self.total_solutions_label.setObjectName("total-solutions-label")
 
         # Next button to flip forward one solution
@@ -94,9 +98,8 @@ class SolutionBarWidget(QFrame):
         solutions_layout.addWidget(self.next_btn)
         layout.addWidget(self.solutions_group)
 
-        # ── Group 2: DATABASE PAGES (10k solutions / pg) ──
-        # Navigation between large batches (pages) of results. Hidden by default.
-        self.pages_group = QGroupBox("DATABASE PAGES (10k solutions per page)")
+        # Navigation between database result pages. Hidden by default.
+        self.pages_group = QGroupBox(f"DATABASE PAGES ({WINDOW_SIZE:,} solutions per page)")
         pages_layout = QHBoxLayout(self.pages_group)
         pages_layout.setContentsMargins(10, 10, 10, 6)
         pages_layout.setSpacing(8)

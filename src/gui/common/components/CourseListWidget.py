@@ -7,7 +7,6 @@ Each program row can be expanded to reveal its courses, grouped by academic year
 from typing import Dict, List
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,

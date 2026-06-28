@@ -3,6 +3,7 @@ from src.models.ExamSchedule import ExamSchedule, ExamAssignment
 from .SlotBuilder import Slot
 from .checkers.IConflictChecker import IConflictChecker
 from .observers.IScheduleObserver import IScheduleObserver
+from src.config import DEFAULT_MAX_RESULTS
 
 # A domain means one unscheduled slot and the dates that are still possible for it.
 _Domain = Tuple[Slot, List]
@@ -24,7 +25,7 @@ class Scheduler:
         self,
         slots: List[Slot],
         observer: IScheduleObserver,
-        max_results: int = 1_000_000,
+        max_results: int = DEFAULT_MAX_RESULTS,
         target_depth: Optional[int] = None,
         seed_assignments: Optional[List[ExamAssignment]] = None,
         use_mrv: bool = True,

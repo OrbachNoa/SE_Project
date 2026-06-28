@@ -7,7 +7,6 @@ it needs to show right now.
 from __future__ import annotations
 
 import os
-import pickle
 import sqlite3
 import tempfile
 import uuid
@@ -64,8 +63,8 @@ class SQLiteScheduleRepository:
         # SQLite connection is shared by the worker thread, so we protect it with a lock.
         self._lock = threading.Lock()
 
-        # Separate, cheap lock just for _total_count. count() is polled every
-        # 500ms from the GUI thread while the writer thread holds self._lock for
+        # Separate, cheap lock just for _total_count. The GUI polls count()
+        # while the writer thread holds self._lock for
         # the whole insert+commit; sharing one lock made that poll block on disk I/O
         # and stall the GUI. This lock is only ever held for a plain int read/write.
         self._count_lock = threading.Lock()
@@ -162,14 +161,6 @@ class SQLiteScheduleRepository:
                         f"ALTER TABLE schedule_scores ADD COLUMN {col} REAL"
                     )
             self._conn.commit()
-
-    def insert_batch(self, batch: List[ScheduleDTO]) -> None:
-        """Compress and save a normal list of ScheduleDTO objects."""
-        # Pickle turns the DTO list into bytes, and zlib makes it smaller.
-        data = zlib.compress(pickle.dumps(batch, protocol=4), level=1)
-
-        # The real insert logic is shared with already-compressed batches.
-        self.insert_compressed_batch(data, len(batch))
 
     def insert_compressed_batch(self, data: bytes, batch_count: int,
                                 batch_scores: "List[dict] | None" = None,
@@ -316,18 +307,8 @@ class SQLiteScheduleRepository:
         # Every batch is compressed before it is saved.
         data = zlib.decompress(raw)
 
-        # Old batches may be saved as normal pickled ScheduleDTO objects.
         if not is_packed_blob(data):
-            batch: List[ScheduleDTO] = pickle.loads(data)
-
-            if wanted_ids is None:
-                return {first_offset + i: dto for i, dto in enumerate(batch)}
-
-            return {
-                first_offset + i: dto
-                for i, dto in enumerate(batch)
-                if first_offset + i in wanted_ids
-            }
+            raise RuntimeError("unsupported legacy schedule batch format")
 
         # Packed schedules need the original slots to rebuild full DTO objects.
         if self._slots is None:
@@ -372,52 +353,6 @@ class SQLiteScheduleRepository:
         self._sort_index_signatures.clear()
         with self._count_lock:
             self._total_count = 0
-
-    def get_window_raw(self, offset: int, limit: int) -> tuple:
-        """Return raw rows for a page, without building full ScheduleDTO objects.
-
-        The GUI can later build only the specific schedule it needs to display.
-        This keeps page loading much faster when there are many results.
-        """
-        with self._lock:
-            db_rows = self._conn.execute(
-                "SELECT first_offset, batch_count, data FROM schedule_batches "
-                "WHERE first_offset + batch_count > ? AND first_offset < ? ORDER BY first_offset",
-                (offset, offset + limit),
-            ).fetchall()
-
-        raw_map: dict = {}
-
-        for first_off, batch_count, raw_blob in db_rows:
-            data = zlib.decompress(raw_blob)
-
-            if is_packed_blob(data):
-                _, rows = unpack_rows(data)
-
-                # Take only the exact overlap between this batch and the requested page.
-                lo = max(offset, first_off)
-                hi = min(offset + limit, first_off + batch_count)
-
-                for gidx in range(lo, hi):
-                    raw_map[gidx] = rows[gidx - first_off]
-
-            else:
-                # Backward support for old batches that were saved as full DTOs.
-                batch: List[ScheduleDTO] = pickle.loads(data)
-
-                for i, dto in enumerate(batch):
-                    gidx = first_off + i
-
-                    if offset <= gidx < offset + limit:
-                        raw_map[gidx] = dto
-
-            if len(raw_map) >= limit:
-                break
-
-        # Scores are returned separately so the caller can attach them only when needed.
-        score_map = self._scores_for_ids(list(raw_map.keys()))
-
-        return raw_map, score_map, self._slots
 
     def ensure_sort_indexes(self, priority: List[str]) -> None:
         """Build a covering index matching one sort order, once per order.
@@ -520,14 +455,7 @@ class SQLiteScheduleRepository:
                     raw_map[first_off + offset] = row
 
             else:
-                # Backward support for batches saved as full DTO objects.
-                batch: List[ScheduleDTO] = pickle.loads(data)
-
-                for i, dto in enumerate(batch):
-                    gidx = first_off + i
-
-                    if gidx in gidx_set and gidx not in raw_map:
-                        raw_map[gidx] = dto
+                raise RuntimeError("unsupported legacy schedule batch format")
 
             if len(raw_map) >= len(gidxs):
                 break

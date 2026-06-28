@@ -156,7 +156,7 @@ def _run_scheduler_process(slots,
 def _drain_queue(q) -> None:
     """Empty a multiprocessing Queue of any stale leftover messages."""
     try:
-        while not q.empty():
+        while True:
             q.get_nowait()
     except (queue.Empty, ValueError, OSError):
         pass
@@ -287,15 +287,38 @@ class SchedulingService:
             target=self.ensure_pool_started, args=(num_processes,), daemon=True
         ).start()
 
+    @staticmethod
+    def _resolve_pool_size(num_processes: Optional[int]) -> int:
+        """Return the requested pool size, validating explicit overrides."""
+        if num_processes is None:
+            return _default_num_processes()
+        if num_processes <= 0:
+            raise ValueError("num_processes must be a positive integer")
+        return int(num_processes)
+
+    def _validate_pool_size_request(self, num_processes: Optional[int]) -> None:
+        """Reject explicit pool-size changes after the persistent pool exists."""
+        if num_processes is None or self._pool_processes is None:
+            return
+
+        requested = self._resolve_pool_size(num_processes)
+        if requested != self._pool_num_processes:
+            raise ValueError(
+                "scheduler worker pool is already started with "
+                f"{self._pool_num_processes} process(es); requested {requested}. "
+                "Call shutdown_pool() before changing the process count."
+            )
+
     def ensure_pool_started(self, num_processes: Optional[int] = None) -> None:
         """Create the persistent worker pool if it isn't running yet. Idempotent."""
         if self._pool_processes is not None:
+            self._validate_pool_size_request(num_processes)
             return
         with self._pool_lock:
             if self._pool_processes is not None:
+                self._validate_pool_size_request(num_processes)
                 return
-            if num_processes is None:
-                num_processes = _default_num_processes()
+            num_processes = self._resolve_pool_size(num_processes)
 
             cancel_event = Event()
             # "q" means the value is a big number
@@ -415,7 +438,11 @@ class SchedulingService:
     ) -> SchedulerWorker:
         """
         This is the main engine starter. It sets up the parallel processing environment
-        and starts the whole operation in the background
+        and starts the whole operation in the background.
+
+        ``num_processes`` is only allowed to choose the persistent pool size
+        before that pool is started. Later calls with ``None`` reuse the active
+        pool; later calls with a different explicit value fail clearly.
         """
         # Identifies this run on the shared, cross-run result queue so a
         # message left over from a just-cancelled run can be told apart from

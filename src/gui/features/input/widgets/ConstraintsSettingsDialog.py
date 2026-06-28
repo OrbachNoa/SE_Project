@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
 from PyQt6.QtCore import Qt
@@ -11,68 +10,8 @@ from PyQt6.QtWidgets import (
 
 from gui.core.styles.Theme import APP_STYLESHEET
 from gui.core.styles.DialogStyles import DIALOG_STYLESHEET, SETTINGS_DIALOG_STYLESHEET
+from src.logic.checkers.config.ConstraintMetadata import CONSTRAINTS, ConstraintMeta
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
-
-
-@dataclass(frozen=True)
-class _ConstraintMeta:
-    """
-    Static data for one constraint row.
-
-    Describes how the row should look in the GUI (label, description, unit,
-    min/max value and default value) and which ConstraintsConfig field it maps
-    to (``field_name``). Mapping by field name — instead of by list position —
-    means adding a new constraint only requires one new entry here.
-    """
-
-    field_name: str
-    label: str
-    description: str
-    unit: str
-    min_k: int
-    max_k: int
-    default_k: int
-
-
-# Single source of truth for the constraint rows. Each entry's `field_name`
-# matches a ConstraintsConfig constructor parameter, so order is irrelevant.
-_CONSTRAINTS: list[_ConstraintMeta] = [
-    _ConstraintMeta(
-        field_name="min_gap_obligatory",
-        label="Min. gap — obligatory exams",
-        description="Minimum calendar days between two mandatory exams in the same program-year.",
-        unit="days",
-        min_k=1, max_k=30, default_k=3,
-    ),
-    _ConstraintMeta(
-        field_name="min_gap_any",
-        label="Min. gap — all exams",
-        description="Minimum calendar days between any two exams (mandatory or elective) in the same program-year.",
-        unit="days",
-        min_k=1, max_k=30, default_k=2,
-    ),
-    _ConstraintMeta(
-        field_name="elective_conflict_cap",
-        label="Elective clash cap",
-        description="Maximum same-day pair-conflicts between elective exams in the same program.",
-        unit="conflicts",
-        min_k=0, max_k=10, default_k=2,
-    ),
-    _ConstraintMeta(
-        field_name="exam_span",
-        label="Exam period span",
-        description="Minimum days between the first and last mandatory exam in a program-year-moed group.",
-        unit="days",
-        min_k=1, max_k=60, default_k=7,
-    ),
-    _ConstraintMeta(
-        field_name="max_exams_per_day",
-        label="Max exams per day",
-        description="Maximum total exams allowed on any single day.",
-        unit="exams / day",
-        min_k=1, max_k=10, default_k=3,
-    ),
-]
 
 
 class ConstraintsSettingsDialog(QDialog):
@@ -99,8 +38,8 @@ class ConstraintsSettingsDialog(QDialog):
         # When the user clicks Apply, the new ConstraintsConfig is passed there.
         self._on_apply = on_apply
 
-        # Checkbox+spinbox per row, in _CONSTRAINTS order. _apply() zips this with
-        # _CONSTRAINTS to read each row's value by field name (no index→field map).
+        # Checkbox+spinbox per row, in CONSTRAINTS order. _apply() zips this with
+        # CONSTRAINTS to read each row's value by field name.
         self._rows: list[Tuple[QCheckBox, QSpinBox]] = []
 
         outer = QVBoxLayout(self)
@@ -112,7 +51,6 @@ class ConstraintsSettingsDialog(QDialog):
         card_layout.setContentsMargins(26, 24, 26, 22)
         card_layout.setSpacing(14)
 
-        # Header
         header_row = QHBoxLayout()
         header_row.setSpacing(12)
         title_col = QVBoxLayout()
@@ -128,17 +66,15 @@ class ConstraintsSettingsDialog(QDialog):
         title_col.addWidget(title)
         title_col.addWidget(hint)
         header_row.addLayout(title_col, stretch=1)
-        rules_badge = QLabel(f"{len(_CONSTRAINTS)} rules")
+        rules_badge = QLabel(f"{len(CONSTRAINTS)} rules")
         rules_badge.setObjectName("dialog-counter")
         header_row.addWidget(rules_badge, alignment=Qt.AlignmentFlag.AlignTop)
         card_layout.addLayout(header_row)
 
-        # Build one row for each constraint metadata object.
-        for meta in _CONSTRAINTS:
+        for meta in CONSTRAINTS:
             row_widget = self._build_row(meta, current_config)
             card_layout.addWidget(row_widget)
 
-        # Buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
         btn_row.addStretch()
@@ -158,7 +94,7 @@ class ConstraintsSettingsDialog(QDialog):
 
     def _build_row(
         self,
-        meta: _ConstraintMeta,
+        meta: ConstraintMeta,
         current_config: Optional[ConstraintsConfig],
     ) -> QFrame:
         """
@@ -168,7 +104,6 @@ class ConstraintsSettingsDialog(QDialog):
         If the value is None, the row starts disabled.
         """
 
-        # None means the constraint is currently disabled.
         current_k = self._current_k(current_config, meta)
         is_on = current_k is not None
 
@@ -200,11 +135,7 @@ class ConstraintsSettingsDialog(QDialog):
         spinbox = QSpinBox()
         spinbox.setObjectName("settings-comparator")
         spinbox.setRange(meta.min_k, meta.max_k)
-
-        # If the constraint is already configured, show its saved value.
-        # Otherwise show the default value, even though the row is disabled.
         spinbox.setValue(current_k if current_k is not None else meta.default_k)
-
         spinbox.setFixedWidth(62)
         spinbox.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         spinbox.setEnabled(is_on)
@@ -242,8 +173,6 @@ class ConstraintsSettingsDialog(QDialog):
         spin_col.addWidget(unit_lbl)
         row_layout.addLayout(spin_col)
 
-        # The checkbox controls the whole row state.
-        # When unchecked, the value stays visible but will not be sent in _apply().
         checkbox.toggled.connect(spinbox.setEnabled)
         checkbox.toggled.connect(up_btn.setEnabled)
         checkbox.toggled.connect(down_btn.setEnabled)
@@ -255,9 +184,7 @@ class ConstraintsSettingsDialog(QDialog):
         return row
 
     def _set_row_active(self, row: QFrame, active: bool) -> None:
-        """
-        Update the row style after enabling or disabling it.
-        """
+        """Update the row style after enabling or disabling it."""
 
         row.setProperty("active", "true" if active else "false")
         row.style().unpolish(row)
@@ -265,7 +192,7 @@ class ConstraintsSettingsDialog(QDialog):
 
     @staticmethod
     def _current_k(
-        config: Optional[ConstraintsConfig], meta: _ConstraintMeta
+        config: Optional[ConstraintsConfig], meta: ConstraintMeta
     ) -> Optional[int]:
         """Get the saved k value for a constraint by its config field name."""
         if config is None:
@@ -281,10 +208,9 @@ class ConstraintsSettingsDialog(QDialog):
         """
         values = {
             meta.field_name: (spinbox.value() if checkbox.isChecked() else None)
-            for meta, (checkbox, spinbox) in zip(_CONSTRAINTS, self._rows)
+            for meta, (checkbox, spinbox) in zip(CONSTRAINTS, self._rows)
         }
         config = ConstraintsConfig(**values)
 
-        # Send the config back to the presenter/controller chain.
         self._on_apply(config)
         self.accept()

@@ -1,30 +1,13 @@
-"""Central registry of sortable schedule criteria.
-
-Single source of truth mapping criterion ids to their display labels, built once
-from the comparator classes. The sort-config GUI imports this registry instead
-of importing each comparator class directly, so adding a new sort criterion only
-means registering its comparator here.
-"""
+"""Central registry of sortable schedule criteria."""
 from __future__ import annotations
 
-from src.logic.comparators.MinMandatoryGapComparator import MinMandatoryGapComparator
-from src.logic.comparators.AvgAllCoursesGapComparator import AvgAllCoursesGapComparator
-from src.logic.comparators.MaxElectiveConflictsComparator import MaxElectiveConflictsComparator
-from src.logic.comparators.MandatorySpanComparator import MandatorySpanComparator
-from src.logic.comparators.MaxExamsPerDayComparator import MaxExamsPerDayComparator
-from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
+from src.logic.comparators.ScheduleScorer import (
+    ALL_CRITERIA,
+)
+from src.logic.clustering.CriterionMetadata import SORT_CRITERION_LABELS
 
-# Comparator classes that back each sortable criterion.
-SORT_COMPARATORS = [
-    MinMandatoryGapComparator,
-    AvgAllCoursesGapComparator,
-    MaxElectiveConflictsComparator,
-    MandatorySpanComparator,
-    MaxExamsPerDayComparator,
-]
-
-# criterion_id -> human-readable label.
-CRITERION_LABELS = {c.criterion_id: c.label for c in SORT_COMPARATORS}
+# criterion_id -> human-readable sort label.
+CRITERION_LABELS = dict(SORT_CRITERION_LABELS)
 
 
 def label_for(criterion_id: str) -> str:
@@ -32,4 +15,4 @@ def label_for(criterion_id: str) -> str:
     return CRITERION_LABELS.get(criterion_id, criterion_id)
 
 
-__all__ = ["ALL_CRITERIA", "SORT_COMPARATORS", "CRITERION_LABELS", "label_for"]
+__all__ = ["ALL_CRITERIA", "CRITERION_LABELS", "label_for"]

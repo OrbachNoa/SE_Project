@@ -19,6 +19,8 @@ from src.logic.parallel.WorkUnit import WorkUnit
 from src.models.ExamSchedule import ExamAssignment
 from src.config import MAX_PARTITION_DEPTH
 
+PARTITION_MAX_RESULTS = 10 ** 9
+
 
 class SearchSpacePartitioner:
     """Creates small starting points for the real schedule search.
@@ -44,11 +46,11 @@ class SearchSpacePartitioner:
         max_depth = min(MAX_PARTITION_DEPTH, len(slots))
 
         # Start with the first real frontier instead of an empty seed that covers everything.
-        frontier = self._split_unit(slots, WorkUnit(seed_dates=[]), 1)
+        frontier = self._split_unit(slots, WorkUnit(seed_dates=()), 1)
 
         # Keep splitting existing units until we have enough work or cannot split deeper.
         while len(frontier) < target:
-            split_index = self._next_largest_frontier_index(frontier, max_depth)
+            split_index = self._next_shallowest_frontier_index(frontier, max_depth)
             if split_index is None:
                 break
 
@@ -66,8 +68,8 @@ class SearchSpacePartitioner:
 
         return frontier
 
-    def _next_largest_frontier_index(self, frontier: List[WorkUnit], max_depth: int) -> Optional[int]:
-        """Return the broadest frontier unit that can still be split."""
+    def _next_shallowest_frontier_index(self, frontier: List[WorkUnit], max_depth: int) -> Optional[int]:
+        """Return the shallowest frontier unit that can still be split."""
 
         best_index: Optional[int] = None
         best_depth: Optional[int] = None
@@ -93,7 +95,7 @@ class SearchSpacePartitioner:
         Scheduler(self._checkers).generateSchedules(
             slots,
             observer,
-            max_results=10 ** 9,
+            max_results=PARTITION_MAX_RESULTS,
             target_depth=target_depth,
             seed_assignments=seed_assignments,
             use_mrv=False,

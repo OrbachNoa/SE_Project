@@ -44,6 +44,16 @@ ALL_CRITERIA = (
     MAX_EXAMS_PER_DAY,
 )
 
+LOWER_IS_BETTER_CRITERIA = (
+    ELECTIVE_CONFLICTS,
+    MAX_EXAMS_PER_DAY,
+)
+
+
+def _lower_is_better_score(value: float) -> float:
+    """Store lower-is-better sort values as higher-is-better scores."""
+    return -float(value)
+
 
 class ScheduleScorer:
     """Computes all sort scores for a schedule. Built once per run."""
@@ -237,10 +247,10 @@ class ScheduleScorer:
                 (avg_total / avg_count) if avg_count else 0.0
             ),
             # Fewer conflicts is better, so negate.
-            ELECTIVE_CONFLICTS: -float(elective_conflicts),
+            ELECTIVE_CONFLICTS: _lower_is_better_score(elective_conflicts),
             MANDATORY_SPAN: float(mandatory_span),
             # Fewer exams on the busiest day is better, so negate.
-            MAX_EXAMS_PER_DAY: -float(max_per_day),
+            MAX_EXAMS_PER_DAY: _lower_is_better_score(max_per_day),
         }
 
 
@@ -446,8 +456,10 @@ class _IncrementalScoreState:
                 min_mandatory_gap if min_mandatory_gap is not None else (self._allowed_window_size if self._has_slots else 10_000)
             ),
             AVG_ALL_COURSES_GAP: float(self._any_gaps.avg_gap()),
-            ELECTIVE_CONFLICTS: -float(max(self._elective_pair_totals.values(), default=0)),
+            ELECTIVE_CONFLICTS: _lower_is_better_score(
+                max(self._elective_pair_totals.values(), default=0)
+            ),
             MANDATORY_SPAN: float(mandatory_span),
-            MAX_EXAMS_PER_DAY: -float(self._max_per_day),
+            MAX_EXAMS_PER_DAY: _lower_is_better_score(self._max_per_day),
         }
         return scores

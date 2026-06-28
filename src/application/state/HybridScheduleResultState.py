@@ -104,12 +104,7 @@ class HybridScheduleResultState(ScheduleResultState):
             raise IndexError(f"global index {global_idx} not in raw_map")
 
         score = self._score_map.get(global_idx)
-        if isinstance(raw, ScheduleDTO):
-            dto = raw
-            if score:
-                dto.scores = score
-        else:
-            dto = row_to_dto(raw, self._slots_ref, score)
+        dto = row_to_dto(raw, self._slots_ref, score)
 
         if len(self._dto_cache) >= SCHEDULE_DTO_CACHE_SIZE:
             self._dto_cache.pop(next(iter(self._dto_cache)))
@@ -177,7 +172,7 @@ class HybridScheduleResultState(ScheduleResultState):
 
     def current_window_size(self) -> int:
         if self._sorted_ids:
-            # full page of sorted ids (10k), even though raw is fetched lazily
+            # Full page of sorted ids, even though raw is fetched lazily.
             return len(getattr(self, "_page_ids", []) or [])
         total = self.count()
         offset = self._current_page_idx * self._window_size

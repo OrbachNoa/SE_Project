@@ -6,7 +6,6 @@ to highlight differences and similarities.
 from __future__ import annotations
 
 from typing import List, Tuple
-from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QFrame,
@@ -20,7 +19,7 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.common.components.HeaderWidget import HeaderWidget
-from gui.common.helpers import create_divider, create_scaled_pixmap
+from gui.common.helpers import create_divider
 from gui.core.screen import Screen
 from gui.features.clusters.ClusterCalendarOverlayPresenter import ClusterCalendarOverlayPresenter
 from gui.features.clusters.widgets.OverlayCalendarWidget import OverlayCalendarWidget

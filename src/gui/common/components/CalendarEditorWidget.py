@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import List
 
 from PyQt6.QtCore import QDate, Qt, pyqtSignal
-from PyQt6.QtWidgets import QDateEdit, QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QDateEdit, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from gui.common.components.CalendarWidget import CalendarWidget
 from gui.common.components.ExclusionModel import ExclusionModel

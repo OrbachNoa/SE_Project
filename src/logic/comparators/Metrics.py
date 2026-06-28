@@ -125,25 +125,6 @@ def build_elective_program_index(
     }
 
 
-def build_program_index(
-    courses: list,
-    selected_programs: Optional[list] = None,
-    selected_index: Optional[SelectedProgramIndex] = None,
-) -> Dict[str, Set[str]]:
-    """Index every course to the programs it belongs to.
-
-    This is kept as a compatibility helper for older comparator and metric
-    tests. Current production max-exams-per-day logic is global, but callers
-    that still pass this index can continue to do so harmlessly.
-    """
-    selected_index = selected_index or SelectedProgramIndex(courses, selected_programs)
-    result: Dict[str, Set[str]] = {}
-    for course in courses:
-        for entry in selected_index.entries_for_course(course.courseId):
-            result.setdefault(course.courseId, set()).add(entry.programId)
-    return result
-
-
 def build_metric_indices(
     courses: list,
     selected_programs: Optional[list] = None,
@@ -230,56 +211,6 @@ def avg_all_courses_gap(schedule, any_cohorts: Dict[str, Set[Cohort]]) -> float:
             total += (later - earlier).days
             count += 1
     return (total / count) if count else 0.0
-
-
-def elective_conflict_pairs(
-    schedule,
-    elective_programs: Dict[str, Set[str]],
-) -> int:
-    """Metric 3: the worst per-program elective same-day pair-conflict total.
-
-    For each program and each day, count how many of that program's elective
-    exams fall on that day; n electives on one day make n*(n-1)//2 conflict
-    pairs. The score is the total pairs for the worst program, summed across
-    all its days. Mirrors ElectiveConflictCapChecker's own pair-conflict
-    formula and program-only grouping (year is ignored on purpose), so
-    filtering and sorting agree. Fewer is better, so callers negate it.
-
-    Pass the index from build_elective_program_index (built once per run).
-    """
-    counts: Dict[Tuple[str, date], int] = {}
-    for a in schedule.assignments:
-        programs = elective_programs.get(a.course.courseId)
-        if not programs:
-            continue
-        for program in programs:
-            counts[(program, a.date)] = counts.get((program, a.date), 0) + 1
-
-    per_program_total: Dict[str, int] = {}
-    for (program, _day), n in counts.items():
-        per_program_total[program] = per_program_total.get(program, 0) + n * (n - 1) // 2
-    return max(per_program_total.values(), default=0)
-
-
-def peak_elective_conflict(
-    schedule,
-    elective_cohorts: Dict[str, Set[Cohort]],
-) -> int:
-    """Compatibility metric: worst same-day elective pile-up minus one.
-
-    The threshold checker still enforces pair-conflict caps separately. The
-    sorting score uses this peak-minus-one metric.
-    """
-    counts: Dict[Tuple[Cohort, date], int] = {}
-    for a in schedule.assignments:
-        cohorts = elective_cohorts.get(a.course.courseId)
-        if not cohorts:
-            continue
-        for cohort in cohorts:
-            key = (cohort, a.date)
-            counts[key] = counts.get(key, 0) + 1
-    peak = max(counts.values(), default=1)
-    return max(0, peak - 1)
 
 
 def mandatory_span(schedule, obligatory_span_cohorts: Dict[str, Set[SpanCohort]]) -> int:

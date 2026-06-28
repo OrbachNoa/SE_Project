@@ -1,7 +1,7 @@
 """Input screen layout and widget wiring."""
 from __future__ import annotations
 
-from typing import Callable, List
+from typing import List
 import os
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QProgressBar, QPushButton, QVBoxLayout

@@ -2,7 +2,7 @@
 
 The whole point of this object is to be the *single* contract between
 "what the user wants" and "what the engine does". Today it is filled in with
-responsive defaults over the core score criteria. Tomorrow, the custom-clustering
+application defaults over the core score criteria. Tomorrow, the custom-clustering
 UI and the LLM translation layer will produce exactly this same object from a
 free-text request — so nothing downstream of here needs to change when that step
 arrives. That is the seam the future work plugs into.
@@ -39,9 +39,9 @@ K_MODE_FIXED = "fixed"
 class ClusterConfig:
     """Everything needed to run the clustering pipeline once.
 
-    Defaults reproduce the "open the screen and it just clusters" behaviour
-    with a fixed K that keeps first entry responsive. Custom requests can still
-    choose automatic K.
+    Constructor defaults are neutral raw defaults for custom configs. Use
+    ``ClusterConfig.default()`` for the application default used when the user
+    opens the clustering screen without a custom request.
     """
 
     # Which score criteria take part in the feature vector. The default sticks
@@ -59,7 +59,7 @@ class ClusterConfig:
     # Normalization strategy to use: "zscore" or "minmax".
     normalizer: str = "zscore"
 
-    # How the number of clusters is chosen.
+    # How the number of clusters is chosen for raw/custom configs.
     k_mode: str = K_MODE_AUTO
 
     # The number of clusters when ``k_mode == "fixed"``; ignored for auto.
@@ -129,7 +129,12 @@ class ClusterConfig:
 
     @staticmethod
     def default() -> "ClusterConfig":
-        """The out-of-the-box configuration used on automatic screen entry."""
+        """Application default used on automatic clustering screen entry.
+
+        It intentionally uses fixed K=4 so the first clustering result is
+        deterministic and responsive. Free-text requests may still produce
+        automatic-K configs.
+        """
         return ClusterConfig(
             weights={
                 ELECTIVE_CONFLICTS: 1.5,

@@ -8,6 +8,7 @@ collaborators in separately.
 from __future__ import annotations
 
 from gui.features.output.PeriodNavigator import PeriodNavigator
+from src.config import WINDOW_SIZE
 
 
 class SolutionPagingPresenter:
@@ -23,7 +24,7 @@ class SolutionPagingPresenter:
         self.total_pages = 0
         self.total_found = 0
         self.sqlite_count = 0
-        self.window_capacity = 10000
+        self.window_capacity = WINDOW_SIZE
         self.periods = PeriodNavigator()
 
     # Update the UI counter labels and button availability based on the current solution index
@@ -213,7 +214,7 @@ class SolutionPagingPresenter:
         self.total = info["window_size"]
         self.total_found = info["total_count"]
         self.sqlite_count = info.get("sqlite_count", 0)
-        self.window_capacity = info.get("window_capacity", 10000)
+        self.window_capacity = info.get("window_capacity", WINDOW_SIZE)
 
     # Retrieve period configurations from the controller
     def _get_available_periods(self):

@@ -18,97 +18,7 @@ from typing import Dict, List
 import numpy as np
 
 from src.logic.clustering.Cluster import Cluster
-from src.logic.comparators.ScheduleScorer import (
-    AVG_ALL_COURSES_GAP,
-    ELECTIVE_CONFLICTS,
-    MANDATORY_SPAN,
-    MAX_EXAMS_PER_DAY,
-    MIN_MANDATORY_GAP,
-)
-from src.logic.clustering.ExtendedFeatureComputer import (
-    AVG_MOED_GAP,
-    MIN_MOED_GAP,
-    GAP_STD_DEV,
-    AVG_PREP_DAYS,
-    DOUBLE_EXAM_DAYS,
-    BUSIEST_WEEK_COUNT,
-    MAX_REST_DAYS,
-    B2B_EXAM_INCIDENCE,
-    DEPT_EXAM_CONCURRENCY,
-    INSTRUCTOR_EXAM_GAP,
-    MANDATORY_CONSEC,
-)
-
-
-# Plain-language phrases for "this cluster scores notably high / low on X".
-# Remember scores are higher-is-better (conflict / exams-per-day are negated),
-# so "high" always reads as the nicer end.
-_PHRASES = {
-    MIN_MANDATORY_GAP: (
-        "More breathing room between mandatory exams",
-        "Mandatory exams packed close together",
-    ),
-    AVG_ALL_COURSES_GAP: (
-        "Exams spread out across the period",
-        "Exams bunched closely in time",
-    ),
-    ELECTIVE_CONFLICTS: (
-        "Few elective clashes",
-        "More elective clashes",
-    ),
-    MANDATORY_SPAN: (
-        "Mandatory exams span a wide window",
-        "Mandatory exams kept within a short window",
-    ),
-    MAX_EXAMS_PER_DAY: (
-        "A light busiest-day load",
-        "A heavy busiest-day load",
-    ),
-    AVG_MOED_GAP: (
-        "Longer Moed A to B grading gaps",
-        "Shorter Moed A to B grading gaps",
-    ),
-    MIN_MOED_GAP: (
-        "A generous minimum Moed A to B gap",
-        "A tight minimum Moed A to B gap",
-    ),
-    GAP_STD_DEV: (
-        "Highly consistent study gaps",
-        "Unevenly distributed study gaps",
-    ),
-    AVG_PREP_DAYS: (
-        "Abundant study prep days before mandatory exams",
-        "Limited study prep days before mandatory exams",
-    ),
-    DOUBLE_EXAM_DAYS: (
-        "Fewer days with multiple exams",
-        "More days with multiple exams",
-    ),
-    B2B_EXAM_INCIDENCE: (
-        "Fewer consecutive days with exams",
-        "More consecutive days with exams",
-    ),
-    BUSIEST_WEEK_COUNT: (
-        "A lighter busiest-week exam load",
-        "A heavier busiest-week exam load",
-    ),
-    DEPT_EXAM_CONCURRENCY: (
-        "Low department-specific exam concurrency",
-        "High department-specific exam concurrency",
-    ),
-    MAX_REST_DAYS: (
-        "Compact exam spacing overall",
-        "Longer inactive gaps between exams",
-    ),
-    INSTRUCTOR_EXAM_GAP: (
-        "Excellent instructor grading gaps",
-        "Tight grading windows for instructors",
-    ),
-    MANDATORY_CONSEC: (
-        "Fewer back-to-back mandatory exams",
-        "More back-to-back mandatory exams",
-    ),
-}
+from src.logic.clustering import CriterionDisplay
 
 # Z-score magnitude under which a cluster is "average" on a criterion.
 _STANDOUT_THRESHOLD = 0.6
@@ -156,8 +66,9 @@ class ClusterSummarizer:
             if std == 0:
                 continue
             z = (value - mean) / std
-            if abs(z) >= _STANDOUT_THRESHOLD and crit in _PHRASES:
-                high_phrase, low_phrase = _PHRASES[crit]
+            phrase_pair = CriterionDisplay.standout_phrases(crit)
+            if abs(z) >= _STANDOUT_THRESHOLD and phrase_pair is not None:
+                high_phrase, low_phrase = phrase_pair
                 standouts.append((abs(z), high_phrase if z > 0 else low_phrase))
 
         if not standouts:

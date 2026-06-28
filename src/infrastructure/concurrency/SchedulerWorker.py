@@ -97,7 +97,7 @@ class SchedulerWorker(QThread):
             while True:
                 try:
                     # Wait for the next message from any scheduler process.
-                    msg_type, payload = self._queue.get(timeout=1.0)
+                    message = self._queue.get(timeout=1.0)
                 except queue.Empty:
                     # No message arrived during the timeout.
                     if self._owns_processes:
@@ -130,6 +130,11 @@ class SchedulerWorker(QThread):
                     self._emit_ipc_error(e)
                     break
 
+                parsed_message = self._parse_queue_message(message)
+                if parsed_message is _MALFORMED_MESSAGE:
+                    break
+                msg_type, payload = parsed_message
+
                 if self._expected_run_id is not None:
                     # Producer wraps every message as (run_id, payload) when
                     # given a run_id; drop anything tagged for a different
@@ -141,9 +146,14 @@ class SchedulerWorker(QThread):
                         break
 
                 # Choose the correct handler according to the message type.
-                handler = self._dispatch.get(msg_type)
+                handler = self._dispatch[msg_type]
                 # If the handler returns False, stop the monitoring loop.
-                if handler and not handler(payload):
+                try:
+                    should_continue = handler(payload)
+                except Exception as e:
+                    self._emit_ipc_error(e, stage="message_handling")
+                    break
+                if not should_continue:
                     break
         finally:
             # Always clean up child processes, even after errors or cancellation.
@@ -183,14 +193,31 @@ class SchedulerWorker(QThread):
             return _STALE_MESSAGE
         return inner_payload
 
-    def _emit_ipc_error(self, exc: Exception) -> None:
+    def _parse_queue_message(self, message):
+        """Validate the outer IPC message shape before dispatching it."""
+        if not isinstance(message, tuple) or len(message) != 2:
+            self._emit_ipc_error(RuntimeError(
+                "Malformed scheduler IPC message: expected (message_type, payload)"
+            ))
+            return _MALFORMED_MESSAGE
+
+        msg_type, payload = message
+        if not isinstance(msg_type, str) or msg_type not in self._dispatch:
+            self._emit_ipc_error(RuntimeError(
+                f"Unknown scheduler IPC message type: {msg_type!r}"
+            ))
+            return _MALFORMED_MESSAGE
+
+        return msg_type, payload
+
+    def _emit_ipc_error(self, exc: Exception, stage: str = "ipc_read") -> None:
         """Map an IPC boundary failure to the standard scheduler IPC error."""
         info = self._errors.map(exc, {
             "category": ErrorCategory.INFRASTRUCTURE,
             "severity": ErrorSeverity.CRITICAL,
             "recoverable": False,
             "fallback_code": "SCHEDULER_IPC_ERROR",
-            "stage": "ipc_read",
+            "stage": stage,
         })
         self._emit_error(info)
 
@@ -252,7 +279,7 @@ class SchedulerWorker(QThread):
     def _drain_queue(self) -> None:
         """Clear remaining queue messages so stale data never leaks into the next read."""
         try:
-            while not self._queue.empty():
+            while True:
                 self._queue.get_nowait()
         except (queue.Empty, ValueError, OSError):
             pass
@@ -262,8 +289,14 @@ class SchedulerWorker(QThread):
         """Saves one compressed schedule batch and notifies the GUI how many schedules were added."""
         # Payload is (data, count) or (data, count, batch_scores); the third
         # element carries per-schedule scores for the narrow score table.
+        if not isinstance(payload, (tuple, list)) or len(payload) < 2:
+            raise RuntimeError("Malformed SCHEDULE_BATCH payload: expected (data, count[, batch_scores])")
+
         data, count = payload[0], payload[1]
         batch_scores = payload[2] if len(payload) > 2 else None
+        if not isinstance(count, int) or count < 0:
+            raise RuntimeError("Malformed SCHEDULE_BATCH payload: count must be a non-negative integer")
+
         if count:
             self._repository.insert_compressed_batch(data, count, batch_scores)
             self.schedules_batch_found.emit(count)

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QLabel, QRadioButton, QButtonGroup, QWidget
-from PyQt6.QtCore import Qt        
 from PyQt6.QtGui import QIcon
 from gui.common.helpers import create_scaled_pixmap, create_vertical_divider
 

@@ -95,7 +95,6 @@ class ClusteringCoordinator:
 
     def _detect_flat_criteria(self, ids, vectors, criteria) -> List[str]:
         """Return list of criterion IDs with near-zero variance."""
-        import numpy as np
         if vectors.shape[0] < 2:
             return []
         variances = vectors.var(axis=0)

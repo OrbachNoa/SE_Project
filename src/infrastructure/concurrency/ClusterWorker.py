@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     # scikit-learn/scipy/pandas (~2.3s) just to define this QThread's
     # signature -- and this class is imported every time the cluster screens
     # are built, regardless of whether clustering is ever used.
-    from src.application.services.ClusteringCoordinator import ClusteringCoordinator, ClusteringRun
+    from src.application.services.ClusteringCoordinator import ClusteringCoordinator
     from src.logic.clustering.ClusterConfig import ClusterConfig
 
 

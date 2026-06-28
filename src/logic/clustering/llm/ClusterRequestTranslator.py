@@ -4,7 +4,7 @@ Order of attempts (each one degrades gracefully to the next):
   1. LLM — if a client is configured, ask it to identify intent topics, then
      map those topics to criteria in Python (the LLM never sees criterion IDs).
   2. Keyword parser — always available, no dependency, English + Hebrew.
-  3. Default — automatic grouping by all criteria.
+  3. Default — application default grouping over the core criteria.
 
 The result is always a valid ``ClusterConfig`` plus a short, human-readable
 interpretation of what the request was understood to mean, so the UI can show the
@@ -23,17 +23,15 @@ from typing import Dict, Optional, Tuple
 _log = logging.getLogger(__name__)
 
 from src.logic.clustering.ClusterConfig import ClusterConfig, K_MODE_AUTO, K_MODE_FIXED
-from src.logic.clustering.ExtendedFeatureComputer import (
-    AVG_MOED_GAP, MIN_MOED_GAP, GAP_STD_DEV, AVG_PREP_DAYS,
-    DOUBLE_EXAM_DAYS, BUSIEST_WEEK_COUNT, MAX_REST_DAYS, MANDATORY_CONSEC,
-    B2B_EXAM_INCIDENCE, DEPT_EXAM_CONCURRENCY, INSTRUCTOR_EXAM_GAP, ALL_EXTENDED_FEATURES,
-)
+from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
 from src.logic.clustering.llm.HeuristicRequestParser import HeuristicRequestParser
 from src.logic.clustering.llm.ILLMClient import ILLMClient
-from src.logic.comparators.ScheduleScorer import (
-    MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP, ELECTIVE_CONFLICTS,
-    MANDATORY_SPAN, MAX_EXAMS_PER_DAY, ALL_CRITERIA,
+from src.logic.clustering.llm.ClusterTopicMetadata import (
+    FUZZY_TOPIC_MAP,
+    SMART_K,
+    TOPIC_CRITERIA,
 )
+from src.logic.comparators.ScheduleScorer import MANDATORY_SPAN, ALL_CRITERIA
 
 _SYSTEM_PROMPT = """You identify the clustering intent in a student's exam schedule request.
 
@@ -210,78 +208,6 @@ Output: {"topics": ["rest", "balance"],
 
 _USER_TEMPLATE = "Request:\n{request}\n\nReturn the JSON configuration."
 
-_TOPIC_CRITERIA: Dict[str, Tuple[list, dict]] = {
-    "retake_time":  ([AVG_MOED_GAP, MIN_MOED_GAP], {AVG_MOED_GAP: 2.0}),
-    "study_prep":   ([AVG_PREP_DAYS, MIN_MANDATORY_GAP], {AVG_PREP_DAYS: 3.0}),
-    "daily_load":   ([MAX_EXAMS_PER_DAY, DOUBLE_EXAM_DAYS, BUSIEST_WEEK_COUNT, DEPT_EXAM_CONCURRENCY], {MAX_EXAMS_PER_DAY: 2.0, DEPT_EXAM_CONCURRENCY: 1.2}),
-    "weekly_load":  ([BUSIEST_WEEK_COUNT, MAX_EXAMS_PER_DAY], {BUSIEST_WEEK_COUNT: 2.0}),
-    "rest":         ([MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP, MAX_REST_DAYS], {}),
-    "consistency":  ([GAP_STD_DEV, AVG_ALL_COURSES_GAP], {GAP_STD_DEV: 2.0}),
-    "consecutive":  ([B2B_EXAM_INCIDENCE, MANDATORY_CONSEC, MIN_MANDATORY_GAP], {MANDATORY_CONSEC: 3.0, B2B_EXAM_INCIDENCE: 3.0}),
-    "span":         ([MANDATORY_SPAN, AVG_ALL_COURSES_GAP], {}),
-    "conflicts":    ([ELECTIVE_CONFLICTS, MAX_EXAMS_PER_DAY], {}),
-    "balance":      ([BUSIEST_WEEK_COUNT, GAP_STD_DEV, AVG_ALL_COURSES_GAP],
-                     {BUSIEST_WEEK_COUNT: 1.5, GAP_STD_DEV: 1.5}),
-    "faculty_load": ([INSTRUCTOR_EXAM_GAP, DEPT_EXAM_CONCURRENCY], {INSTRUCTOR_EXAM_GAP: 2.0}),
-    "general":      (list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES), {}),
-}
-
-_FUZZY_TOPIC_MAP: Dict[str, str] = {
-    "load":             "daily_load",
-    "daily":            "daily_load",
-    "cramming":         "daily_load",
-    "cramped":          "daily_load",
-    "weekly":           "weekly_load",
-    "heavy":            "weekly_load",
-    "light":            "weekly_load",
-    "retake":           "retake_time",
-    "retake_gap":       "retake_time",
-    "moed":             "retake_time",
-    "prep":             "study_prep",
-    "preparation":      "study_prep",
-    "study":            "study_prep",
-    "revision":         "study_prep",
-    "gap":              "rest",
-    "gaps":             "rest",
-    "rest_time":        "rest",
-    "spacing":          "consistency",
-    "spread":           "span",
-    "compact":          "span",
-    "concentrated":     "span",
-    "distribution":     "balance",
-    "even":             "balance",
-    "balanced":         "balance",
-    "uniform":          "balance",
-    "back_to_back":     "consecutive",
-    "backtoback":       "consecutive",
-    "back2back":        "consecutive",
-    "consecutive_days": "consecutive",
-    "faculty":          "faculty_load",
-    "instructor":       "faculty_load",
-    "instructor_time":  "faculty_load",
-    "grading":          "faculty_load",
-    "dept_load":        "faculty_load",
-    "department":       "faculty_load",
-    "מרצה":             "faculty_load",
-    "מרצים":            "faculty_load",
-}
-
-_SMART_K: Dict[str, Optional[int]] = {
-    "retake_time":  2,
-    "daily_load":   4,
-    "weekly_load":  3,
-    "rest":         4,
-    "study_prep":   3,
-    "consistency":  None,
-    "consecutive":  2,
-    "span":         None,
-    "conflicts":    3,
-    "balance":      4,
-    "faculty_load": 3,
-    "general":      None,
-}
-
-
 @dataclass(slots=True)
 class TranslationResult:
     """A finished translation: the config, a human summary, and its source."""
@@ -307,7 +233,7 @@ class ClusterRequestTranslator:
         request = (text or "").strip()
         if not request:
             return TranslationResult(
-                ClusterConfig.default(), "Automatic grouping by all criteria.", "default"
+                ClusterConfig.default(), "Default grouping by core schedule quality, 4 families.", "default"
             )
 
         if request in self._cache:
@@ -343,50 +269,20 @@ class ClusterRequestTranslator:
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
         data = self._extract_json(raw)
 
-        raw_topics = data.get("topics") or ["general"]
-        topics = []
-        for t in raw_topics:
-            normalized = _FUZZY_TOPIC_MAP.get(t, t)
-            if normalized not in _TOPIC_CRITERIA:
-                continue
-            topics.append(normalized)
+        topics = self._normalized_topics(data.get("topics") or ["general"])
         thresholds: dict = data.get("thresholds") or {}
         confidence_map = data.get("confidence") or {}
 
-        merged_criteria: list = []
-        merged_weights: dict = {}
-        _DECAY = [1.0, 0.8, 0.6]
-        for rank, topic in enumerate(topics):
-            crit, weights = _TOPIC_CRITERIA[topic]
-            confidence = confidence_map.get(topic, 1.0)
-            confidence = max(0.1, min(1.0, float(confidence)))
-            rank_decay = _DECAY[min(rank, len(_DECAY) - 1)]
-            effective_multiplier = rank_decay * confidence
-            for c in crit:
-                if c not in merged_criteria:
-                    merged_criteria.append(c)
-            for k, v in weights.items():
-                scaled = v * effective_multiplier
-                merged_weights[k] = max(merged_weights.get(k, 0.0), scaled)
+        merged_criteria, merged_weights = self._merge_topic_criteria(
+            topics, confidence_map
+        )
 
         # Apply threshold-based weight boosts: threshold N → multiplier (1 + N/5).
-        for topic, threshold in thresholds.items():
-            normalized_t = _FUZZY_TOPIC_MAP.get(topic, topic)
-            if normalized_t in _TOPIC_CRITERIA:
-                crit, _ = _TOPIC_CRITERIA[normalized_t]
-                multiplier = 1.0 + float(threshold) / 5.0
-                for c in crit:
-                    base = merged_weights.get(c, 1.0)
-                    merged_weights[c] = min(base * multiplier, 5.0)
+        self._apply_threshold_weight_boosts(merged_weights, thresholds)
 
         # Apply span direction: compact → de-emphasize MANDATORY_SPAN (0.5),
         # spread → emphasize (2.0).
-        directions: dict = data.get("directions") or {}
-        span_dir = directions.get("span")
-        if span_dir == "compact":
-            merged_weights[MANDATORY_SPAN] = 0.5
-        elif span_dir == "spread":
-            merged_weights[MANDATORY_SPAN] = 2.0
+        self._apply_span_direction(merged_weights, data.get("directions") or {})
 
         if not merged_criteria:
             merged_criteria = list(ALL_CRITERIA) + list(ALL_EXTENDED_FEATURES)
@@ -395,28 +291,80 @@ class ClusterRequestTranslator:
         if merged_weights:
             kwargs["weights"] = merged_weights
 
-        k_mode = data.get("k_mode", "auto")
-        if k_mode == K_MODE_FIXED:
-            raw_k = data.get("k")
-            if raw_k is not None:
-                kwargs["k_mode"] = K_MODE_FIXED
-                kwargs["k"] = max(2, min(int(raw_k), 20))
-            else:
-                kwargs["k_mode"] = K_MODE_AUTO
-        else:
-            kwargs["k_mode"] = K_MODE_AUTO
-
-        # Apply smart K suggestion only when user did not explicitly set K.
-        if kwargs.get("k_mode") == K_MODE_AUTO and topics:
-            dominant_topic = topics[0]
-            suggested_k = _SMART_K.get(dominant_topic)
-            if suggested_k is not None:
-                kwargs["k_mode"] = K_MODE_FIXED
-                kwargs["k"] = suggested_k
+        kwargs.update(self._k_kwargs(data))
+        self._apply_smart_k(kwargs, topics)
 
         config = ClusterConfig(**kwargs)
         interpretation = (data.get("explanation") or "").strip() or "Custom grouping applied."
         return config, interpretation
+
+    def _normalized_topics(self, raw_topics: list) -> list:
+        """Normalize model topic names and drop unknown values."""
+        topics = []
+        for topic in raw_topics:
+            normalized = FUZZY_TOPIC_MAP.get(topic, topic)
+            if normalized in TOPIC_CRITERIA:
+                topics.append(normalized)
+        return topics
+
+    def _merge_topic_criteria(self, topics: list, confidence_map: dict) -> Tuple[list, dict]:
+        """Merge topic criteria and base weights, preserving topic order."""
+        merged_criteria: list = []
+        merged_weights: dict = {}
+        decay = [1.0, 0.8, 0.6]
+        for rank, topic in enumerate(topics):
+            criteria, weights = TOPIC_CRITERIA[topic]
+            confidence = confidence_map.get(topic, 1.0)
+            confidence = max(0.1, min(1.0, float(confidence)))
+            effective_multiplier = decay[min(rank, len(decay) - 1)] * confidence
+            for criterion in criteria:
+                if criterion not in merged_criteria:
+                    merged_criteria.append(criterion)
+            for criterion, weight in weights.items():
+                scaled = weight * effective_multiplier
+                merged_weights[criterion] = max(merged_weights.get(criterion, 0.0), scaled)
+        return merged_criteria, merged_weights
+
+    def _apply_threshold_weight_boosts(self, weights: dict, thresholds: dict) -> None:
+        """Apply threshold-based emphasis boosts in-place."""
+        for topic, threshold in thresholds.items():
+            normalized = FUZZY_TOPIC_MAP.get(topic, topic)
+            if normalized not in TOPIC_CRITERIA:
+                continue
+            criteria, _ = TOPIC_CRITERIA[normalized]
+            multiplier = 1.0 + float(threshold) / 5.0
+            for criterion in criteria:
+                base = weights.get(criterion, 1.0)
+                weights[criterion] = min(base * multiplier, 5.0)
+
+    def _apply_span_direction(self, weights: dict, directions: dict) -> None:
+        """Apply the special compact/spread span direction weight."""
+        span_dir = directions.get("span")
+        if span_dir == "compact":
+            weights[MANDATORY_SPAN] = 0.5
+        elif span_dir == "spread":
+            weights[MANDATORY_SPAN] = 2.0
+
+    def _k_kwargs(self, data: dict) -> dict:
+        """Build explicit K settings from the LLM payload."""
+        if data.get("k_mode", "auto") != K_MODE_FIXED:
+            return {"k_mode": K_MODE_AUTO}
+        raw_k = data.get("k")
+        if raw_k is None:
+            return {"k_mode": K_MODE_AUTO}
+        return {
+            "k_mode": K_MODE_FIXED,
+            "k": max(2, min(int(raw_k), 20)),
+        }
+
+    def _apply_smart_k(self, kwargs: dict, topics: list) -> None:
+        """Fill in topic-specific K only when the user did not set K explicitly."""
+        if kwargs.get("k_mode") != K_MODE_AUTO or not topics:
+            return
+        suggested_k = SMART_K.get(topics[0])
+        if suggested_k is not None:
+            kwargs["k_mode"] = K_MODE_FIXED
+            kwargs["k"] = suggested_k
 
     @staticmethod
     def _extract_json(raw: str) -> Dict:

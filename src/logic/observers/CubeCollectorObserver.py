@@ -18,7 +18,7 @@ class CubeCollectorObserver(IScheduleObserver):
 
     def on_schedule_found(self, schedule) -> None:
         # Save only the dates, because the worker can rebuild the assignments from its own slots.
-        self._units.append(WorkUnit(seed_dates=[a.date for a in schedule.assignments]))
+        self._units.append(WorkUnit(seed_dates=tuple(a.date for a in schedule.assignments)))
 
     def on_progress(self, value: int) -> None:
         # Progress is not needed while we only collect work units.
