@@ -23,7 +23,7 @@ class App(QMainWindow):
         """Initialize the main window."""
         super().__init__()
         
-        # Save a reference to the main brain (controller) of the app
+        # Store the controller used by all screens to reach application services.
         self._controller = controller
         
         # Set the window's title, default starting size, and the minimum size it can be shrunk to

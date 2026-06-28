@@ -69,7 +69,7 @@ class ClusterCompareScreen(Screen):
 
         # Center/Left: Title
         self._title = QLabel("<b>Compare Representatives</b>")
-        self._title.setStyleSheet("font-size: 16px; margin-left: 12px;")
+        self._title.setObjectName("compare-title")
         layout.addWidget(self._title)
         layout.addStretch()
 
@@ -131,7 +131,7 @@ class ClusterCompareScreen(Screen):
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.HLine)
         divider.setFrameShadow(QFrame.Shadow.Sunken)
-        divider.setStyleSheet("background-color: #E2E8F0; max-height: 1px; border: none;")
+        divider.setObjectName("compare-divider")
         layout.addWidget(divider)
 
         # 2x2 grid of composite ratings
@@ -153,8 +153,8 @@ class ClusterCompareScreen(Screen):
             col = (idx % 2) * 2
 
             name_lbl = QLabel(label_name)
-            name_lbl.setStyleSheet("color: #64748B; font-weight: 500; font-size: 12px;")
-            
+            name_lbl.setObjectName("compare-composite-name")
+
             val_lbl = QLabel(val)
             val_lbl.setObjectName("composite-label-value")
             val_lbl.setProperty("rating", val.lower())
@@ -172,10 +172,10 @@ class ClusterCompareScreen(Screen):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("background-color: transparent;")
+        scroll.setObjectName("compare-scroll")
 
         self._table_frame = QFrame()
-        self._table_frame.setStyleSheet("background-color: transparent;")
+        self._table_frame.setObjectName("compare-table-frame")
         self._table = QGridLayout(self._table_frame)
         self._table.setContentsMargins(24, 16, 24, 16)
         self._table.setHorizontalSpacing(36)
@@ -185,15 +185,28 @@ class ClusterCompareScreen(Screen):
         root.addWidget(scroll, stretch=1)
 
     def _get_arrow(self, crit_id: str) -> str:
-        from src.logic.clustering.CriterionDisplay import _NEGATED
-        if crit_id in _NEGATED:
-            return "↓"
-        return "↑"
+        from src.logic.clustering.CriterionDisplay import is_lower_better
+        return "↓" if is_lower_better(crit_id) else "↑"
+
+    def _winning_value_container(self, value_lbl: QLabel, crit_id: str) -> QWidget:
+        """Wrap the better side's value label with a directional delta arrow."""
+        value_lbl.setObjectName("compare-metric-better")
+        value_lbl.style().unpolish(value_lbl)
+        value_lbl.style().polish(value_lbl)
+
+        arrow = QLabel(self._get_arrow(crit_id))
+        arrow.setObjectName("delta-indicator")
+
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.addStretch()
+        layout.addWidget(value_lbl)
+        layout.addWidget(arrow)
+        return container
 
     # ── view API used by the presenter ───────────────────────────────────────
-
-    def set_periods(self, periods) -> None:
-        pass
 
     def render_comparison(self, comparison) -> None:
         self._title.setText(f"<b>Compare Representatives: {comparison.left_title} vs {comparison.right_title}</b>")
@@ -227,7 +240,7 @@ class ClusterCompareScreen(Screen):
         header_left = QLabel(comparison.left_title)
         header_right = QLabel(comparison.right_title)
         for col, lbl in enumerate((header_feature, header_left, header_right)):
-            lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: #475569; padding-bottom: 8px;")
+            lbl.setObjectName("compare-table-header")
             if col > 0:
                 lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._table.addWidget(lbl, 0, col)
@@ -235,73 +248,30 @@ class ClusterCompareScreen(Screen):
         # Render feature rows
         for row, (crit_id, label, left_val, right_val, differs) in enumerate(comparison.feature_rows, start=1):
             name_lbl = QLabel(label)
-            name_lbl.setStyleSheet("color: #3E352F; font-size: 13px; font-weight: 500;")
+            name_lbl.setObjectName("compare-row-name")
 
             left_lbl = QLabel(left_val)
             left_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            left_lbl.setStyleSheet("font-size: 13px; padding: 2px 6px;")
+            left_lbl.setObjectName("compare-row-value")
 
             right_lbl = QLabel(right_val)
             right_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            right_lbl.setStyleSheet("font-size: 13px; padding: 2px 6px;")
+            right_lbl.setObjectName("compare-row-value")
 
-            if differs:
-                from src.logic.clustering.CriterionDisplay import _NEGATED
-                
-                try:
-                    val_l = float(left_val.replace("%", ""))
-                    val_r = float(right_val.replace("%", ""))
-                except ValueError:
-                    val_l = val_r = 0.0
-
-                lower_is_better = crit_id in _NEGATED
-                if val_l != val_r:
-                    if (lower_is_better and val_l < val_r) or (not lower_is_better and val_l > val_r):
-                        # Left is better
-                        left_lbl.setObjectName("compare-metric-better")
-                        left_lbl.style().unpolish(left_lbl)
-                        left_lbl.style().polish(left_lbl)
-
-                        left_arrow = QLabel(self._get_arrow(crit_id))
-                        left_arrow.setObjectName("delta-indicator")
-                        
-                        left_container = QWidget()
-                        left_layout = QHBoxLayout(left_container)
-                        left_layout.setContentsMargins(0, 0, 0, 0)
-                        left_layout.setSpacing(4)
-                        left_layout.addStretch()
-                        left_layout.addWidget(left_lbl)
-                        left_layout.addWidget(left_arrow)
-                        
-                        self._table.addWidget(name_lbl, row, 0)
-                        self._table.addWidget(left_container, row, 1)
-                        self._table.addWidget(right_lbl, row, 2)
-                        continue
-                    else:
-                        # Right is better
-                        right_lbl.setObjectName("compare-metric-better")
-                        right_lbl.style().unpolish(right_lbl)
-                        right_lbl.style().polish(right_lbl)
-
-                        right_arrow = QLabel(self._get_arrow(crit_id))
-                        right_arrow.setObjectName("delta-indicator")
-                        
-                        right_container = QWidget()
-                        right_layout = QHBoxLayout(right_container)
-                        right_layout.setContentsMargins(0, 0, 0, 0)
-                        right_layout.setSpacing(4)
-                        right_layout.addStretch()
-                        right_layout.addWidget(right_lbl)
-                        right_layout.addWidget(right_arrow)
-                        
-                        self._table.addWidget(name_lbl, row, 0)
-                        self._table.addWidget(left_lbl, row, 1)
-                        self._table.addWidget(right_container, row, 2)
-                        continue
+            # Which side wins is precomputed from raw numeric scores in the
+            # view-model (no parsing of the display strings here).
+            winner = comparison.better_by_criterion.get(crit_id, "") if differs else ""
 
             self._table.addWidget(name_lbl, row, 0)
-            self._table.addWidget(left_lbl, row, 1)
-            self._table.addWidget(right_lbl, row, 2)
+            if winner == "left":
+                self._table.addWidget(self._winning_value_container(left_lbl, crit_id), row, 1)
+                self._table.addWidget(right_lbl, row, 2)
+            elif winner == "right":
+                self._table.addWidget(left_lbl, row, 1)
+                self._table.addWidget(self._winning_value_container(right_lbl, crit_id), row, 2)
+            else:
+                self._table.addWidget(left_lbl, row, 1)
+                self._table.addWidget(right_lbl, row, 2)
 
     def show_message(self, message: str) -> None:
         QMessageBox.information(self, "Compare", message)

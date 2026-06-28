@@ -10,11 +10,9 @@ from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 from gui.common.helpers import create_scaled_pixmap
 
 
-# This is the main white box (card) you see on the screen that says "Study Programs"
-# It shows what you have selected and acts as a big button to open the pop-up menu.
+# The "Study Programs" card: shows the current selection and opens the picker dialog when clicked.
 class ProgramSelectorCardWidget(QFrame):
-    # This signal is like an alarm that goes off whenever the user changes their selected programs.
-    # Other parts of the app listen to this alarm so they can update themselves.
+    # Emitted whenever the committed program selection changes, so observers can refresh.
     selection_changed = pyqtSignal()
 
     def __init__(
@@ -56,7 +54,7 @@ class ProgramSelectorCardWidget(QFrame):
         header_row.addWidget(prog_title)
         header_row.addStretch()
 
-        # The little badge on the right that shows "0 / 5" selected
+        # Count badge showing "selected / max", e.g. "0 / 5".
         self._programs_count_badge = QLabel(f"0 / {self.max_programs}")
         self._programs_count_badge.setObjectName("badge")
         header_row.addWidget(self._programs_count_badge)
@@ -148,7 +146,7 @@ class ProgramSelectorCardWidget(QFrame):
         # Create a dictionary to easily find the full name of a program using its short ID
         name_by_id = {vm.program_id: vm.display_name for vm in self._program_view_models}
 
-        # For every program the user picked, create a nice little visual tag ("chip") and add it to the card.
+        # Render one chip per selected program.
         for pid in self._selected_program_ids:
             row = QHBoxLayout()
             row.setContentsMargins(0, 0, 0, 0)
@@ -168,3 +166,18 @@ class ProgramSelectorCardWidget(QFrame):
     def selected_program_ids(self) -> List[str]:
         """Return the program IDs the user has committed via the popup."""
         return list(self._selected_program_ids)
+
+    # Public mutators/accessors so other layers don't reach into private fields.
+    def set_selected_program_ids(self, ids: List[str]) -> None:
+        """Replace the committed selection and redraw the summary."""
+        self._selected_program_ids = list(ids)
+        self._refresh_program_summary()
+
+    def refresh_summary(self) -> None:
+        """Redraw the selected-programs summary (public wrapper)."""
+        self._refresh_program_summary()
+
+    @property
+    def programs_count_badge(self) -> QLabel:
+        """The count badge label (read accessor for the owning screen)."""
+        return self._programs_count_badge

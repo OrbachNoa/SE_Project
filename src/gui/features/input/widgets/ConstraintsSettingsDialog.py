@@ -19,11 +19,13 @@ class _ConstraintMeta:
     """
     Static data for one constraint row.
 
-    This class only describes how the row should look in the GUI:
-    label, description, unit, min/max value and default value.
-    The real scheduling config is built later in _apply().
+    Describes how the row should look in the GUI (label, description, unit,
+    min/max value and default value) and which ConstraintsConfig field it maps
+    to (``field_name``). Mapping by field name — instead of by list position —
+    means adding a new constraint only requires one new entry here.
     """
 
+    field_name: str
     label: str
     description: str
     unit: str
@@ -32,35 +34,39 @@ class _ConstraintMeta:
     default_k: int
 
 
-# The order here is important.
-# The same indexes are used later in _current_k() and _apply()
-# to map each GUI row to the matching ConstraintsConfig field.
+# Single source of truth for the constraint rows. Each entry's `field_name`
+# matches a ConstraintsConfig constructor parameter, so order is irrelevant.
 _CONSTRAINTS: list[_ConstraintMeta] = [
     _ConstraintMeta(
+        field_name="min_gap_obligatory",
         label="Min. gap — obligatory exams",
         description="Minimum calendar days between two mandatory exams in the same program-year.",
         unit="days",
         min_k=1, max_k=30, default_k=3,
     ),
     _ConstraintMeta(
+        field_name="min_gap_any",
         label="Min. gap — all exams",
         description="Minimum calendar days between any two exams (mandatory or elective) in the same program-year.",
         unit="days",
         min_k=1, max_k=30, default_k=2,
     ),
     _ConstraintMeta(
+        field_name="elective_conflict_cap",
         label="Elective clash cap",
         description="Maximum same-day pair-conflicts between elective exams in the same program.",
         unit="conflicts",
         min_k=0, max_k=10, default_k=2,
     ),
     _ConstraintMeta(
+        field_name="exam_span",
         label="Exam period span",
         description="Minimum days between the first and last mandatory exam in a program-year-moed group.",
         unit="days",
         min_k=1, max_k=60, default_k=7,
     ),
     _ConstraintMeta(
+        field_name="max_exams_per_day",
         label="Max exams per day",
         description="Maximum total exams allowed on any single day.",
         unit="exams / day",
@@ -93,8 +99,8 @@ class ConstraintsSettingsDialog(QDialog):
         # When the user clicks Apply, the new ConstraintsConfig is passed there.
         self._on_apply = on_apply
 
-        # Save the checkbox and spinbox of each row.
-        # The list order must match _CONSTRAINTS order.
+        # Checkbox+spinbox per row, in _CONSTRAINTS order. _apply() zips this with
+        # _CONSTRAINTS to read each row's value by field name (no index→field map).
         self._rows: list[Tuple[QCheckBox, QSpinBox]] = []
 
         outer = QVBoxLayout(self)
@@ -122,14 +128,14 @@ class ConstraintsSettingsDialog(QDialog):
         title_col.addWidget(title)
         title_col.addWidget(hint)
         header_row.addLayout(title_col, stretch=1)
-        rules_badge = QLabel("5 rules")
+        rules_badge = QLabel(f"{len(_CONSTRAINTS)} rules")
         rules_badge.setObjectName("dialog-counter")
         header_row.addWidget(rules_badge, alignment=Qt.AlignmentFlag.AlignTop)
         card_layout.addLayout(header_row)
 
         # Build one row for each constraint metadata object.
-        for i, meta in enumerate(_CONSTRAINTS):
-            row_widget = self._build_row(meta, current_config, i)
+        for meta in _CONSTRAINTS:
+            row_widget = self._build_row(meta, current_config)
             card_layout.addWidget(row_widget)
 
         # Buttons
@@ -154,7 +160,6 @@ class ConstraintsSettingsDialog(QDialog):
         self,
         meta: _ConstraintMeta,
         current_config: Optional[ConstraintsConfig],
-        index: int,
     ) -> QFrame:
         """
         Build one constraint row.
@@ -164,7 +169,7 @@ class ConstraintsSettingsDialog(QDialog):
         """
 
         # None means the constraint is currently disabled.
-        current_k = self._current_k(current_config, index)
+        current_k = self._current_k(current_config, meta)
         is_on = current_k is not None
 
         row = QFrame()
@@ -260,26 +265,12 @@ class ConstraintsSettingsDialog(QDialog):
 
     @staticmethod
     def _current_k(
-        config: Optional[ConstraintsConfig], index: int
+        config: Optional[ConstraintsConfig], meta: _ConstraintMeta
     ) -> Optional[int]:
-        """
-        Get the saved k value for the row index.
-
-        The fields list must stay in the same order as _CONSTRAINTS.
-        """
-
+        """Get the saved k value for a constraint by its config field name."""
         if config is None:
             return None
-
-        fields = [
-            config.min_gap_obligatory,
-            config.min_gap_any,
-            config.elective_conflict_cap,
-            config.exam_span,
-            config.max_exams_per_day,
-        ]
-
-        return fields[index]
+        return getattr(config, meta.field_name)
 
     def _apply(self) -> None:
         """
@@ -288,18 +279,11 @@ class ConstraintsSettingsDialog(QDialog):
         Checked row means the constraint is active and gets an integer k.
         Unchecked row means the constraint is disabled and gets None.
         """
-
-        def k(index: int) -> Optional[int]:
-            checkbox, spinbox = self._rows[index]
-            return spinbox.value() if checkbox.isChecked() else None
-
-        config = ConstraintsConfig(
-            min_gap_obligatory=k(0),
-            min_gap_any=k(1),
-            elective_conflict_cap=k(2),
-            exam_span=k(3),
-            max_exams_per_day=k(4),
-        )
+        values = {
+            meta.field_name: (spinbox.value() if checkbox.isChecked() else None)
+            for meta, (checkbox, spinbox) in zip(_CONSTRAINTS, self._rows)
+        }
+        config = ConstraintsConfig(**values)
 
         # Send the config back to the presenter/controller chain.
         self._on_apply(config)

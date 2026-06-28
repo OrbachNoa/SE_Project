@@ -58,11 +58,11 @@ class ViewModelMapper:
         else:
             relevant_pairs = list(a.program_requirements)
 
+        # Plain-text program/requirement lines kept as structured data so the
+        # PDF exporter / overlay don't have to parse them back out of subtitle.
+        program_lines = [f"Prog {pid} ({req.capitalize()})" for pid, req in relevant_pairs]
         # Build the program req string. using <br> cuz PyQt labels support rich text HTML formatting.
-        if relevant_pairs:
-            req_str = "<br>".join(f"Prog {pid} ({req.capitalize()})" for pid, req in relevant_pairs)
-        else:
-            req_str = ""
+        req_str = "<br>".join(program_lines)
 
         # Title is just the course name. Subtitle holds the ID and the colored req string.
         title = a.course_name
@@ -83,6 +83,9 @@ class ViewModelMapper:
             tooltip=tooltip,
             instructor=a.instructor,
             evaluation=a.evaluation,
+            course_id=a.course_id,
+            details=f"{a.semester} · Moed {a.moed}",
+            programs=program_lines,
         )
 
     def to_schedule_vm(
@@ -291,12 +294,24 @@ class ViewModelMapper:
         rows = []
         left_features_display = {}
         right_features_display = {}
+        better_by_criterion = {}
         for name in result.criteria:
-            la = CriterionDisplay.display_value(name, feats_a.get(name, 0.0))
-            lb = CriterionDisplay.display_value(name, feats_b.get(name, 0.0))
+            raw_a = feats_a.get(name, 0.0)
+            raw_b = feats_b.get(name, 0.0)
+            la = CriterionDisplay.display_value(name, raw_a)
+            lb = CriterionDisplay.display_value(name, raw_b)
             rows.append((name, CriterionDisplay.label(name), la, lb, la != lb))
             left_features_display[name] = la
             right_features_display[name] = lb
+
+            # Decide the better side from the raw numeric scores (not the display
+            # strings), so the comparison view doesn't have to parse "%" text.
+            if raw_a == raw_b:
+                better_by_criterion[name] = ""
+            else:
+                lower_better = CriterionDisplay.is_lower_better(name)
+                a_better = (raw_a < raw_b) if lower_better else (raw_a > raw_b)
+                better_by_criterion[name] = "left" if a_better else "right"
 
         # Build composite ratings for both families
         left_labels = self._compute_composite_labels(cluster_a, result.clusters)
@@ -318,6 +333,7 @@ class ViewModelMapper:
             right_schedule_spread=right_labels["schedule_spread"],
             left_features=left_features_display,
             right_features=right_features_display,
+            better_by_criterion=better_by_criterion,
         )
 
     def _compute_composite_labels(self, cluster, all_clusters) -> dict:

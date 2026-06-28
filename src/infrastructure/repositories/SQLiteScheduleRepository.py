@@ -10,6 +10,7 @@ import os
 import pickle
 import sqlite3
 import tempfile
+import uuid
 import zlib
 import threading
 from typing import List
@@ -17,13 +18,31 @@ from typing import List
 import numpy as np
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
-from src.application.dto.PackedScheduleCodec import is_packed_blob, row_to_dto, unpack_rows
+from src.application.dto.PackedScheduleCodec import is_packed_blob, row_to_dto, unpack_rows, unpack_rows_at
 from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
 
 
-# Default place for the overflow database.
-# We use the temp folder because this DB is only for generated results.
-_DEFAULT_DB = os.path.join(tempfile.gettempdir(), "exam_scheduler_overflow.sqlite")
+# Default place for overflow databases.
+# These DBs hold generated results only, so each app session gets a fresh file
+# instead of deleting millions of stale rows from yesterday's temp DB on the
+# first Generate click.
+_DEFAULT_DB_PREFIX = "exam_scheduler_overflow"
+
+
+def _make_default_db_path() -> str:
+    filename = f"{_DEFAULT_DB_PREFIX}_{os.getpid()}_{uuid.uuid4().hex}.sqlite"
+    return os.path.join(tempfile.gettempdir(), filename)
+
+
+def _remove_sqlite_files(db_path: str) -> None:
+    """Best-effort cleanup for a SQLite database and its WAL sidecars."""
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            os.remove(db_path + suffix)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
 
 # Map every core score criterion to a short SQLite column name. This never
 # depends on clustering, so it stays a module constant.
@@ -33,9 +52,11 @@ _SCORE_COLS = {cid: f"s_{i}" for i, cid in enumerate(ALL_CRITERIA)}
 class SQLiteScheduleRepository:
     """Stores generated schedules in SQLite so the GUI can browse large result sets."""
 
-    def __init__(self, db_path: str = _DEFAULT_DB, extra_score_criteria: "list[str] | None" = None) -> None:
+    def __init__(self, db_path: "str | None" = None, extra_score_criteria: "list[str] | None" = None) -> None:
         # Save the DB path so we can open the same database again.
-        self._db_path = db_path
+        self._owns_temp_db = db_path is None
+        self._db_path = db_path or _make_default_db_path()
+        self._closed = False
 
         # Total number of schedules saved in this run.
         self._total_count: int = 0
@@ -68,6 +89,23 @@ class SQLiteScheduleRepository:
         self._all_score_cols = list(_SCORE_COLS.values()) + list(self._ext_feature_cols.values())
 
         self._init_db()
+
+    @property
+    def db_path(self) -> str:
+        """Return the SQLite file path backing this repository."""
+        return self._db_path
+
+    def close(self) -> None:
+        """Close the repository and delete its session-owned temp DB."""
+        if self._closed:
+            return
+        with self._lock:
+            if self._closed:
+                return
+            self._conn.close()
+            self._closed = True
+        if self._owns_temp_db:
+            _remove_sqlite_files(self._db_path)
 
     def configure_slots(self, slots: list) -> None:
         """Save slot metadata so packed schedules can be decoded later."""
@@ -295,21 +333,23 @@ class SQLiteScheduleRepository:
         if self._slots is None:
             raise RuntimeError("configure_slots() must be called before reading packed schedules")
 
-        _slot_count, rows = unpack_rows(data)
-
-        # Decode either the whole batch or only the ids we actually need.
-        ids = (
-            range(first_offset, first_offset + len(rows))
-            if wanted_ids is None
-            else sorted(g for g in wanted_ids if first_offset <= g < first_offset + len(rows))
-        )
+        if wanted_ids is None:
+            _slot_count, rows = unpack_rows(data)
+            rows_by_id = {first_offset + i: row for i, row in enumerate(rows)}
+        else:
+            wanted_offsets = [
+                g - first_offset
+                for g in wanted_ids
+                if first_offset <= g
+            ]
+            _slot_count, rows_by_offset = unpack_rows_at(data, wanted_offsets)
+            rows_by_id = {first_offset + offset: row for offset, row in rows_by_offset.items()}
 
         # Add score data back into the DTOs if it exists.
-        scores_by_id = self._scores_for_ids(list(ids))
+        scores_by_id = self._scores_for_ids(list(rows_by_id))
 
         decoded = {}
-        for gidx in ids:
-            row = rows[gidx - first_offset]
+        for gidx, row in rows_by_id.items():
             decoded[gidx] = row_to_dto(row, self._slots, scores_by_id.get(gidx))
 
         return decoded
@@ -469,14 +509,15 @@ class SQLiteScheduleRepository:
             data = zlib.decompress(raw_blob)
 
             if is_packed_blob(data):
-                _, rows = unpack_rows(data)
+                wanted_offsets = [
+                    gidx - first_off
+                    for gidx in gidx_set
+                    if first_off <= gidx < first_off + batch_count and gidx not in raw_map
+                ]
+                _, rows_by_offset = unpack_rows_at(data, wanted_offsets)
 
-                # Scan the batch and keep only ids that were requested.
-                for i, row in enumerate(rows):
-                    gidx = first_off + i
-
-                    if gidx in gidx_set and gidx not in raw_map:
-                        raw_map[gidx] = row
+                for offset, row in rows_by_offset.items():
+                    raw_map[first_off + offset] = row
 
             else:
                 # Backward support for batches saved as full DTO objects.

@@ -67,6 +67,14 @@ class ExclusionModel:
         self._start_date = start_date
         self._end_date = end_date
 
+    # True unless both dates are set and the end falls before the start.
+    # ISO (YYYY-MM-DD) date strings compare correctly lexicographically.
+    @property
+    def is_range_valid(self) -> bool:
+        if not self._start_date or not self._end_date:
+            return True
+        return self._start_date <= self._end_date
+
     # Flips a specific date: if it's blocked, unblock it. If it's free, block it.
     def toggle(self, date_str: str) -> bool:
         """Toggle a date and return True when it is now excluded."""

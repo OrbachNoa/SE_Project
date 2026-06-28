@@ -82,6 +82,13 @@ class CalendarEditorWidget(QWidget):
         dates_layout.addStretch()
         self.main_layout.addLayout(dates_layout)
 
+        # Inline warning shown when the end date falls before the start date.
+        self.date_warning_label = QLabel("End date is before the start date.")
+        self.date_warning_label.setObjectName("calendar-date-warning")
+        self.date_warning_label.setStyleSheet("color: #c0392b; font-weight: 600;")
+        self.date_warning_label.setVisible(False)
+        self.main_layout.addWidget(self.date_warning_label)
+
         # The main interactive calendar grid where users can click to exclude days
         self.calendar_grid = CalendarWidget()
         self.calendar_grid.date_clicked.connect(self.toggle_date_exclusion)
@@ -110,6 +117,7 @@ class CalendarEditorWidget(QWidget):
         )
         self.prev_btn.setEnabled(self._model.can_move_previous())
         self.next_btn.setEnabled(self._model.can_move_next())
+        self._update_validity()
         self._render_calendar()
 
     # Save the current view's changes, switch to the previous period, and update the screen
@@ -127,8 +135,22 @@ class CalendarEditorWidget(QWidget):
     # When the user picks a new start or end date, save it, redraw the calendar, and announce the change
     def _on_dates_changed(self) -> None:
         self._sync_date_controls_to_model()
+        self._update_validity()
         self._render_calendar()
         self.data_changed.emit()
+
+    # Show/hide the inline warning and highlight the end field when the range is invalid.
+    def _update_validity(self) -> bool:
+        valid = self._model.is_range_valid
+        self.date_warning_label.setVisible(not valid)
+        self.end_date_edit.setStyleSheet(
+            "" if valid else "border: 1px solid #c0392b;"
+        )
+        return valid
+
+    # True when the current exam period has a usable (start <= end) date range.
+    def is_valid(self) -> bool:
+        return self._model.is_range_valid
 
     # Grab the dates from the input boxes on the screen and save them into the background model
     def _sync_date_controls_to_model(self) -> None:

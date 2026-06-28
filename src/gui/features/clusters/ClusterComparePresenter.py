@@ -28,8 +28,6 @@ class ClusterComparePresenter:
             self._view.show_message(f"Could not compare clusters: {message}")
             return
 
-        periods = self._available_periods()
-        self._view.set_periods(periods)
         self._view.render_comparison(comparison)
 
     def on_leave(self) -> None:
@@ -45,10 +43,3 @@ class ClusterComparePresenter:
         if overlay_screen:
             overlay_screen.set_pair(self._cluster_a, self._cluster_b)
         self._router.show(SCREEN_CLUSTER_CALENDAR_OVERLAY)
-
-    def _available_periods(self):
-        periods = self._controller.get_loaded_periods()
-        mapper = self._controller.get_mapper()
-        if mapper and periods:
-            return mapper.to_period_edit_vms(periods)
-        return []

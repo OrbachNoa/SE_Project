@@ -323,8 +323,20 @@ class InputScreen(Screen):
             self._editor_widget.deleteLater()
 
         self._editor_widget = CalendarEditorWidget(period_vms)
-        self._editor_widget.data_changed.connect(self.mark_inputs_dirty)
+        self._editor_widget.data_changed.connect(self._on_period_data_changed)
         self.right_col.insertWidget(0, self._editor_widget, stretch=1)
+
+    # A period date/exclusion change both dirties the inputs and re-gates Generate,
+    # so an invalid date range immediately disables generation.
+    def _on_period_data_changed(self) -> None:
+        self.mark_inputs_dirty()
+        self._presenter.refresh_generate_button()
+
+    # True when there is no period editor yet, or its current range is valid.
+    def is_period_range_valid(self) -> bool:
+        if self._editor_widget is None:
+            return True
+        return self._editor_widget.is_valid()
 
     # Error popups
     def show_import_error(self, data_label: str, detail: str) -> None:
@@ -377,14 +389,14 @@ class InputScreen(Screen):
 
     @_selected_program_ids.setter
     def _selected_program_ids(self, val: List[str]) -> None:
-        self.program_selector_card._selected_program_ids = val
+        self.program_selector_card.set_selected_program_ids(val)
 
     @property
     def _programs_count_badge(self):
-        return self.program_selector_card._programs_count_badge
+        return self.program_selector_card.programs_count_badge
 
     def _refresh_program_summary(self) -> None:
-        self.program_selector_card._refresh_program_summary()
+        self.program_selector_card.refresh_summary()
 
     def _selected_mode(self) -> ImportMode:
         return self._presenter.selected_mode()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass
 from typing import List, Optional, TYPE_CHECKING
@@ -637,6 +638,9 @@ class AppController(QObject):
         """Acts as a cleanup intercept hook to eliminate zombie or orphan background worker allocations."""
         self.cancel_scheduling()
         self._scheduler.shutdown_pool()
+        repo = self._get_schedule_repository()
+        if repo is not None and hasattr(repo, "close"):
+            repo.close()
 
     def warm_up_clustering_async(self) -> None:
         """Pre-import and lightly prime the clustering engine on a background thread.
@@ -646,7 +650,12 @@ class AppController(QObject):
         tiny run primes both paths so opening the Clusters screen later does not
         spend that time on the user interaction.
         """
-        def _import_clustering_engine() -> None:
+        threading.Thread(target=self._warm_up_clustering_engine, daemon=True).start()
+
+    @staticmethod
+    def _warm_up_clustering_engine() -> None:
+        """Best-effort clustering warm-up; never surface failures to the GUI."""
+        try:
             from src.application.services.ClusteringCoordinator import ClusteringCoordinator  # noqa: F401
             from src.logic.clustering.ScikitLearnKMeansStrategy import ScikitLearnKMeansStrategy
             import numpy as np
@@ -661,8 +670,8 @@ class AppController(QObject):
                 dtype=float,
             )
             ScikitLearnKMeansStrategy(n_init=1, max_iter=5).cluster(sample, 2)
-
-        threading.Thread(target=_import_clustering_engine, daemon=True).start()
+        except Exception:
+            logging.getLogger(__name__).debug("Clustering warm-up failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Private — SchedulerWorker signal handlers

@@ -93,6 +93,14 @@ def label(criterion: str) -> str:
     return CRITERION_LABELS.get(criterion, criterion)
 
 
+def is_lower_better(criterion: str) -> bool:
+    """True when a lower raw score is the better outcome for this criterion.
+
+    Public accessor so GUI code does not import the private _NEGATED set.
+    """
+    return criterion in _NEGATED
+
+
 def criterion_summary(criterion: str) -> str:
     """Help description/summary for a criterion id."""
     return CRITERION_SUMMARIES.get(criterion, "")

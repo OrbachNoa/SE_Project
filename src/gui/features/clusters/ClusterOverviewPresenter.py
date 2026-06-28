@@ -31,27 +31,63 @@ class ClusterOverviewPresenter:
         self._pending_request_text: str = ""
         self._last_k: Optional[int] = None
 
+        # True only while this screen is the one currently visible. Together with
+        # the current-worker check it guards the finished/failed handlers so a
+        # cluster worker that completes after the user has left (clustering can
+        # take seconds) cannot touch a hidden screen or pop a stale dialog.
+        self._is_active = False
+        self._retired_workers: List = []
+
     # Entry point: compute clusters. Reuse the last active K if one exists so
     # the view stays consistent after a generation run invalidates the cache.
     # If entering for the first time (no active clusters), use default automatic K.
     def on_enter(self) -> None:
+        self._is_active = True
         if self._controller.has_clusters():
             # Restore last request text in the input field
             if self._last_request_text:
-                self._view._request_input.setText(self._last_request_text)
+                self._view.set_request_text(self._last_request_text)
             else:
-                self._view._request_input.setText("")
+                self._view.clear_request_text()
             # Use last active K for consistency
             prev_k = self._controller.get_active_k()
             self._kick_off(k=prev_k or None, recompute=False)
         else:
             self._last_k = None
             self._last_request_text = ""
-            self._view._request_input.setText("")
+            self._view.clear_request_text()
             self._kick_off(k=None, recompute=False)
 
     def on_leave(self) -> None:
-        pass
+        """Discard the in-flight worker so its late result cannot touch this screen."""
+        self._is_active = False
+        self._view.set_busy(False)
+        worker = self._worker
+        self._worker = None
+        if worker is not None and worker.isRunning():
+            # These workers run a single synchronous compute with no event loop,
+            # so they cannot be interrupted — the real protection is the
+            # _is_active / current-worker guard in the handlers, which ignores
+            # late results. We keep a reference until the thread ends so the
+            # QThread is not garbage-collected mid-run, then deleteLater it.
+            self._retired_workers.append(worker)
+            worker.finished.connect(lambda *a, w=worker: self._cleanup_retired_worker(w))
+            worker.failed.connect(lambda *a, w=worker: self._cleanup_retired_worker(w))
+        elif worker is not None:
+            try:
+                worker.deleteLater()
+            except RuntimeError:
+                pass
+
+    def _cleanup_retired_worker(self, worker) -> None:
+        try:
+            self._retired_workers.remove(worker)
+        except ValueError:
+            pass
+        try:
+            worker.deleteLater()
+        except RuntimeError:
+            pass
 
     # User changed K and pressed Apply — re-cluster without re-fitting the engine.
     def on_apply_k(self, k: int) -> None:
@@ -74,9 +110,10 @@ class ClusterOverviewPresenter:
         self._view.set_busy(True)
         from src.infrastructure.concurrency.ClusterRequestWorker import ClusterRequestWorker
         self._worker = ClusterRequestWorker(self._controller, text, k)
-        self._worker.finished.connect(self._on_request_worker_finished)
-        self._worker.failed.connect(self._on_worker_failed)
-        self._worker.start()
+        worker = self._worker
+        worker.finished.connect(lambda bundle, w=worker: self._on_request_worker_finished(bundle, w))
+        worker.failed.connect(lambda message, w=worker: self._on_worker_failed(message, w))
+        worker.start()
 
     def on_open_cluster(self, cluster_id: int) -> None:
         self._detail.enter_cluster(cluster_id)
@@ -131,19 +168,28 @@ class ClusterOverviewPresenter:
             self._view.set_busy(True)
 
         self._worker = ClusterWorker(coordinator, k=k)
-        self._worker.finished.connect(self._on_worker_finished)
-        self._worker.failed.connect(self._on_worker_failed)
-        self._worker.start()
+        worker = self._worker
+        worker.finished.connect(lambda run, w=worker: self._on_worker_finished(run, w))
+        worker.failed.connect(lambda message, w=worker: self._on_worker_failed(message, w))
+        worker.start()
 
-    def _on_request_worker_finished(self, bundle) -> None:
+    def _is_stale(self, worker) -> bool:
+        """True if a worker callback arrives after the screen left or was superseded."""
+        return not self._is_active or (worker is not None and worker is not self._worker)
+
+    def _on_request_worker_finished(self, bundle, worker=None) -> None:
         """Handler for ClusterRequestWorker.finished — commit + render."""
+        if self._is_stale(worker):
+            return
         cards = self._controller.commit_request_run(bundle)
         self._finish_render(bundle.run, cards)
         self._last_request_text = self._pending_request_text
         self._last_k = bundle.run.result.k
 
-    def _on_worker_finished(self, run) -> None:
+    def _on_worker_finished(self, run, worker=None) -> None:
         """Handler for ClusterWorker.finished (on_enter / on_apply_k path)."""
+        if self._is_stale(worker):
+            return
         try:
             cards = self._controller.cards_from_run(run)
         except Exception as error:
@@ -205,13 +251,18 @@ class ClusterOverviewPresenter:
         )
         self._warn_capped_k(run.result.requested_k or active_k, custom_warn)
 
-    def _on_worker_failed(self, message: str) -> None:
+    def _on_worker_failed(self, message: str, worker=None) -> None:
+        # Always log the failure, even if the user already left, so the error
+        # is not silently swallowed.
+        failed_worker = worker if worker is not None else self._worker
+        if failed_worker is not None:
+            self._controller.log_worker_error(failed_worker.last_error)
+        if self._is_stale(worker):
+            return
         self._view.set_busy(False)
         self._view.render_cards([])
         self._view.set_summary("")
         self._view.show_message(f"Could not compute clusters: {message}")
-        if self._worker is not None:
-            self._controller.log_worker_error(self._worker.last_error)
 
     def _warn_capped_k(self, requested_k: Optional[int], custom_warning: Optional[str] = None) -> None:
         """Alert the user if a ConvergenceWarning fired during clustering."""

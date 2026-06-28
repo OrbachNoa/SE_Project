@@ -62,4 +62,7 @@ class ClusterComparisonViewModel:
     # Raw feature dicts for differential indicators: criterion_id -> display string
     left_features: dict = field(default_factory=dict)
     right_features: dict = field(default_factory=dict)
+    # Precomputed winner per criterion: criterion_id -> "left" | "right" | "".
+    # Built from raw numeric scores so the view never parses display strings.
+    better_by_criterion: dict = field(default_factory=dict)
 

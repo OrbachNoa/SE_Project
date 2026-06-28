@@ -21,8 +21,8 @@ from PyQt6.QtWidgets import (
 
 from src.application.viewmodels.ClusterViewModel import ClusterCardViewModel
 from src.logic.clustering.CriterionDisplay import display_value, label
-from src.gui.features.clusters.widgets.AllMetricsDialog import AllMetricsDialog
-from src.gui.features.clusters.widgets.MetricWidgetFactory import create_metric_widgets
+from gui.features.clusters.widgets.AllMetricsDialog import AllMetricsDialog
+from gui.features.clusters.widgets.MetricWidgetFactory import create_metric_widgets
 
 
 
@@ -112,7 +112,7 @@ class ClusterCardWidget(QFrame):
         self._defining_criterion = card.defining_criterion
 
         # Sort all summary items by their goodness percentage and display the top 5
-        from src.gui.features.clusters.widgets.MetricWidgetFactory import display_value_to_percentage
+        from gui.features.clusters.widgets.MetricWidgetFactory import display_value_to_percentage
         sorted_summary = sorted(
             formatted_summary,
             key=lambda item: display_value_to_percentage(item[0], item[2]),
