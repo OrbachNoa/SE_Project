@@ -84,6 +84,7 @@ class ScheduleScorer:
         for programs in elective_programs.values():
             all_programs.update(programs)
         program_ids = {program: i for i, program in enumerate(all_programs)}
+        self._elective_program_count = len(program_ids)
 
         # Mandatory span uses its own (program, year, semester) id space,
         # distinct from the gap cohorts above -- span is checker-scoped by
@@ -134,6 +135,7 @@ class ScheduleScorer:
         touched_any = []
         span_bounds = {}
         elective_counts = {}
+        elective_pair_totals = [0] * self._elective_program_count
         day_counts = {}
         max_per_day = 0
         key_factor = 1_000_000
@@ -185,7 +187,9 @@ class ScheduleScorer:
             if elective_programs:
                 for program_id in elective_programs:
                     key = program_id * key_factor + day
-                    elective_counts[key] = elective_counts.get(key, 0) + 1
+                    old_count = elective_counts.get(key, 0)
+                    elective_counts[key] = old_count + 1
+                    elective_pair_totals[program_id] += old_count
 
         min_mandatory_gap = None
         for group_id in touched_obligatory:
@@ -220,9 +224,10 @@ class ScheduleScorer:
                 if span > mandatory_span:
                     mandatory_span = span
 
-        # Sort score uses the legacy "peak crowding minus one" metric. The
-        # threshold checker still enforces pair-conflict caps separately.
-        elective_conflicts = max((n - 1 for n in elective_counts.values()), default=0)
+        # Elective conflicts are pair-conflicts per program, matching
+        # ElectiveConflictCapChecker: adding the n-th same-day elective creates
+        # n-1 new conflicting pairs, accumulated above as old_count.
+        elective_conflicts = max(elective_pair_totals, default=0)
 
         return {
             MIN_MANDATORY_GAP: float(
@@ -441,7 +446,7 @@ class _IncrementalScoreState:
                 min_mandatory_gap if min_mandatory_gap is not None else (self._allowed_window_size if self._has_slots else 10_000)
             ),
             AVG_ALL_COURSES_GAP: float(self._any_gaps.avg_gap()),
-            ELECTIVE_CONFLICTS: -float(max((n - 1 for n in self._elective_counts.values()), default=0)),
+            ELECTIVE_CONFLICTS: -float(max(self._elective_pair_totals.values(), default=0)),
             MANDATORY_SPAN: float(mandatory_span),
             MAX_EXAMS_PER_DAY: -float(self._max_per_day),
         }

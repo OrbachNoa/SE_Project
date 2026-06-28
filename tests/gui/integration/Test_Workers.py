@@ -176,6 +176,40 @@ def test_worker_unexpected_queue_read_error_is_mapped_not_raw(mock_repository):
 
 
 # ===========================================================================
+# TC-SCHED-WORK-002d: when run_id filtering is enabled, malformed unwrapped
+# queue payloads are reported as clean IPC errors instead of escaping the worker.
+# ===========================================================================
+def test_worker_malformed_run_id_payload_is_mapped_not_raised(mock_repository):
+    # Arrange
+    mock_queue = MagicMock()
+    mock_process = MagicMock()
+    mock_cancel_event = MagicMock()
+
+    mock_queue.get.side_effect = [("PROGRESS", 50)]
+
+    worker = SchedulerWorker(
+        mock_queue,
+        mock_cancel_event,
+        [mock_process],
+        mock_repository,
+        expected_run_id=7,
+    )
+    messages = []
+    worker.error_occurred.connect(messages.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert len(messages) == 1
+    assert "Malformed scheduler IPC message" not in messages[0]
+    assert worker.last_error is not None
+    assert worker.last_error.code == "SCHEDULER_IPC_ERROR"
+    assert worker.last_error.recoverable is False
+    assert "Malformed scheduler IPC message" in worker.last_error.technical_message
+
+
+# ===========================================================================
 # TC-SCHED-WORK-003: Test that cancel flow sets event, drains queue, and terminates process if needed.
 # ===========================================================================
 def test_worker_cancel_graceful_and_terminate(mock_repository):

@@ -25,6 +25,7 @@ import pytest
 from src.logic.clustering.KMeansClusteringStrategy import KMeansClusteringStrategy
 from src.logic.clustering.AutoKSelector import AutoKSelector
 from src.logic.clustering.ScheduleSampler import ScheduleSampler
+from src.logic.clustering.WeightedEuclideanDistanceMetric import WeightedEuclideanDistanceMetric
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +132,41 @@ def test_kmeans_clustering_rejects_an_empty_point_set():
         strategy.cluster(empty_points, k=2)
 
 
+# ===========================================================================
+# TC-CLU-021A: the scikit-learn KMeans path applies configured feature weights
+# during cluster assignment, while reporting centroids in original coordinates.
+# ===========================================================================
+def test_sklearn_kmeans_clustering_applies_feature_weights():
+    # Arrange
+    pytest.importorskip("sklearn")
+    from src.logic.clustering.ScikitLearnKMeansStrategy import ScikitLearnKMeansStrategy
+
+    points = np.array([
+        [0.0, 0.0],
+        [0.0, 10.0],
+        [1.0, 0.0],
+        [1.0, 10.0],
+    ])
+    strategy = ScikitLearnKMeansStrategy(
+        n_init=20,
+        random_state=42,
+        weights=[400.0, 1.0],
+    )
+
+    # Act
+    output = strategy.cluster(points, k=2)
+
+    # Assert
+    member_sets = [
+        set(np.where(output.labels == cluster_id)[0].tolist())
+        for cluster_id in sorted(set(output.labels.tolist()))
+    ]
+    assert {0, 1} in member_sets
+    assert {2, 3} in member_sets
+    assert sorted(output.centroids[:, 0].tolist()) == [0.0, 1.0]
+    assert output.centroids[:, 1].tolist() == [5.0, 5.0]
+
+
 # ---------------------------------------------------------------------------
 # AutoKSelector TC-CLU-022..023
 # ---------------------------------------------------------------------------
@@ -172,6 +208,27 @@ def test_auto_k_selector_handles_a_degenerate_small_population():
     # Assert
     assert selection.k == 2
     assert selection.scores == {}
+
+
+# ===========================================================================
+# TC-CLU-023A: Auto-K silhouette distances use the injected metric, so weighted
+# clustering evaluates K in the same geometry used for assignments.
+# ===========================================================================
+def test_auto_k_selector_distance_matrix_uses_weighted_metric():
+    # Arrange
+    points = np.array([
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [0.0, 10.0],
+    ])
+    selector = AutoKSelector(metric=WeightedEuclideanDistanceMetric([400.0, 1.0]))
+
+    # Act
+    dist = selector._build_dist_matrix(points)
+
+    # Assert
+    assert dist[0, 1] == pytest.approx(20.0)
+    assert dist[0, 2] == pytest.approx(10.0)
 
 
 # ---------------------------------------------------------------------------

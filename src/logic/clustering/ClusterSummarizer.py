@@ -97,8 +97,8 @@ _PHRASES = {
         "High department-specific exam concurrency",
     ),
     MAX_REST_DAYS: (
-        "Longer recovery windows between exams",
         "Compact exam spacing overall",
+        "Longer inactive gaps between exams",
     ),
     INSTRUCTOR_EXAM_GAP: (
         "Excellent instructor grading gaps",

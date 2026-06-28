@@ -99,13 +99,15 @@ class AutoKSelector:
         return points[idx]
 
     def _build_dist_matrix(self, points: np.ndarray) -> np.ndarray:
-        """Euclidean pairwise distance matrix for the eval sub-sample."""
+        """Pairwise distance matrix for the eval sub-sample."""
         p32 = points.astype(np.float32, copy=False)
-        if _HAS_SKLEARN:
+        if _HAS_SKLEARN and isinstance(self._metric, EuclideanDistanceMetric):
             from sklearn.metrics import pairwise_distances
             return pairwise_distances(p32, metric='euclidean')
-        diff = p32[:, np.newaxis, :] - p32[np.newaxis, :, :]
-        return np.linalg.norm(diff, axis=2).astype(np.float32)
+        metric_dist = self._metric.distance_to_centroids(p32, p32)
+        if metric_dist.shape != (p32.shape[0], p32.shape[0]):
+            raise ValueError("metric returned an invalid pairwise distance matrix")
+        return metric_dist.astype(np.float32, copy=False)
 
     def _silhouette_precomputed(self, dist: np.ndarray, labels: np.ndarray) -> float:
         """Mean silhouette from a precomputed (n, n) distance matrix."""

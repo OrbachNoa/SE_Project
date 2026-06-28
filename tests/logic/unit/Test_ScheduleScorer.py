@@ -106,7 +106,7 @@ def test_score_avg_all_courses_gap_for_three_exams(
 
 # ===========================================================================
 # TC-SCO-004: ScheduleScorer.score — three electives piled on the same day
-# score ELECTIVE_CONFLICTS = -2.0 (peak 3, minus one, negated).
+# score ELECTIVE_CONFLICTS = -3.0 (three same-day elective pairs, negated).
 # ===========================================================================
 def test_score_elective_conflicts_for_three_electives_same_day(
     make_course, make_program_entry, make_assignment, empty_schedule,
@@ -124,7 +124,7 @@ def test_score_elective_conflicts_for_three_electives_same_day(
     result = scorer.score(schedule)
 
     # Assert
-    assert result[ELECTIVE_CONFLICTS] == -2.0
+    assert result[ELECTIVE_CONFLICTS] == -3.0
 
 
 # ===========================================================================

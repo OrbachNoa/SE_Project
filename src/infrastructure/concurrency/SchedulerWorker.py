@@ -14,6 +14,9 @@ from src.application.errors.ErrorModel import (
 )
 from src.application.errors.ExceptionMapper import default_registry
 
+_STALE_MESSAGE = object()
+_MALFORMED_MESSAGE = object()
+
 
 class SchedulerWorker(QThread):
     """
@@ -124,23 +127,18 @@ class SchedulerWorker(QThread):
                     # boundary so the user never sees a raw str(e); the unknown-fallback
                     # context keeps the historical CRITICAL/non-recoverable/IPC code for
                     # whatever this exception turns out to be.
-                    info = self._errors.map(e, {
-                        "category": ErrorCategory.INFRASTRUCTURE,
-                        "severity": ErrorSeverity.CRITICAL,
-                        "recoverable": False,
-                        "fallback_code": "SCHEDULER_IPC_ERROR",
-                        "stage": "ipc_read",
-                    })
-                    self._emit_error(info)
+                    self._emit_ipc_error(e)
                     break
 
                 if self._expected_run_id is not None:
                     # Producer wraps every message as (run_id, payload) when
                     # given a run_id; drop anything tagged for a different
                     # (stale) run instead of acting on it.
-                    run_id, payload = payload
-                    if run_id != self._expected_run_id:
+                    payload = self._unwrap_expected_run_payload(payload)
+                    if payload is _STALE_MESSAGE:
                         continue
+                    if payload is _MALFORMED_MESSAGE:
+                        break
 
                 # Choose the correct handler according to the message type.
                 handler = self._dispatch.get(msg_type)
@@ -171,6 +169,30 @@ class SchedulerWorker(QThread):
             ))
         else:
             self.search_finished.emit()
+
+    def _unwrap_expected_run_payload(self, payload):
+        """Return the inner payload, or a sentinel for stale/malformed wrappers."""
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            self._emit_ipc_error(RuntimeError(
+                "Malformed scheduler IPC message: expected (run_id, payload)"
+            ))
+            return _MALFORMED_MESSAGE
+
+        run_id, inner_payload = payload
+        if run_id != self._expected_run_id:
+            return _STALE_MESSAGE
+        return inner_payload
+
+    def _emit_ipc_error(self, exc: Exception) -> None:
+        """Map an IPC boundary failure to the standard scheduler IPC error."""
+        info = self._errors.map(exc, {
+            "category": ErrorCategory.INFRASTRUCTURE,
+            "severity": ErrorSeverity.CRITICAL,
+            "recoverable": False,
+            "fallback_code": "SCHEDULER_IPC_ERROR",
+            "stage": "ipc_read",
+        })
+        self._emit_error(info)
 
     def cancel(self) -> None:
         """Requests cancellation and then stops any process that did not exit by itself."""

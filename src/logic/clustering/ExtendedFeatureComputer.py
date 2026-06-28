@@ -85,7 +85,7 @@ class ExtendedFeatureComputer:
             gaps = [(sorted_dates[i + 1] - sorted_dates[i]).days
                     for i in range(len(sorted_dates) - 1)]
             result[GAP_STD_DEV] = -statistics.pstdev(gaps)
-            result[MAX_REST_DAYS] = float(max(gaps))
+            result[MAX_REST_DAYS] = -float(max(gaps))
         else:
             result[GAP_STD_DEV] = 0.0
             result[MAX_REST_DAYS] = 0.0

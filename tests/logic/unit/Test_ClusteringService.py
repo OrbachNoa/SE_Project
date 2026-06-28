@@ -2,7 +2,7 @@
 extraction, normalization, K selection, and the clustering strategy into a
 single fit()/cluster() pipeline and reports the outcome as a ClusterResult.
 
-This file owns TC-CLU-028 through TC-CLU-032. The "CLU" prefix is shared
+This file owns TC-CLU-028 through TC-CLU-033. The "CLU" prefix is shared
 across four sibling files that each cover one layer of the clustering
 subsystem as a single numbered family:
   - Test_ClusteringFeatures.py          TC-CLU-001..010 (feature extraction)
@@ -20,6 +20,7 @@ ExamAssignment, etc.) for the scheduling engine, whereas these tests only
 need bare ScheduleDTO score dictionaries and ClusteringService/ClusterConfig
 instances, which are cheaper and clearer to construct inline per test.
 """
+import numpy as np
 import pytest
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
@@ -154,3 +155,35 @@ def test_clustering_service_result_reports_only_the_configured_criteria():
     # Assert
     assert result.criteria == [MANDATORY_SPAN]
     assert set(result.clusters[0].summary.keys()) == {MANDATORY_SPAN}
+
+
+# ===========================================================================
+# TC-CLU-033: weighted criteria affect the sklearn-backed cluster assignment,
+# not only the later representative-picking step.
+# ===========================================================================
+def test_clustering_service_applies_config_weights_to_cluster_assignment():
+    # Arrange
+    raw_vectors = np.array([
+        [0.0, 0.0],
+        [0.0, 10.0],
+        [1.0, 0.0],
+        [1.0, 10.0],
+    ])
+    config = ClusterConfig(
+        criteria=(MIN_MANDATORY_GAP, MANDATORY_SPAN),
+        weights={MIN_MANDATORY_GAP: 400.0},
+        normalizer="minmax",
+        k_mode="fixed",
+        k=2,
+        seed=42,
+    )
+    service = ClusteringService(config)
+    service.fit_vectors(raw_vectors)
+
+    # Act
+    result = service.cluster()
+
+    # Assert
+    member_sets = [set(cluster.member_indices) for cluster in result.clusters]
+    assert {0, 1} in member_sets
+    assert {2, 3} in member_sets

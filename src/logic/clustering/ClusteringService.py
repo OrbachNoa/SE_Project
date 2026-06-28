@@ -63,18 +63,13 @@ class ClusteringService:
         self._config = config or ClusterConfig.default()
         self._extractor = ScoreFeatureExtractor(self._config.criteria)
         self._metric = self._build_metric(self._config)
+        self._strategy_override = strategy is not None
         # Prefer the scikit-learn strategy (faster, multiple restarts); fall
         # back to the in-house implementation when sklearn is not installed.
         if strategy is not None:
             self._strategy = strategy
-        elif _SKLEARN_AVAILABLE:
-            self._strategy = ScikitLearnKMeansStrategy(
-                random_state=self._config.seed
-            )
         else:
-            self._strategy = KMeansClusteringStrategy(
-                metric=self._metric, seed=self._config.seed
-            )
+            self._strategy = self._build_strategy(self._config, self._metric)
         self._auto_k = AutoKSelector(
             strategy=self._strategy, metric=self._metric, seed=self._config.seed
         )
@@ -140,10 +135,8 @@ class ClusteringService:
                 pass
             self._extractor = ScoreFeatureExtractor(self._config.criteria)
             self._metric = self._build_metric(self._config)
-            if not _SKLEARN_AVAILABLE:
-                self._strategy = KMeansClusteringStrategy(
-                    metric=self._metric, seed=self._config.seed
-                )
+            if not self._strategy_override:
+                self._strategy = self._build_strategy(self._config, self._metric)
             self._auto_k = AutoKSelector(
                 strategy=self._strategy, metric=self._metric, seed=self._config.seed
             )
@@ -243,6 +236,15 @@ class ClusteringService:
         if any(abs(w - 1.0) > 1e-9 for w in weights):
             return WeightedEuclideanDistanceMetric(weights)
         return EuclideanDistanceMetric()
+
+    @staticmethod
+    def _build_strategy(config: ClusterConfig, metric: IDistanceMetric) -> IClusteringStrategy:
+        if _SKLEARN_AVAILABLE:
+            return ScikitLearnKMeansStrategy(
+                random_state=config.seed,
+                weights=config.weight_vector(),
+            )
+        return KMeansClusteringStrategy(metric=metric, seed=config.seed)
 
     def _pick_representative(self, member_indices: List[int], centroid: np.ndarray) -> int:
         """Member closest to the centroid is the family's archetype."""

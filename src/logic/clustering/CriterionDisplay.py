@@ -79,6 +79,7 @@ _NEGATED = {
     BUSIEST_WEEK_COUNT,
     MANDATORY_CONSEC,
     GAP_STD_DEV,
+    MAX_REST_DAYS,
     B2B_EXAM_INCIDENCE,
     DEPT_EXAM_CONCURRENCY,
 }
@@ -94,7 +95,7 @@ def label(criterion: str) -> str:
 
 
 def is_lower_better(criterion: str) -> bool:
-    """True when a lower raw score is the better outcome for this criterion.
+    """True when a lower natural/display value is better for this criterion.
 
     Public accessor so GUI code does not import the private _NEGATED set.
     """
