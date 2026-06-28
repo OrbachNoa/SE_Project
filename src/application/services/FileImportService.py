@@ -16,6 +16,10 @@ from src.application.errors.ExceptionMapper import (
 )
 from src.application.errors.ErrorLogger import ErrorLogger
 
+
+_SUPPORTED_FILE_TYPES = ("courses", "periods")
+
+
 class FileImportService:
     """Orchestrates import process: validate → cache? → parse → merge → persist."""
 
@@ -44,6 +48,11 @@ class FileImportService:
 
     def load_file(self, path: str, file_type: str, mode: ImportMode) -> ImportResult:
         """Main entry point for loading a file. Validates, checks cache, parses, merges, and persists."""
+        try:
+            self._validate_supported_file_type(file_type)
+        except ValueError as e:
+            return self._failure(e, path, file_type)
+
         try:
             file_validator.validate_file_exists(path)
             file_validator.validate_file_not_empty(path)
@@ -109,9 +118,19 @@ class FileImportService:
         self._error_logger.log(info, cause=exc)
         return ImportResult.failure(info)
 
+    def _validate_supported_file_type(self, file_type: str) -> None:
+        if file_type not in _SUPPORTED_FILE_TYPES:
+            supported = ", ".join(_SUPPORTED_FILE_TYPES)
+            raise ValueError(
+                f"Unsupported import file type '{file_type}'. "
+                f"Supported types: {supported}."
+            )
+
     def _loaded_count(self, file_type: str) -> int:
         """Helper to get count of items by type."""
+        self._validate_supported_file_type(file_type)
+        if file_type == "courses":
+            return len(self._state.get_courses())
         if file_type == "periods":
             return len(self._state.get_periods())
-        # For any other file type, return the course count.
-        return len(self._state.get_courses())
+        raise AssertionError("unreachable supported file type branch")

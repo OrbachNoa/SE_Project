@@ -6,7 +6,7 @@ from typing import Dict, List
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
-    QFrame, QWidget, QMessageBox, QSizePolicy,
+    QFrame, QMessageBox,
 )
 from gui.core.styles.Theme import APP_STYLESHEET
 from gui.core.styles.DialogStyles import DIALOG_STYLESHEET
@@ -30,7 +30,7 @@ class _ProgramCard(QFrame):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(10)
 
-        # Creates the little checkbox square on the left of the card
+        # The checkbox indicator shown on the left of the card.
         self._box = QLabel("")
         self._box.setObjectName("prog-card-box")
         self._box.setFixedSize(20, 20)
@@ -163,7 +163,7 @@ class ProgramSelectorDialog(QDialog):
 
         self._refresh_counter()
 
-    # The main logic for handling clicks: adds the program if it fits, removes it if it's already there
+    # Toggle a program's selection, enforcing the configured maximum.
     def _toggle(self, program_id: str) -> None:
         if program_id in self._selected:
             self._selected.remove(program_id)

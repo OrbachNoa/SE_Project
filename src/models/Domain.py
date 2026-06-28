@@ -5,3 +5,11 @@ It contains the data structures used by the scheduler.
 from .Course import Course, ProgramEntry
 from .ExamPeriod import ExamPeriod
 from .ExamSchedule import ExamSchedule, ExamAssignment
+
+__all__ = [
+    "Course",
+    "ProgramEntry",
+    "ExamPeriod",
+    "ExamSchedule",
+    "ExamAssignment",
+]

@@ -145,6 +145,23 @@ The user may also go back to update the exsiting data (by updating the calendar 
 * **Dependencies:** Install the project dependencies via `requirements.txt`.
 * **PyQt6:** used for the GUI.
 
+Create and activate a virtual environment first, so the dependencies install in an isolated environment instead of your global Python:
+
+```bash
+python -m venv .venv
+```
+
+On Windows:
+```bash
+.venv\Scripts\activate
+```
+
+On macOS/Linux:
+```bash
+source .venv/bin/activate
+```
+
+Then install the dependencies:
 ```bash
 pip install -r requirements.txt
 ```

@@ -63,18 +63,13 @@ class ClusteringService:
         self._config = config or ClusterConfig.default()
         self._extractor = ScoreFeatureExtractor(self._config.criteria)
         self._metric = self._build_metric(self._config)
+        self._strategy_override = strategy is not None
         # Prefer the scikit-learn strategy (faster, multiple restarts); fall
         # back to the in-house implementation when sklearn is not installed.
         if strategy is not None:
             self._strategy = strategy
-        elif _SKLEARN_AVAILABLE:
-            self._strategy = ScikitLearnKMeansStrategy(
-                random_state=self._config.seed
-            )
         else:
-            self._strategy = KMeansClusteringStrategy(
-                metric=self._metric, seed=self._config.seed
-            )
+            self._strategy = self._build_strategy(self._config, self._metric)
         self._auto_k = AutoKSelector(
             strategy=self._strategy, metric=self._metric, seed=self._config.seed
         )
@@ -127,27 +122,7 @@ class ClusteringService:
         if not schedules:
             raise ValueError("cannot cluster an empty set of schedules")
 
-        # Dynamically adjust criteria to only use scores present on the schedules
-        first_schedule_scores = schedules[0].scores or {}
-        actual_criteria = [c for c in self._config.criteria if c in first_schedule_scores]
-        if not actual_criteria:
-            actual_criteria = list(self._config.criteria)
-
-        if len(actual_criteria) != len(self._config.criteria):
-            try:
-                self._config.criteria = tuple(actual_criteria)
-            except AttributeError:
-                pass
-            self._extractor = ScoreFeatureExtractor(self._config.criteria)
-            self._metric = self._build_metric(self._config)
-            if not _SKLEARN_AVAILABLE:
-                self._strategy = KMeansClusteringStrategy(
-                    metric=self._metric, seed=self._config.seed
-                )
-            self._auto_k = AutoKSelector(
-                strategy=self._strategy, metric=self._metric, seed=self._config.seed
-            )
-
+        self._validate_schedule_scores(schedules)
         raw = self._extractor.extract_many(list(schedules))
         return self.fit_vectors(raw, population_size=population_size or len(schedules))
 
@@ -223,6 +198,31 @@ class ClusteringService:
 
     # ── helpers ──────────────────────────────────────────────────────────────
 
+    def _validate_schedule_scores(self, schedules: Sequence[ScheduleDTO]) -> None:
+        """Fail clearly when DTOs are missing criteria required by this config."""
+        missing = []
+        for index, schedule in enumerate(schedules):
+            scores = schedule.scores or {}
+            missing_criteria = [
+                criterion for criterion in self._config.criteria
+                if criterion not in scores
+            ]
+            if missing_criteria:
+                missing.append((index, missing_criteria))
+
+        if not missing:
+            return
+
+        examples = "; ".join(
+            f"schedule[{index}] missing {criteria}"
+            for index, criteria in missing[:3]
+        )
+        suffix = "" if len(missing) <= 3 else f"; and {len(missing) - 3} more schedules"
+        raise ValueError(
+            "cannot cluster schedules with missing required scores: "
+            f"{examples}{suffix}"
+        )
+
     def _resolve_k(self, k: Optional[int]) -> int:
         if k is not None:
             if k <= 0:
@@ -243,6 +243,15 @@ class ClusteringService:
         if any(abs(w - 1.0) > 1e-9 for w in weights):
             return WeightedEuclideanDistanceMetric(weights)
         return EuclideanDistanceMetric()
+
+    @staticmethod
+    def _build_strategy(config: ClusterConfig, metric: IDistanceMetric) -> IClusteringStrategy:
+        if _SKLEARN_AVAILABLE:
+            return ScikitLearnKMeansStrategy(
+                random_state=config.seed,
+                weights=config.weight_vector(),
+            )
+        return KMeansClusteringStrategy(metric=metric, seed=config.seed)
 
     def _pick_representative(self, member_indices: List[int], centroid: np.ndarray) -> int:
         """Member closest to the centroid is the family's archetype."""

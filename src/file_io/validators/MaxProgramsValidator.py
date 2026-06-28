@@ -21,7 +21,7 @@ class MaxProgramsValidator(IInputValidator):
             return False
         return True
 
-    def error_message(self, selected_programs) -> str:
+    def error_message(self, selected_programs, master=None) -> str:
         """
         Returns an error message if the validation fails.
         """

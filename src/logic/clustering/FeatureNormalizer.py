@@ -62,19 +62,6 @@ class FeatureNormalizer:
         if self._min is None or self._range is None:
             raise RuntimeError("normalizer used before fit() was called")
 
-
-def normalize_features(vectors: np.ndarray) -> np.ndarray:
-    """Min-max normalize an (n, d) matrix to [0, 1] per column.
-
-    Identical-value columns map to 0.0 (not NaN).  Empty input (0 rows)
-    returns the same empty array without raising.
-
-    This is a convenience wrapper for callers that want a one-call API
-    without constructing a ``FeatureNormalizer`` explicitly.
-    """
-    return FeatureNormalizer().fit_transform(np.asarray(vectors, dtype=float))
-
-
 class ZScoreNormalizer:
     """Fits per-feature mean/std and rescales vectors using Z-score (standardization)
     with soft clipping at [-3.0, 3.0] to handle outliers gracefully.

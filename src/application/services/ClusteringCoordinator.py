@@ -20,6 +20,10 @@ from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.logic.clustering.Cluster import ClusterResult
 from src.logic.clustering.ClusterConfig import ClusterConfig
 from src.logic.clustering.ClusteringService import ClusteringService
+from src.logic.clustering.ExtendedFeatureComputer import (
+    ALL_EXTENDED_FEATURES,
+    ExtendedFeatureComputer,
+)
 from src.logic.clustering.ScheduleSampler import ScheduleSampler
 
 
@@ -66,6 +70,7 @@ class ClusteringCoordinator:
 
         sampler = ScheduleSampler(max_sample=cfg.max_sample, seed=cfg.seed)
         sampled_ids = sampler.sample_indices(population)
+        self._ensure_extended_scores(cfg, sampled_ids)
         ids, vectors = self._repo.read_score_vectors(list(cfg.criteria), sampled_ids)
 
         if len(vectors) == 0:
@@ -90,7 +95,6 @@ class ClusteringCoordinator:
 
     def _detect_flat_criteria(self, ids, vectors, criteria) -> List[str]:
         """Return list of criterion IDs with near-zero variance."""
-        import numpy as np
         if vectors.shape[0] < 2:
             return []
         variances = vectors.var(axis=0)
@@ -99,6 +103,21 @@ class ClusteringCoordinator:
             if variances[i] < 1e-6:
                 flat.append(c)
         return flat
+
+    def _ensure_extended_scores(self, cfg: ClusterConfig, sampled_ids: List[int]) -> None:
+        """Compute extended features only for the clustering snapshot that needs them."""
+        requested = [c for c in cfg.criteria if c in ALL_EXTENDED_FEATURES]
+        if not requested:
+            return
+        if not hasattr(self._repo, "get_schedules_by_ids") or not hasattr(self._repo, "update_extended_scores"):
+            return
+
+        schedules = self._repo.get_schedules_by_ids(sampled_ids)
+        if not schedules:
+            return
+
+        score_rows = [ExtendedFeatureComputer.compute(schedule) for schedule in schedules]
+        self._repo.update_extended_scores(sampled_ids[:len(score_rows)], score_rows)
 
     def cluster(self, k: Optional[int] = None) -> ClusteringRun:
         """Partition the already-fitted working set into K families.

@@ -31,6 +31,7 @@ class SchedulerProcessRunner:
         work_source,
         scorer=None,
         result_counter=None,
+        run_id=None,
     ) -> None:
         if work_source is None:
             raise ValueError("SchedulerProcessRunner requires a work_source")
@@ -52,6 +53,10 @@ class SchedulerProcessRunner:
         self._work_source = work_source
         # Shared counter so all processes respect the same max_results limit.
         self._result_counter = result_counter
+        # Identifies which generation run this process is working on; forwarded
+        # to the observer so its messages can be told apart from a stale,
+        # just-cancelled run on the shared result queue.
+        self._run_id = run_id
 
 
     def run(self) -> None:
@@ -114,6 +119,7 @@ class SchedulerProcessRunner:
             result_counter=self._result_counter,
             result_limit=self._max_results,
             slots=self._slots,
+            run_id=self._run_id,
         )
 
     def _create_scheduler(self) -> Scheduler:

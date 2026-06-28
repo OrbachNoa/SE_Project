@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import List
+from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -17,4 +17,4 @@ class WorkUnit:
 
     # seed_dates[i] is the fixed date for slots[i].
     # The worker continues the search from len(seed_dates).
-    seed_dates: List[date]
+    seed_dates: Tuple[date, ...]

@@ -246,7 +246,7 @@ class OutputScreen(Screen):
 
     def _on_open_sort_panel(self) -> None:
         from gui.features.output.widgets.SortConfigPanel import SortConfigPanel
-        current_priority = self._presenter._controller.get_current_sort_priority()
+        current_priority = self._presenter.get_current_sort_priority()
         dialog = SortConfigPanel(current_priority, self)
         dialog.config_changed.connect(self._presenter.on_sort_config_changed)
         dialog.exec()
@@ -254,19 +254,18 @@ class OutputScreen(Screen):
     def _on_open_clusters(self) -> None:
         """Navigate to the cluster overview screen (registered as "clusters")."""
         from PyQt6.QtCore import QCoreApplication
-        from PyQt6.QtGui import QCursor, QGuiApplication
-        
-        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
-        self.solution_bar.clusters_btn.setText("Loading Clusters...")
-        self.solution_bar.clusters_btn.setEnabled(False)
-        QCoreApplication.processEvents()
-        
-        try:
-            self._presenter._router.show("clusters")
-        finally:
-            QGuiApplication.restoreOverrideCursor()
-            self.solution_bar.clusters_btn.setText("View Clusters")
-            self.solution_bar.clusters_btn.setEnabled(True)
+
+        from gui.common.BusyCursorGuard import BusyCursorGuard
+
+        with BusyCursorGuard():
+            self.solution_bar.clusters_btn.setText("Loading Clusters...")
+            self.solution_bar.clusters_btn.setEnabled(False)
+            QCoreApplication.processEvents()
+            try:
+                self._presenter.open_clusters()
+            finally:
+                self.solution_bar.clusters_btn.setText("View Clusters")
+                self.solution_bar.clusters_btn.setEnabled(True)
 
     def _on_prev_month(self) -> None:
         self._presenter.on_prev_period()

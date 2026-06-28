@@ -20,7 +20,8 @@ class MaxExamsPerDayChecker(IConflictChecker):
 
     def check(self, assignment, schedule) -> bool:
         """
-        This function use in the search solution time.
+        Called during backtracking to decide whether one candidate assignment
+        must be rejected.
 
         Returns True if adding this assignment makes the date have more than k exams.
         """
@@ -48,7 +49,7 @@ class MaxExamsPerDayChecker(IConflictChecker):
         # Save k in local variable for shorter use.
         k = self._max_exams_per_day
 
-        # Save the messeges if we get impossible assignment.
+        # Collect feasibility errors so the UI can show all problems at once.
         errors = []
 
         # Get all possible dates from all slots.

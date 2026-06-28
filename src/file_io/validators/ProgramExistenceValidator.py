@@ -19,12 +19,13 @@ class ProgramExistenceValidator(IInputValidator):
         valid_ids = set(master) if master is not None else self._valid_ids
         return all(p_id in valid_ids for p_id in selected_programs)
 
-    def error_message(self, selected_programs) -> str:
+    def error_message(self, selected_programs, master=None) -> str:
         """
         Returns an error message if the validation fails.
         """
-        invalid = [p for p in selected_programs if p not in self._valid_ids]
+        valid_ids = set(master) if master is not None else self._valid_ids
+        invalid = [p for p in selected_programs if p not in valid_ids]
         return (
             f"Unknown program code(s): {invalid}. "
-            f"Valid codes are: {sorted(self._valid_ids)}"
+            f"Valid codes are: {sorted(valid_ids)}"
         )

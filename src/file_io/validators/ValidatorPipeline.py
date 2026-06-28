@@ -17,7 +17,12 @@ class ValidatorPipeline:
         """Registers a new validator to the end of the pipeline."""
         self._validators.append(validator)
 
-    def validate(self, data: List[str], fail_fast: bool = False) -> ValidationResult:
+    def validate(
+        self,
+        data: List[str],
+        fail_fast: bool = False,
+        master=None,
+    ) -> ValidationResult:
         """Runs registered validators against the input data and optionally stops at the first error if fail_fast is True."""
         
         # Create a central result object to aggregate all validation errors
@@ -25,7 +30,7 @@ class ValidatorPipeline:
         # Iterate over all registered validators in the pipeline
         for validator in self._validators:
             # Run the current validator on the data and get its partial result
-            partial = validator.validate_as_result(data)
+            partial = validator.validate_as_result(data, master=master)
             # Merge any found errors into our central result object
             aggregated.merge(partial)
             # If fail_fast is enabled and an error was already found

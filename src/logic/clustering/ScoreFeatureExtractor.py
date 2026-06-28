@@ -15,7 +15,7 @@ exam spread" request just selects a subset.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, Sequence
 
 import numpy as np
 
@@ -58,7 +58,14 @@ class ScoreFeatureExtractor(IFeatureExtractor):
         """Stack the feature vectors of many schedules into an (n, d) matrix."""
         if not schedules:
             return np.empty((0, len(self._criteria)), dtype=float)
-        return np.vstack([self.extract(s) for s in schedules])
+        matrix = np.empty((len(schedules), len(self._criteria)), dtype=float)
+        for row_index, schedule in enumerate(schedules):
+            scores = schedule.scores or {}
+            matrix[row_index, :] = [
+                float(scores.get(criterion, 0.0))
+                for criterion in self._criteria
+            ]
+        return matrix
 
     def extract_many_from_scores(
         self, score_dicts: Sequence[Dict[str, float]]
@@ -70,17 +77,11 @@ class ScoreFeatureExtractor(IFeatureExtractor):
         """
         if not score_dicts:
             return np.empty((0, len(self._criteria)), dtype=float)
-        return np.vstack([self.extract_from_scores(sd) for sd in score_dicts])
+        matrix = np.empty((len(score_dicts), len(self._criteria)), dtype=float)
+        for row_index, scores in enumerate(score_dicts):
+            matrix[row_index, :] = [
+                float(scores.get(criterion, 0.0))
+                for criterion in self._criteria
+            ]
+        return matrix
 
-
-def extract_feature_vectors(
-    score_dicts: Sequence[Dict[str, float]],
-    features: Optional[List[str]] = None,
-) -> np.ndarray:
-    """Extract an (n, d) feature matrix from a sequence of score dicts.
-
-    ``features`` selects a subset of the five criteria; ``None`` uses all five.
-    Missing keys in individual dicts default to 0.0.  Invalid feature names
-    raise ``ValueError``.
-    """
-    return ScoreFeatureExtractor(criteria=features).extract_many_from_scores(score_dicts)

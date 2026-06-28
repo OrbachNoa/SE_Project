@@ -92,16 +92,13 @@ def test_hybrid_state_total_pages(total_count, window_size, expected_pages, mock
     assert state.total_pages() == expected_pages
 
 # ===========================================================================
-# TC-HYB-STA-005: Verify load_page updates current page, queries window and resets current index.
+# TC-HYB-STA-005: Verify load_page updates current page without fetching the full window.
 # ===========================================================================
 def test_hybrid_state_load_page(mock_repository, make_schedule_dto):
     # Arrange
     mock_repository.count.return_value = 25
+    mock_repository.get_raw_by_ids.return_value = ({}, {}, [])
     state = HybridScheduleResultState(mock_repository, window_size=10)
-    
-    dummy_dtos = [make_schedule_dto() for _ in range(5)]
-    raw_map = {i: dummy for i, dummy in enumerate(dummy_dtos)}
-    mock_repository.get_window_raw.return_value = (raw_map, {}, [])
     state._current_index = 3 
     
     # Act
@@ -110,8 +107,9 @@ def test_hybrid_state_load_page(mock_repository, make_schedule_dto):
     # Assert
     assert state.current_page == 1
     assert state.current_index == 0
-    mock_repository.get_window_raw.assert_called_once_with(10, 10)
-    assert state.current_window_size() == 5
+    mock_repository.get_window_raw.assert_not_called()
+    mock_repository.get_raw_by_ids.assert_called_once_with([])
+    assert state.current_window_size() == 10
 
 # ===========================================================================
 # TC-HYB-STA-006: Verify load_page raises IndexError for invalid page bounds.
@@ -142,23 +140,20 @@ def test_hybrid_state_set_schedules(mock_repository):
     mock_repository.clear.assert_called_once()
 
 # ===========================================================================
-# TC-HYB-STA-008: Verify add_schedules_batch fetches new window if below capacity.
+# TC-HYB-STA-008: Verify add_schedules_batch does not reload the SQLite window.
 # ===========================================================================
-def test_hybrid_state_add_schedules_batch_under_capacity(mock_repository, make_schedule_dto):
+def test_hybrid_state_add_schedules_batch_does_not_fetch_window(mock_repository, make_schedule_dto):
     # Arrange
+    mock_repository.count.return_value = 18
     state = HybridScheduleResultState(mock_repository, window_size=10)
     state._schedules = [make_schedule_dto() for _ in range(5)] 
     state._current_page_idx = 1
-    
-    dummy_dtos = [make_schedule_dto() for _ in range(8)]
-    raw_map = {i: dummy for i, dummy in enumerate(dummy_dtos)}
-    mock_repository.get_window_raw.return_value = (raw_map, {}, [])
-    
+
     # Act
     state.add_schedules_batch(3)
     
     # Assert
-    mock_repository.get_window_raw.assert_called_once_with(10, 10)
+    mock_repository.get_window_raw.assert_not_called()
     assert state.current_window_size() == 8
 
 # ===========================================================================

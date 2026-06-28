@@ -2,6 +2,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from src.logic.checkers.config.ConstraintMetadata import CONSTRAINTS
+
 
 @dataclass(frozen=True)
 class ConstraintsConfig:
@@ -21,3 +23,24 @@ class ConstraintsConfig:
     exam_span: Optional[int] = None
     # 2.5 - Maximum number of exams allowed on the same day.
     max_exams_per_day: Optional[int] = None
+
+    def validate(self) -> None:
+        """Raise ValueError if any enabled rule has an out-of-range k value.
+
+        None always means "disabled" and is always valid. Every rule except
+        elective_conflict_cap must be a positive integer when enabled;
+        elective_conflict_cap may be 0 (a program may not have any same-day
+        elective pair). Checkers otherwise silently disable on k <= 0, which
+        hides a misconfiguration instead of rejecting it.
+        """
+        invalid = [
+            meta.field_name
+            for meta in CONSTRAINTS
+            if (value := getattr(self, meta.field_name)) is not None
+            and value < meta.min_k
+        ]
+        if invalid:
+            raise ValueError(
+                f"Invalid constraint value(s): {', '.join(invalid)}. "
+                "Must be a positive integer (elective_conflict_cap may be 0)."
+            )

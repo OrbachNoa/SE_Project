@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, List
 import warnings
-from sklearn.exceptions import ConvergenceWarning
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory
@@ -30,7 +29,7 @@ if TYPE_CHECKING:
     # scikit-learn/scipy/pandas (~2.3s) just to define this QThread's
     # signature -- and this class is imported every time the cluster screens
     # are built, regardless of whether clustering is ever used.
-    from src.application.services.ClusteringCoordinator import ClusteringCoordinator, ClusteringRun
+    from src.application.services.ClusteringCoordinator import ClusteringCoordinator
     from src.logic.clustering.ClusterConfig import ClusterConfig
 
 
@@ -57,6 +56,8 @@ class ClusterWorker(QThread):
 
     def run(self) -> None:
         try:
+            from sklearn.exceptions import ConvergenceWarning
+
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always", category=ConvergenceWarning)
 

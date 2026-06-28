@@ -2,9 +2,13 @@
 
 from gui.core.styles.Palette import (
     COLOR_PRIMARY, COLOR_PRIMARY_HOVER, COLOR_BORDER, COLOR_MUTED,
-    COLOR_TEXT, COLOR_BG, COLOR_OVERLAY_A, COLOR_OVERLAY_B,
+    COLOR_TEXT, COLOR_OVERLAY_A, COLOR_OVERLAY_B,
     COLOR_OVERLAY_MUTUAL, BG_OVERLAY_A, BG_OVERLAY_B, BG_OVERLAY_MUTUAL
 )
+
+# Object names migrated out of inline setStyleSheet() calls in the cluster
+# screens (see ClusterOverviewScreen / ClusterCompareScreen /
+# ClusterCalendarOverlayScreen / ClusterDetailScreen).
 
 CLUSTER_STYLESHEET = f"""
 /* ── Nav Bar Labels & Inputs ────────────────────────────────────── */
@@ -366,6 +370,22 @@ QFrame#legend-panel QLabel {{
 }}
 
 /* ── Calendar Overlay Badges ── */
+QFrame#legend-panel QLabel#overlay-legend-a {{
+    background-color: {COLOR_OVERLAY_A};
+    border: 1px solid {COLOR_OVERLAY_A};
+    border-radius: 3px;
+}}
+QFrame#legend-panel QLabel#overlay-legend-b {{
+    background-color: {COLOR_OVERLAY_B};
+    border: 1px solid {COLOR_OVERLAY_B};
+    border-radius: 3px;
+}}
+QFrame#legend-panel QLabel#overlay-legend-mutual {{
+    background-color: {COLOR_OVERLAY_MUTUAL};
+    border: 1px solid {COLOR_OVERLAY_MUTUAL};
+    border-radius: 3px;
+}}
+
 QLabel#overlay-badge-a {{
     background-color: {BG_OVERLAY_A};
     color: {COLOR_TEXT};
@@ -392,5 +412,85 @@ QLabel#overlay-badge-mutual {{
     border-radius: 4px;
     padding: 3px;
     font-weight: 500;
+}}
+
+/* ── Migrated inline styles: overview screen ─────────────────────── */
+QLabel#cluster-overview-title {{
+    font-size: 16px;
+}}
+QLabel#cluster-overview-summary {{
+    color: #555;
+}}
+QLabel#cluster-request-prompt {{
+    font-weight: 600;
+}}
+
+/* ── Migrated inline styles: detail screen ───────────────────────── */
+QLabel#cluster-detail-title {{
+    font-weight: 600;
+}}
+
+/* ── Migrated inline styles: compare screen ──────────────────────── */
+QLabel#compare-title {{
+    font-size: 16px;
+    margin-left: 12px;
+}}
+QFrame#compare-divider {{
+    background-color: #E2E8F0;
+    max-height: 1px;
+    border: none;
+}}
+QLabel#compare-composite-name {{
+    color: #64748B;
+    font-weight: 500;
+    font-size: 12px;
+}}
+QScrollArea#compare-scroll,
+QFrame#compare-table-frame {{
+    background-color: transparent;
+}}
+QLabel#compare-table-header {{
+    font-weight: bold;
+    font-size: 13px;
+    color: #475569;
+    padding-bottom: 8px;
+}}
+QLabel#compare-row-name {{
+    color: #3E352F;
+    font-size: 13px;
+    font-weight: 500;
+}}
+QLabel#compare-row-value {{
+    font-size: 13px;
+    padding: 2px 6px;
+}}
+
+/* ── Migrated inline styles: calendar overlay screen ─────────────── */
+QLabel#overlay-title {{
+    font-size: 15px;
+    font-weight: bold;
+    margin-left: 12px;
+}}
+QLabel#overlay-legend-label {{
+    font-size: 12px;
+    font-weight: 500;
+    color: #374151;
+}}
+QLabel#overlay-period-label {{
+    font-weight: bold;
+    font-size: 13px;
+    color: white;
+}}
+QLabel#overlay-legend-a {{
+    background-color: {COLOR_OVERLAY_A};
+    border-radius: 2px;
+}}
+QLabel#overlay-legend-b {{
+    background-color: {COLOR_OVERLAY_B};
+    border-radius: 2px;
+}}
+QLabel#overlay-legend-mutual {{
+    background-color: {COLOR_OVERLAY_MUTUAL};
+    border-radius: 2px;
 }}
 """

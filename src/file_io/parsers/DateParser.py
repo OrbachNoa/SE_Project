@@ -52,71 +52,82 @@ class ExamPeriodsFileParser(FileParser):
 
     def _parse_date(self, record):
         """Converts one text record into an ExamPeriod object."""
-        # Split the record into clean lines, so empty lines do not affect parsing.
-        lines = [line.strip() for line in record.strip().split('\n') if line.strip()]
+        lines = self._record_lines(record)
         # Skip records that do not contain the minimum required lines.
         if len(lines) < 2:
             return None
 
-        # Split semester and moed, so each field can be parsed separately.
-        parts = [p.strip() for p in lines[0].split(',')]
+        semester, moed = self._parse_period_header(lines[0])
+        start_date, end_date = self._parse_period_range(lines[1])
+        excluded_dates = self._parse_excluded_dates(lines[2:])
+        return ExamPeriod(semester, moed, start_date, end_date, excluded_dates)
+
+    def _record_lines(self, record):
+        """Split a raw period record into meaningful, stripped lines."""
+        return [line.strip() for line in record.strip().split('\n') if line.strip()]
+
+    def _parse_period_header(self, line):
+        """Parse the '<semester>,<moed>' line."""
+        parts = [p.strip() for p in line.split(',')]
         if len(parts) != 2:
-            raise ValueError(f"Invalid Exam Period line: {lines[0]}")
+            raise ValueError(f"Invalid Exam Period line: {line}")
 
         semester_str = parts[0].upper()
         moed_str = parts[1].upper()
-        # Parse the semester, so unknown values fail early.
         try:
             semester = Semester(semester_str)
         except ValueError:
-            raise ValueError(f"Invalid semester: '{semester_str}' in line: {lines[0]}")
+            raise ValueError(f"Invalid semester: '{semester_str}' in line: {line}")
 
-        # Parse the moed, so unknown values fail early.
         try:
             moed = Moed(moed_str)
         except ValueError:
-            raise ValueError(f"Invalid moed: '{moed_str}' in line: {lines[0]}")
+            raise ValueError(f"Invalid moed: '{moed_str}' in line: {line}")
 
-        # Split the start and end dates, so each date can be parsed.
-        dates_parts = [p.strip() for p in lines[1].split(',')]
+        return semester, moed
+
+    def _parse_period_range(self, line):
+        """Parse the strict '<start>,<end>' DD-MM-YYYY date range."""
+        dates_parts = [p.strip() for p in line.split(',')]
         if len(dates_parts) != 2:
-            raise ValueError(f"Invalid Dates line: {lines[1]}")
+            raise ValueError(f"Invalid Dates line: {line}")
         if not re.match(r"^\d{2}-\d{2}-\d{4}$", dates_parts[0]) or not re.match(r"^\d{2}-\d{2}-\d{4}$", dates_parts[1]):
-            raise ValueError(f"Dates must be strictly in DD-MM-YYYY format: {lines[1]}")
+            raise ValueError(f"Dates must be strictly in DD-MM-YYYY format: {line}")
 
         try:
             start_date = datetime.strptime(dates_parts[0], "%d-%m-%Y").date()
             end_date = datetime.strptime(dates_parts[1], "%d-%m-%Y").date()
         except ValueError:
             raise ValueError(f"Dates must be valid DD-MM-YYYY format: '{dates_parts[0]}', '{dates_parts[1]}'")
+        return start_date, end_date
 
-        # Collect excluded dates, so unavailable days are not used for exams.
+    def _parse_excluded_dates(self, lines):
+        """Parse optional excluded single dates and date ranges."""
         excluded_dates = set()
+        for line in lines:
+            excluded_dates.update(self._parse_excluded_date_line(line))
+        return excluded_dates
 
-        for i in range(2, len(lines)):
-            # Find one-digit or two-digit day and month values, so flexible dates work.
-            found_dates = re.findall(r"\d{1,2}-\d{1,2}-\d{4}", lines[i])
+    def _parse_excluded_date_line(self, line):
+        """Parse one excluded-date line into a set of excluded dates."""
+        # Find one-digit or two-digit day and month values, so flexible dates work.
+        found_dates = re.findall(r"\d{1,2}-\d{1,2}-\d{4}", line)
 
-            if len(found_dates) == 1:
-                d = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
-                excluded_dates.add(d)
-            elif len(found_dates) >= 2:
-                # Expand the range, so every date in it is excluded.
-                d1 = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
-                d2 = datetime.strptime(found_dates[1], "%d-%m-%Y").date()
-                if d1 > d2:
-                    # Reject reversed ranges, so input order stays clear.
-                    raise ValueError(
-                        f"Excluded date range is reversed: {found_dates[0]} is after {found_dates[1]}. "
-                        f"Range must be written as start, end (earlier date first)."
-                    )
-                curr = d1
-                while curr <= d2:
-                    excluded_dates.add(curr)
-                    curr += timedelta(days=1)
-            else:
-                # Reject unclear excluded-date lines, so invalid input fails loudly.
-                raise ValueError(f"Invalid excluded date format in line: '{lines[i]}'")
+        if len(found_dates) == 1:
+            return {datetime.strptime(found_dates[0], "%d-%m-%Y").date()}
+        if len(found_dates) >= 2:
+            d1 = datetime.strptime(found_dates[0], "%d-%m-%Y").date()
+            d2 = datetime.strptime(found_dates[1], "%d-%m-%Y").date()
+            if d1 > d2:
+                raise ValueError(
+                    f"Excluded date range is reversed: {found_dates[0]} is after {found_dates[1]}. "
+                    f"Range must be written as start, end (earlier date first)."
+                )
+            excluded = set()
+            curr = d1
+            while curr <= d2:
+                excluded.add(curr)
+                curr += timedelta(days=1)
+            return excluded
 
-        # Build the ExamPeriod, so its constructor can validate the range.
-        return ExamPeriod(semester, moed, start_date, end_date, excluded_dates)
+        raise ValueError(f"Invalid excluded date format in line: '{line}'")

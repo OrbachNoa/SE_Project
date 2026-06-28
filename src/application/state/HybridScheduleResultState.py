@@ -55,17 +55,16 @@ class HybridScheduleResultState(ScheduleResultState):
                 self._slots_ref = slots_ref or []
         else:
             self._page_ids = None
-            offset = self._current_page_idx * self._window_size
-            raw_map, score_map, slots_ref = self._repository.get_window_raw(offset, self._window_size)
-            self._raw_map = raw_map
-            self._score_map = score_map
+            self._raw_map = {}
+            self._score_map = {}
+            _, _, slots_ref = self._repository.get_raw_by_ids([])
             self._slots_ref = slots_ref or []
 
     def get_schedule(self, index: int) -> ScheduleDTO:
         # Fall back to the base list only when there is neither a loaded window
         # nor an active sort. In sorted mode raw_map is intentionally empty
         # (schedules are fetched lazily), so we must NOT short-circuit here.
-        if not self._raw_map and not self._sorted_ids:
+        if not self._raw_map and not self._sorted_ids and self.count() == 0:
             return super().get_schedule(index)
 
         if self._sorted_ids:
@@ -80,10 +79,11 @@ class HybridScheduleResultState(ScheduleResultState):
                 )
             global_idx = page_ids[index]
         else:
-            if index < 0 or index >= len(self._raw_map):
+            window_size = self.current_window_size()
+            if index < 0 or index >= window_size:
                 raise IndexError(
                     f"schedule index {index} out of range "
-                    f"(window has {len(self._raw_map)} items)"
+                    f"(window has {window_size} items)"
                 )
             global_idx = self._current_page_idx * self._window_size + index
 
@@ -104,12 +104,7 @@ class HybridScheduleResultState(ScheduleResultState):
             raise IndexError(f"global index {global_idx} not in raw_map")
 
         score = self._score_map.get(global_idx)
-        if isinstance(raw, ScheduleDTO):
-            dto = raw
-            if score:
-                dto.scores = score
-        else:
-            dto = row_to_dto(raw, self._slots_ref, score)
+        dto = row_to_dto(raw, self._slots_ref, score)
 
         if len(self._dto_cache) >= SCHEDULE_DTO_CACHE_SIZE:
             self._dto_cache.pop(next(iter(self._dto_cache)))
@@ -117,12 +112,11 @@ class HybridScheduleResultState(ScheduleResultState):
         return dto
 
     def add_schedules_batch(self, batch_size: int) -> None:
-        if self._sort_priority:
-            # During generation do NOT re-sort per batch (freezes the GUI). The
-            # sorted view is refreshed once when generation finishes.
-            return
-        elif self.current_window_size() < self._window_size:
-            self._load_current_page()
+        # Do not reload the current SQLite page for every incoming batch. Page
+        # metadata comes from count(), and individual schedules are fetched
+        # lazily by get_schedule(). Repeated page reloads here used to block
+        # the GUI while generation was still streaming results.
+        return
 
     def refresh_sort(self) -> None:
         """Re-run the global sort once when generation finishes. Kept light: it
@@ -178,10 +172,12 @@ class HybridScheduleResultState(ScheduleResultState):
 
     def current_window_size(self) -> int:
         if self._sorted_ids:
-            # full page of sorted ids (10k), even though raw is fetched lazily
+            # Full page of sorted ids, even though raw is fetched lazily.
             return len(getattr(self, "_page_ids", []) or [])
-        if self._raw_map:
-            return len(self._raw_map)
+        total = self.count()
+        offset = self._current_page_idx * self._window_size
+        if total > offset:
+            return min(self._window_size, total - offset)
         return len(self._schedules)
 
     @property

@@ -1,7 +1,7 @@
 """Stylesheets specifically for dialog chrome (modal popups)."""
 
 from gui.core.styles.Palette import (
-    COLOR_PRIMARY, COLOR_PRIMARY_HOVER, COLOR_BORDER, COLOR_BG, COLOR_TEXT
+    COLOR_PRIMARY, COLOR_PRIMARY_HOVER, COLOR_BORDER, COLOR_TEXT
 )
 
 DIALOG_STYLESHEET = f"""

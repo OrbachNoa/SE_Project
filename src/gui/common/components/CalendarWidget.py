@@ -9,6 +9,31 @@ from PyQt6.QtWidgets import QFrame, QGridLayout, QLabel, QScrollArea, QVBoxLayou
 
 from src.application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
 
+class ClickableDayCell(QFrame):
+    """A calendar day cell that emits `clicked` on a left click or Space/Enter.
+
+    Replaces the previous inline ``cell.mousePressEvent = lambda ...`` patch:
+    it ignores non-left buttons and is keyboard-reachable for accessibility.
+    """
+
+    clicked = pyqtSignal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        else:
+            super().mousePressEvent(event)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.clicked.emit()
+        else:
+            super().keyPressEvent(event)
+
 
 class CalendarWidget(QWidget):
     """Visual day-matrix rendering engine displaying pre-composed schedule items."""
@@ -204,14 +229,15 @@ class CalendarWidget(QWidget):
                 total_days_offset % 7,
             )
 
-    # Create the actual physical box (frame) for a single day and place it in the grid
+    # Build the day-cell frame for a single date and place it in the grid.
     def _create_cell_widget(self, date_str: str, qdate: QDate, row: int, col: int) -> None:
-        cell_frame = QFrame()
+        cell_frame = ClickableDayCell()
         cell_frame.setFrameShape(QFrame.Shape.StyledPanel)
         cell_frame.setObjectName("calendar-cell-frame")
-        
-        # When this box is clicked, tell the rest of the program what date was clicked
-        cell_frame.mousePressEvent = lambda event, date=date_str: self.date_clicked.emit(date)
+
+        # When this box is clicked (left button) or activated by keyboard, tell
+        # the rest of the program what date was clicked.
+        cell_frame.clicked.connect(lambda date=date_str: self.date_clicked.emit(date))
 
         cell_layout = QVBoxLayout(cell_frame)
         cell_layout.setContentsMargins(6, 4, 6, 4)
@@ -230,24 +256,30 @@ class CalendarWidget(QWidget):
 
     # Take a list of scheduled exams and put them into the correct day boxes
     def display_assignments(self, items: List[ScheduleItemViewModel]) -> None:
-        """Place exam tiles into the matching day cells on the calendar grid."""
+        """Place exam tiles into the matching day cells on the calendar grid.
+
+        Every exam is rendered as its own badge. The output screen is scrollable,
+        so dense days should remain fully visible rather than being collapsed.
+        """
         for item in items:
-            target_date = item.date
-            if target_date not in self._day_layouts:
-                continue
+            if item.date in self._day_layouts:
+                self._day_layouts[item.date].addWidget(self._make_exam_badge(item))
 
-            # Clean up the text so it looks nice inside the small calendar box
-            clean_subtitle = item.subtitle.replace("<br>", "\n")
-            clean_subtitle = re.sub(r"<[^>]+>", "", clean_subtitle)
-            clean_subtitle = clean_subtitle.replace("ID: ", "")
+    @staticmethod
+    def _clean_subtitle(subtitle: str) -> str:
+        """Strip HTML/markup from a badge subtitle so it fits a calendar cell."""
+        clean = subtitle.replace("<br>", "\n")
+        clean = re.sub(r"<[^>]+>", "", clean)
+        return clean.replace("ID: ", "")
 
-            # Create the little sticker/badge for the exam and add it to the day
-            exam_label = QLabel(f"{item.title}\n{clean_subtitle}")
-            exam_label.setWordWrap(True)
-            exam_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            exam_label.setToolTip(item.tooltip)
-            exam_label.setObjectName("calendar-exam-badge")
-            self._day_layouts[target_date].addWidget(exam_label)
+    def _make_exam_badge(self, item: ScheduleItemViewModel) -> QLabel:
+        """Build a single exam badge label for a day cell."""
+        exam_label = QLabel(f"{item.title}\n{self._clean_subtitle(item.subtitle)}")
+        exam_label.setWordWrap(True)
+        exam_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        exam_label.setToolTip(item.tooltip)
+        exam_label.setObjectName("calendar-exam-badge")
+        return exam_label
 
     # Change the styling (color/look) of a day box depending on whether it is excluded or included
     def set_date_excluded_style(self, date_str: str, is_excluded: bool) -> None:

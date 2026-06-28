@@ -1,10 +1,11 @@
 """Presentation logic for browsing the schedules inside one family."""
 from __future__ import annotations
 
+from gui.common.ScheduleExportMixin import ScheduleExportMixin
 from src.application.errors.ApplicationErrors import ApplicationError
 
 
-class ClusterDetailPresenter:
+class ClusterDetailPresenter(ScheduleExportMixin):
     """Pages through a family's schedules and exports the chosen one."""
 
     def __init__(self, view, controller, router) -> None:
@@ -28,12 +29,6 @@ class ClusterDetailPresenter:
     def set_cluster(self, cluster_id: int) -> None:
         self._cluster_id = cluster_id
         self._index = 0
-
-    def _assert_not_empty(self) -> bool:
-        if self._size == 0:
-            self._view.show_message("This family has no schedules to export.")
-            return False
-        return True
 
     def _handle_error(self, error: Exception, context: dict, user_prefix: str) -> None:
         message = self._controller.map_error(error, context)
@@ -91,18 +86,44 @@ class ClusterDetailPresenter:
             self._index -= 1
             self._show_current()
 
-    def on_export_pdf(self) -> None:
-        if not self._assert_not_empty():
-            return
-        try:
-            schedule_vm = self._controller.get_cluster_schedule_view(self._cluster_id, self._index)
-            self._view.export_schedule_pdf(schedule_vm, self._index)
-        except Exception as error:
-            self._handle_error(
-                error,
-                {"operation": "read_schedule", "screen": "cluster_detail", "export_format": "pdf"},
-                "Could not read schedule: "
-            )
+    # ── export hooks for ScheduleExportMixin ─────────────────────────────────
+    def _export_has_content(self) -> bool:
+        return self._size != 0
+
+    def _export_read_schedule(self):
+        return self._controller.get_cluster_schedule_view(self._cluster_id, self._index)
+
+    def _export_filename(self, ext: str) -> str:
+        return f"family_{self._cluster_id + 1}_schedule_{self._index + 1}.{ext}"
+
+    def _export_pdf_view(self, schedule_view) -> None:
+        self._view.export_schedule_pdf(schedule_view, self._index)
+
+    def _export_save_txt(self, path: str) -> None:
+        self._controller.save_cluster_schedule(self._cluster_id, self._index, path)
+
+    def _export_save_excel(self, path: str) -> None:
+        self._controller.save_cluster_schedule_excel(self._cluster_id, self._index, path)
+
+    def _export_nothing(self, message: str) -> None:
+        self._view.show_message(message)
+
+    def _export_read_error(self, error: Exception, fmt: str) -> None:
+        self._handle_error(
+            error,
+            {"operation": "read_schedule", "screen": "cluster_detail", "export_format": fmt},
+            "Could not read schedule: ",
+        )
+
+    def _export_save_error(self, error: Exception, fmt: str, path: str) -> None:
+        self._handle_error(
+            error,
+            {"operation": "save_schedule", "screen": "cluster_detail", "export_format": fmt, "path": path},
+            "Export failed.\n",
+        )
+
+    def _export_saved(self, path: str) -> None:
+        self._view.show_message(f"Saved to:\n{path}")
 
     def map_export_error(self, error: Exception, path: str) -> str:
         """Map a PDF-writing failure (called by SchedulePdfExporter) to a clean message.
@@ -115,51 +136,6 @@ class ClusterDetailPresenter:
             error,
             {"operation": "export_pdf", "screen": "cluster_detail", "export_format": "pdf", "path": path},
         )
-
-    def on_export_txt(self) -> None:
-        if not self._assert_not_empty():
-            return
-        path = self._view.ask_save_path(
-            f"family_{self._cluster_id + 1}_schedule_{self._index + 1}.txt"
-        )
-        if not path:
-            return
-        try:
-            self._controller.save_cluster_schedule(self._cluster_id, self._index, path)
-            self._view.show_message(f"Saved to:\n{path}")
-        except Exception as error:
-            self._handle_error(
-                error,
-                {"operation": "save_schedule", "screen": "cluster_detail", "export_format": "txt", "path": path},
-                "Export failed.\n"
-            )
-
-    # Initiates the Excel export process for the current cluster schedule
-    def on_export_excel(self) -> None:
-        # Check if there is data to export
-        if not self._assert_not_empty():
-            return
-
-        # Prompt the user for the save location
-        path = self._view.ask_save_path_excel(
-            f"family_{self._cluster_id + 1}_schedule_{self._index + 1}.xlsx"
-        )
-        if not path:
-            return
-
-        try:
-            # Call the controller to handle the saving logic
-            self._controller.save_cluster_schedule_excel(self._cluster_id, self._index, path)
-            self._view.show_message(f"Saved to:\n{path}")
-        except Exception as error:
-            # PermissionErrorMapper already produces a friendly "file is open
-            # elsewhere" message, so there is no separate `except
-            # PermissionError` here — one path covers every failure.
-            self._handle_error(
-                error,
-                {"operation": "save_schedule", "screen": "cluster_detail", "export_format": "excel", "path": path},
-                "Export failed.\n"
-            )
 
     # ── helpers ──────────────────────────────────────────────────────────────
 

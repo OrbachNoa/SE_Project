@@ -74,7 +74,7 @@ class ClusterDetailScreen(Screen):
         self._prev_btn = QPushButton("◀ Prev")
         self._prev_btn.setObjectName("btn-secondary")
         self._title = QLabel("")
-        self._title.setStyleSheet("font-weight: 600;")
+        self._title.setObjectName("cluster-detail-title")
         self._next_btn = QPushButton("Next ▶")
         self._next_btn.setObjectName("btn-secondary")
 

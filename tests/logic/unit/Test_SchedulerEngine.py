@@ -23,6 +23,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.models.ExamSchedule import ExamAssignment
 from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
 from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
 from src.logic.Scheduler import Scheduler
@@ -291,3 +292,44 @@ def test_program_with_only_non_exam_courses_returns_empty_schedule(
     # (`if not slots: return`) returns immediately with no results at all —
     # not a single schedule containing zero assignments.
     assert schedules == []
+
+
+# ===========================================================================
+# TC-ENG-009: Seed assignments are matched to their real slots by identity, not
+# by their position in the slots list. This protects worker resumes from
+# duplicating the seeded course when the seed is not a strict prefix.
+# ===========================================================================
+def test_seed_assignments_do_not_have_to_be_slot_prefix(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange
+    pe = make_program_entry(program_id="83101", year=2,
+                            requirement=Requirement.ELECTIVE)
+    courses = [
+        make_course(course_id=f"1010{i}", name=f"C{i}", program_entries=[pe])
+        for i in range(3)
+    ]
+    period = make_period(
+        start=date(2026, 6, 1), end=date(2026, 6, 2), excluded=[]
+    )
+    slots = SlotBuilder([period]).build(courses)
+    seeded_slot = slots[1]
+    seed = [
+        ExamAssignment(
+            course=seeded_slot.course,
+            date=seeded_slot.candidateDates[0],
+            moed=seeded_slot.moed,
+            semester=seeded_slot.semester,
+        )
+    ]
+    scheduler = Scheduler([])
+    observer = CollectingScheduleObserver()
+
+    # Act
+    scheduler.generateSchedules(slots, observer, seed_assignments=seed, max_results=1)
+
+    # Assert
+    assert len(observer.schedules) == 1
+    course_ids = [a.course.courseId for a in observer.schedules[0].assignments]
+    assert course_ids.count(seeded_slot.course.courseId) == 1
+    assert set(course_ids) == {slot.course.courseId for slot in slots}

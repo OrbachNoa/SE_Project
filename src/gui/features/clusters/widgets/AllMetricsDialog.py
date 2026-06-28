@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.gui.features.clusters.widgets.MetricWidgetFactory import create_metric_widgets
+from gui.features.clusters.widgets.MetricWidgetFactory import create_metric_widgets
 
 
 class AllMetricsDialog(QDialog):

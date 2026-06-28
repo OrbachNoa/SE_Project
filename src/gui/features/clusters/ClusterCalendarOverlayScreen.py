@@ -6,7 +6,6 @@ to highlight differences and similarities.
 from __future__ import annotations
 
 from typing import List, Tuple
-from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QFrame,
@@ -20,18 +19,13 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.common.components.HeaderWidget import HeaderWidget
-from gui.common.helpers import create_divider, create_scaled_pixmap
+from gui.common.helpers import create_divider
 from gui.core.screen import Screen
 from gui.features.clusters.ClusterCalendarOverlayPresenter import ClusterCalendarOverlayPresenter
 from gui.features.clusters.widgets.OverlayCalendarWidget import OverlayCalendarWidget
 from gui.features.output.PeriodNavigator import PeriodNavigator
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 from src.application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
-from gui.core.styles.Palette import ( 
-    COLOR_OVERLAY_A,
-    COLOR_OVERLAY_B,
-    COLOR_OVERLAY_MUTUAL
-)
 
 
 class ClusterCalendarOverlayScreen(Screen):
@@ -75,7 +69,7 @@ class ClusterCalendarOverlayScreen(Screen):
 
         # Center: Title
         self._title = QLabel("<b>Calendar Overlay</b>")
-        self._title.setStyleSheet("font-size: 15px; font-weight: bold; margin-left: 12px;")
+        self._title.setObjectName("overlay-title")
         layout.addWidget(self._title)
 
         layout.addStretch()
@@ -87,27 +81,28 @@ class ClusterCalendarOverlayScreen(Screen):
         legend_layout.setContentsMargins(16, 4, 16, 4)
         legend_layout.setSpacing(12)
 
-        # Helper function to create standard 12x12px solid color blocks
-        def create_color_block(color_hex: str) -> QLabel:
+        # Helper function to create standard 12x12px solid color blocks. The
+        # swatch color comes from QSS via the object name (see ClusterStyles).
+        def create_color_block(object_name: str) -> QLabel:
             block = QLabel()
             block.setFixedSize(12, 12)
-            block.setStyleSheet(f"background-color: {color_hex}; border-radius: 2px;")
+            block.setObjectName(object_name)
             return block
 
-        # Family 1 (Using your clean blue color from the image)
-        icon_a = create_color_block(COLOR_OVERLAY_A) 
+        # Family 1
+        icon_a = create_color_block("overlay-legend-a")
         self._lbl_a = QLabel("Family 1 only")
-        self._lbl_a.setStyleSheet("font-size: 12px; font-weight: 500; color: #374151;")
+        self._lbl_a.setObjectName("overlay-legend-label")
 
-        # Family 2 (Using your gold color from the image)
-        icon_b = create_color_block(COLOR_OVERLAY_B)
+        # Family 2
+        icon_b = create_color_block("overlay-legend-b")
         self._lbl_b = QLabel("Family 2 only")
-        self._lbl_b.setStyleSheet("font-size: 12px; font-weight: 500; color: #374151;")
+        self._lbl_b.setObjectName("overlay-legend-label")
 
         # Mutual
-        icon_mutual = create_color_block(COLOR_OVERLAY_MUTUAL)
+        icon_mutual = create_color_block("overlay-legend-mutual")
         lbl_mutual = QLabel("Mutual")
-        lbl_mutual.setStyleSheet("font-size: 12px; font-weight: 500; color: #374151;")
+        lbl_mutual.setObjectName("overlay-legend-label")
 
         # helper to create a vertical divider
         def create_vertical_divider() -> QFrame:
@@ -150,7 +145,7 @@ class ClusterCalendarOverlayScreen(Screen):
         
         self._period_label = QLabel("")
         self._period_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._period_label.setStyleSheet("font-weight: bold; font-size: 13px; color: white;")
+        self._period_label.setObjectName("overlay-period-label")
 
         self._next_period_btn = QPushButton("Next Period >")
         self._next_period_btn.setFixedWidth(120)

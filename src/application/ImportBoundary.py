@@ -2,7 +2,7 @@
 from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 from src.application.errors.ErrorModel import AppErrorInfo
 

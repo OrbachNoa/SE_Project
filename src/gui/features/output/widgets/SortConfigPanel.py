@@ -23,21 +23,9 @@ from gui.core.styles.SortConfigPanelStyles import SORT_CONFIG_PANEL_STYLESHEET
 
 from gui.common.components.SortRow import SortRow
 
-from src.logic.comparators.MinMandatoryGapComparator import MinMandatoryGapComparator
-from src.logic.comparators.AvgAllCoursesGapComparator import AvgAllCoursesGapComparator
-from src.logic.comparators.MaxElectiveConflictsComparator import MaxElectiveConflictsComparator
-from src.logic.comparators.MandatorySpanComparator import MandatorySpanComparator
-from src.logic.comparators.MaxExamsPerDayComparator import MaxExamsPerDayComparator
-from src.logic.comparators.ScheduleScorer import ALL_CRITERIA
-
-COMPARATORS = [
-    MinMandatoryGapComparator,
-    AvgAllCoursesGapComparator,
-    MaxElectiveConflictsComparator,
-    MandatorySpanComparator,
-    MaxExamsPerDayComparator,
-]
-LABELS = {c.criterion_id: c.label for c in COMPARATORS}
+# Central criterion registry — single source of truth for ids and labels, so this
+# panel no longer imports each comparator class just to build its label map.
+from src.logic.comparators.SortCriteria import ALL_CRITERIA, CRITERION_LABELS as LABELS
 
 
 class SortConfigPanel(QDialog):
@@ -194,10 +182,10 @@ class SortConfigPanel(QDialog):
             row.deleteLater()
         self._rows.clear()
 
-        # Build in default order
+        # Build in default order, all criteria enabled (matches "Reset to default").
         for cid in ALL_CRITERIA:
             label = LABELS.get(cid, cid)
-            row_widget = SortRow(cid, label, False, self)
+            row_widget = SortRow(cid, label, True, self)
             self._rows.append(row_widget)
             self.rows_layout.addWidget(row_widget)
 

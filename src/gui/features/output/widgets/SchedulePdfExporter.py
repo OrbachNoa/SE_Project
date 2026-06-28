@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import html
 import os
-import re
 from typing import Callable, Optional
 
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
@@ -80,28 +79,18 @@ def _build_schedule_html(view) -> str:
         # Instructor column — use the instructor name or a dash if unknown
         instructor_text = html.escape(item.instructor) if item.instructor else "<span style='color:#94A3B8;'>—</span>"
 
-        # Processing the details (Course ID, Semester, Moed, etc.) for the table cell
-        clean_sub = item.subtitle.replace("<br>", "\n")
-        clean_sub = re.sub(r"<[^>]+>", "", clean_sub)
-        clean_sub = clean_sub.replace("ID: ", "")
-        sub_parts = [p.strip() for p in clean_sub.split("\n") if p.strip()]
-        course_id_text = sub_parts[0] if sub_parts else ""
-
-        tooltip_lines = str(item.tooltip).split("\n")
-        if len(tooltip_lines) >= 2:
-            meta_pieces = tooltip_lines[1].strip().split(" · ", 1)
-            if len(meta_pieces) > 1:
-                course_id_text += " · " + meta_pieces[1]
-
+        # Details cell (Course ID · Semester/Moed · Evaluation) built from the
+        # view-model's structured fields — no subtitle/tooltip re-parsing.
+        details_parts = [str(item.course_id)] if item.course_id else []
+        if item.details:
+            details_parts.append(item.details)
         if item.evaluation:
-            course_id_text += f" · {item.evaluation}"
+            details_parts.append(item.evaluation)
+        details_text = html.escape(" · ".join(details_parts))
 
-        details_text = html.escape(course_id_text)
-
-        # Building the programs column with tags/info
-        prog_parts = [p for p in sub_parts[1:] if p.strip()]
-        if prog_parts:
-            programs_text = "<br>".join(html.escape(p) for p in prog_parts)
+        # Programs column straight from the structured program lines.
+        if item.programs:
+            programs_text = "<br>".join(html.escape(p) for p in item.programs)
         else:
             programs_text = "<span style='color:#94A3B8;'>—</span>"
 

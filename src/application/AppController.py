@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import threading
+import importlib
 from dataclasses import dataclass
 from typing import List, Optional, TYPE_CHECKING
 
@@ -9,7 +11,6 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QSettings
 from src.application.ImportBoundary import ImportMode, ImportResult
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel
 from src.application.viewmodels.ClusterViewModel import (
-    ClusterCardViewModel,
     ClusterComparisonViewModel,
 )
 from src.application.state.InputDataState import InputDataState
@@ -20,7 +21,6 @@ from src.application.services.ScheduleExportService import ScheduleExportService
 from src.application.services.ViewModelMapper import ViewModelMapper
 
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
-from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
 from src.application.errors.ErrorModel import (
     AppErrorInfo,
     ErrorCategory,
@@ -32,7 +32,7 @@ from src.application.errors.ExceptionMapper import (
     default_registry,
 )
 from src.application.errors.ErrorLogger import ErrorLogger
-from src.config import PROGRESS_POLL_INTERVAL_MS
+from src.config import PROGRESS_POLL_INTERVAL_MS, WINDOW_SIZE
 
 # Import the formatting utility (cheap, stdlib-only -- safe at module level).
 from src.file_io.formatters.ScheduleCsvFormatter import format_schedule_csv
@@ -40,14 +40,18 @@ from src.file_io.formatters.ScheduleCsvFormatter import format_schedule_csv
 if TYPE_CHECKING:
     from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
     from src.application.dto.ScheduleDTO import ScheduleDTO
-    from src.logic.clustering.llm import ClusterRequestTranslator
+    from src.logic.clustering.llm.ClusterRequestTranslator import ClusterRequestTranslator
+    from src.application.services.ClusteringCoordinator import (
+        ClusteringCoordinator,
+        ClusteringRun,
+    )
 
 
 @dataclass
 class _RequestRunBundle:
     """Immutable result from build_request_run(); committed on the GUI thread."""
-    coordinator: object  # ClusteringCoordinator
-    run: object          # ClusteringRun
+    coordinator: "ClusteringCoordinator"
+    run: "ClusteringRun"
     interpretation: str
 
 
@@ -185,7 +189,7 @@ class AppController(QObject):
                 program_ids, self._input_state.get_courses(), self._input_state.get_periods(),
                 config=config
             )
-        except (InfeasibleScheduleError, MemoryError, Exception) as exc:
+        except Exception as exc:
             # Infeasible input is a clean, recoverable message; MemoryError maps
             # to a resource problem; anything else falls back to a safe generic.
             # All three are routed through the same central mapper so the GUI
@@ -199,7 +203,7 @@ class AppController(QObject):
         self._worker.search_finished.connect(self._handle_search_finished)
         self._worker.error_occurred.connect(self._handle_error_occurred)
 
-        # Poll the repository count every 500 ms and emit progress_updated.
+        # Poll the repository count on the configured interval and emit progress_updated.
         # This replaces the old per-schedule queue messages from the Scheduler,
         # keeping the IPC channel free for SCHEDULE_BATCH and FINISHED only.
         self._start_progress_timer()
@@ -268,7 +272,7 @@ class AppController(QObject):
     def get_page_info(self) -> dict:
         """Extracts metadata snapshots detailing current navigation cursor index bounds information."""
         state = self._schedule_state
-        window_size = getattr(state, "_window_size", 10000)
+        window_size = getattr(state, "_window_size", WINDOW_SIZE)
         return {
             "current_page":  state.current_page,
             "total_pages":   state.total_pages(),
@@ -346,7 +350,8 @@ class AppController(QObject):
         clustering request -- not on every app launch.
         """
         if self._request_translator is None:
-            from src.logic.clustering.llm import ClusterRequestTranslator, OpenAICompatibleLLMClient
+            from src.logic.clustering.llm.ClusterRequestTranslator import ClusterRequestTranslator
+            from src.logic.clustering.llm.OpenAICompatibleLLMClient import OpenAICompatibleLLMClient
             self._request_translator = ClusterRequestTranslator(OpenAICompatibleLLMClient.from_env())
         return self._request_translator
 
@@ -637,21 +642,40 @@ class AppController(QObject):
         """Acts as a cleanup intercept hook to eliminate zombie or orphan background worker allocations."""
         self.cancel_scheduling()
         self._scheduler.shutdown_pool()
+        repo = self._get_schedule_repository()
+        if repo is not None and hasattr(repo, "close"):
+            repo.close()
 
     def warm_up_clustering_async(self) -> None:
-        """Pre-import the clustering engine on a background thread.
+        """Pre-import and lightly prime the clustering engine on a background thread.
 
-        ClusteringCoordinator -> ClusteringService pulls in scikit-learn/scipy
-        (~2.3s to import). Nothing is built here -- this only primes Python's
-        module cache, so by the time the user actually opens the Clusters
-        screen (after loading files and generating schedules, which already
-        takes a while), the import is already done and that screen opens
-        instantly. Sessions that never open Clusters never pay this cost.
+        ClusteringCoordinator -> ClusteringService pulls in scikit-learn/scipy,
+        and the first KMeans fit also pays native-library cold-start cost. This
+        tiny run primes both paths so opening the Clusters screen later does not
+        spend that time on the user interaction.
         """
-        def _import_clustering_engine() -> None:
-            from src.application.services.ClusteringCoordinator import ClusteringCoordinator  # noqa: F401
+        threading.Thread(target=self._warm_up_clustering_engine, daemon=True).start()
 
-        threading.Thread(target=_import_clustering_engine, daemon=True).start()
+    @staticmethod
+    def _warm_up_clustering_engine() -> None:
+        """Best-effort clustering warm-up; never surface failures to the GUI."""
+        try:
+            importlib.import_module("src.application.services.ClusteringCoordinator")
+            from src.logic.clustering.ScikitLearnKMeansStrategy import ScikitLearnKMeansStrategy
+            import numpy as np
+
+            sample = np.array(
+                [
+                    [0.0, 0.0],
+                    [0.1, 0.2],
+                    [4.0, 4.0],
+                    [4.2, 4.1],
+                ],
+                dtype=float,
+            )
+            ScikitLearnKMeansStrategy(n_init=1, max_iter=5).cluster(sample, 2)
+        except Exception:
+            logging.getLogger(__name__).debug("Clustering warm-up failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Private — SchedulerWorker signal handlers
@@ -679,7 +703,7 @@ class AppController(QObject):
             self.early_results_ready.emit()
 
     def _start_progress_timer(self) -> None:
-        """Start polling the repository count every 500 ms during an active run."""
+        """Start polling the repository count during an active run."""
         self._progress_timer = QTimer(self)
         self._progress_timer.setInterval(PROGRESS_POLL_INTERVAL_MS)
         self._progress_timer.timeout.connect(self._poll_progress)

@@ -168,7 +168,7 @@ class ExamSpanChecker(IConflictChecker):
             )
         )
 
-        # Save the messeges if we get impossible assignment.
+        # Collect feasibility errors so the UI can show all problems at once.
         errors = []
 
         for (program_id, year, semester, moed), group_slots in groups.items():

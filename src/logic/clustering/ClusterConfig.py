@@ -2,7 +2,7 @@
 
 The whole point of this object is to be the *single* contract between
 "what the user wants" and "what the engine does". Today it is filled in with
-defaults (all five score criteria, automatic K). Tomorrow, the custom-clustering
+application defaults over the core score criteria. Tomorrow, the custom-clustering
 UI and the LLM translation layer will produce exactly this same object from a
 free-text request — so nothing downstream of here needs to change when that step
 arrives. That is the seam the future work plugs into.
@@ -25,7 +25,6 @@ from src.logic.comparators.ScheduleScorer import (
 )
 from src.logic.clustering.ExtendedFeatureComputer import (
     ALL_EXTENDED_FEATURES,
-    DEFAULT_EXTENDED_FEATURES,
 )
 
 
@@ -40,13 +39,16 @@ K_MODE_FIXED = "fixed"
 class ClusterConfig:
     """Everything needed to run the clustering pipeline once.
 
-    Defaults reproduce the "open the screen and it just clusters" behaviour:
-    every score criterion participates equally and K is chosen automatically.
+    Constructor defaults are neutral raw defaults for custom configs. Use
+    ``ClusterConfig.default()`` for the application default used when the user
+    opens the clustering screen without a custom request.
     """
 
-    # Which of the score criteria take part in the feature vector. The
-    # default is all of them, in their canonical order.
-    criteria: Tuple[str, ...] = tuple(list(ALL_CRITERIA) + list(DEFAULT_EXTENDED_FEATURES))
+    # Which score criteria take part in the feature vector. The default sticks
+    # to core scores that are already produced by the scheduler; custom
+    # clustering requests may still add extended features, which are computed
+    # lazily by the clustering worker.
+    criteria: Tuple[str, ...] = tuple(ALL_CRITERIA)
 
     # Optional per-criterion weight (criterion_id -> weight). Empty means every
     # selected criterion is weighted 1.0. Lets a future request say "group mostly
@@ -57,7 +59,7 @@ class ClusterConfig:
     # Normalization strategy to use: "zscore" or "minmax".
     normalizer: str = "zscore"
 
-    # How the number of clusters is chosen.
+    # How the number of clusters is chosen for raw/custom configs.
     k_mode: str = K_MODE_AUTO
 
     # The number of clusters when ``k_mode == "fixed"``; ignored for auto.
@@ -69,7 +71,7 @@ class ClusterConfig:
 
     # Upper bound on how many schedules are actually clustered. Above this the
     # pipeline draws a representative sample so the run stays responsive.
-    max_sample: int = 10_000
+    max_sample: int = 500
 
     # Fixed seed keeps sampling and K-means deterministic, so the same input and
     # config always yield the same families (stable UI).
@@ -127,7 +129,12 @@ class ClusterConfig:
 
     @staticmethod
     def default() -> "ClusterConfig":
-        """The out-of-the-box configuration used on automatic screen entry."""
+        """Application default used on automatic clustering screen entry.
+
+        It intentionally uses fixed K=4 so the first clustering result is
+        deterministic and responsive. Free-text requests may still produce
+        automatic-K configs.
+        """
         return ClusterConfig(
             weights={
                 ELECTIVE_CONFLICTS: 1.5,
@@ -137,4 +144,6 @@ class ClusterConfig:
                 MIN_MANDATORY_GAP: 0.8,
             },
             normalizer="zscore",
+            k_mode=K_MODE_FIXED,
+            k=4,
         )

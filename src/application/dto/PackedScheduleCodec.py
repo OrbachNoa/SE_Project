@@ -12,6 +12,10 @@ _UINT16 = struct.Struct("<H")
 
 def pack_rows(rows: Iterable[bytes], slot_count: int, row_count: int) -> bytes:
     """Pack already encoded schedule rows into one compact batch blob."""
+    if slot_count > 65535:
+        raise ValueError(f"slot_count {slot_count} exceeds the 16-bit packed format limit (65535).")
+    if row_count > 65535:
+        raise ValueError(f"row_count {row_count} exceeds the 16-bit packed format limit (65535).")
     return _HEADER.pack(MAGIC, slot_count, row_count) + b"".join(rows)
 
 
@@ -32,6 +36,25 @@ def unpack_rows(data: bytes) -> tuple[int, List[tuple[int, ...]]]:
         row_data = data[offset:offset + row_size]
         rows.append(struct.unpack(f"<{slot_count}H", row_data))
         offset += row_size
+    return slot_count, rows
+
+
+def unpack_rows_at(data: bytes, row_indices: Iterable[int]) -> tuple[int, dict[int, tuple[int, ...]]]:
+    """Return selected packed rows without materializing the whole batch."""
+    magic, slot_count, row_count = _HEADER.unpack_from(data, 0)
+    if magic != MAGIC:
+        raise ValueError("not a packed schedule blob")
+
+    row_size = slot_count * _UINT16.size
+    row_struct = struct.Struct(f"<{slot_count}H")
+    rows = {}
+    for row_index in sorted(set(int(index) for index in row_indices)):
+        if row_index < 0 or row_index >= row_count:
+            raise IndexError(f"packed row index {row_index} out of range (have {row_count})")
+
+        offset = _HEADER.size + row_index * row_size
+        rows[row_index] = row_struct.unpack_from(data, offset)
+
     return slot_count, rows
 
 

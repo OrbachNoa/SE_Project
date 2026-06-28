@@ -31,8 +31,6 @@ class ClusterCardViewModel:
     criteria: tuple = field(default_factory=tuple)
     # Raw average feature values: criterion_id -> float.
     summary: Dict[str, float] = field(default_factory=dict)
-    # The top 5 sorted metrics by goodness score for display on the card.
-    best_summary: List[Tuple[str, str, str]] = field(default_factory=list)
     # The key of the defining criterion (the one that stands out the most)
     defining_criterion: str = ""
     # Formatted range bounds: criterion_key -> (min_val_str, max_val_str)
@@ -62,4 +60,7 @@ class ClusterComparisonViewModel:
     # Raw feature dicts for differential indicators: criterion_id -> display string
     left_features: dict = field(default_factory=dict)
     right_features: dict = field(default_factory=dict)
+    # Precomputed winner per criterion: criterion_id -> "left" | "right" | "".
+    # Built from raw numeric scores so the view never parses display strings.
+    better_by_criterion: dict = field(default_factory=dict)
 

@@ -25,6 +25,12 @@ class ScheduleItemViewModel:
     instructor: str = ""
     # EvalType value string (e.g. "EXAM", "PROJECT") — dedicated field for the same reason
     evaluation: str = ""
+    # Structured data so exporters/overlays never re-parse subtitle/tooltip:
+    course_id: str = ""
+    # Pre-composed meta line, e.g. "Semester A · Moed A"
+    details: str = ""
+    # Plain-text program/requirement lines, e.g. ["Prog 83101 (Mandatory)"]
+    programs: List[str] = field(default_factory=list)
 
 
 @dataclass

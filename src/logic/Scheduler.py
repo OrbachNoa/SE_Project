@@ -3,9 +3,11 @@ from src.models.ExamSchedule import ExamSchedule, ExamAssignment
 from .SlotBuilder import Slot
 from .checkers.IConflictChecker import IConflictChecker
 from .observers.IScheduleObserver import IScheduleObserver
+from src.config import DEFAULT_MAX_RESULTS
 
 # A domain means one unscheduled slot and the dates that are still possible for it.
 _Domain = Tuple[Slot, List]
+_SlotKey = Tuple[str, object, object]
 
 
 class Scheduler:
@@ -23,7 +25,7 @@ class Scheduler:
         self,
         slots: List[Slot],
         observer: IScheduleObserver,
-        max_results: int = 1_000_000,
+        max_results: int = DEFAULT_MAX_RESULTS,
         target_depth: Optional[int] = None,
         seed_assignments: Optional[List[ExamAssignment]] = None,
         use_mrv: bool = True,
@@ -62,9 +64,9 @@ class Scheduler:
                 schedule.addAssignment(assignment)
                 if score_state is not None:
                     score_state.add_assignment(assignment)
-            
+
             # Continue only with the slots that were not already assigned by the seed.
-            remaining_slots = slots[len(seed_assignments):]
+            remaining_slots = self._remaining_slots_after_seed(slots, seed_assignments)
         else:
             remaining_slots = slots
 
@@ -80,6 +82,43 @@ class Scheduler:
         found_count = [0]
         # Start the recursive search.
         self._backtrack(domains, schedule, observer, found_count, max_results, target_depth, use_mrv, score_state)
+
+    def _remaining_slots_after_seed(self, slots: List[Slot], seed_assignments: List[ExamAssignment]) -> List[Slot]:
+        """Return every slot not already represented by the seed assignments."""
+        seed_count = len(seed_assignments)
+        if seed_count <= len(slots) and all(
+            self._assignment_key(seed_assignments[i]) == self._slot_key(slots[i])
+            for i in range(seed_count)
+        ):
+            return slots[seed_count:]
+
+        seeded_keys = set()
+        for assignment in seed_assignments:
+            key = self._assignment_key(assignment)
+            if key in seeded_keys:
+                raise ValueError("seed_assignments contains duplicate slots")
+            seeded_keys.add(key)
+
+        matched_keys = set()
+        remaining = []
+        for slot in slots:
+            key = self._slot_key(slot)
+            if key in seeded_keys:
+                matched_keys.add(key)
+            else:
+                remaining.append(slot)
+
+        if matched_keys != seeded_keys:
+            raise ValueError("seed_assignments contains an assignment that does not match any scheduler slot")
+        return remaining
+
+    @staticmethod
+    def _slot_key(slot: Slot) -> _SlotKey:
+        return (slot.course.courseId, slot.semester, slot.moed)
+
+    @staticmethod
+    def _assignment_key(assignment: ExamAssignment) -> _SlotKey:
+        return (assignment.course.courseId, assignment.semester, assignment.moed)
 
     def _forward_check(self, domains: List[_Domain], schedule: ExamSchedule) -> Optional[List[_Domain]]:
         """Return narrowed domains, or None if some slot has no valid dates left."""

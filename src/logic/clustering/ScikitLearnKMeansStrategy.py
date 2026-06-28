@@ -28,10 +28,12 @@ class ScikitLearnKMeansStrategy(IClusteringStrategy):
         n_init: int = 10,
         max_iter: int = 300,
         random_state: int = 42,
+        weights=None,
     ) -> None:
         self._n_init = n_init
         self._max_iter = max_iter
         self._random_state = random_state
+        self._scale = self._build_scale(weights)
 
     def cluster(self, points: np.ndarray, k: int) -> ClusteringOutput:
         if k <= 0:
@@ -43,14 +45,53 @@ class ScikitLearnKMeansStrategy(IClusteringStrategy):
             raise ValueError("cannot cluster an empty set of points")
 
         effective_k = min(k, n)
+        fit_points = self._scale_points(points)
         km = KMeans(
             n_clusters=effective_k,
             n_init=self._n_init,
             max_iter=self._max_iter,
             random_state=self._random_state,
         )
-        labels = km.fit_predict(points)
+        labels = km.fit_predict(fit_points)
         return ClusteringOutput(
             labels=labels.astype(int),
-            centroids=km.cluster_centers_,
+            centroids=self._centroids_in_original_space(points, labels, effective_k, km.cluster_centers_),
         )
+
+    @staticmethod
+    def _build_scale(weights):
+        if weights is None:
+            return None
+        w = np.asarray(weights, dtype=float)
+        if np.any(w < 0):
+            raise ValueError("weights must be non-negative")
+        if w.size == 0 or np.all(w == 0):
+            raise ValueError("at least one weight must be positive")
+        if np.allclose(w, 1.0):
+            return None
+        return np.sqrt(w)
+
+    def _scale_points(self, points: np.ndarray) -> np.ndarray:
+        if self._scale is None:
+            return points
+        if points.shape[1] != self._scale.shape[0]:
+            raise ValueError("weights length must match point dimensionality")
+        return points * self._scale
+
+    def _centroids_in_original_space(
+        self,
+        points: np.ndarray,
+        labels: np.ndarray,
+        k: int,
+        fitted_centers: np.ndarray,
+    ) -> np.ndarray:
+        if self._scale is None:
+            return fitted_centers
+        centroids = np.empty((k, points.shape[1]), dtype=float)
+        for cluster_id in range(k):
+            members = points[labels == cluster_id]
+            if len(members) > 0:
+                centroids[cluster_id] = members.mean(axis=0)
+            else:
+                centroids[cluster_id] = 0.0
+        return centroids

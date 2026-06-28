@@ -2,12 +2,11 @@ from typing import Dict
 from PyQt6.QtWidgets import QStackedWidget
 from gui.core.screen import Screen
 
-# This class acts like a GPS or a traffic controller for our app. 
-# It moves the user smoothly from one screen to another and remembers the path they took.
+# Routes screen transitions and keeps a back-navigation history.
 class ScreenRouter:
     """Manages screen transitions with back-navigation history."""
 
-    # Set up the empty lists and dictionaries to keep track of our screens and our travel history
+    # Initialize the screen registry and the back-navigation history.
     def __init__(self, stack: QStackedWidget) -> None:
         self._stack = stack
         self._screens: Dict[str, Screen] = {}
@@ -24,29 +23,42 @@ class ScreenRouter:
         return self._screens.get(name)
 
     # The main command to jump to a specific screen by its name
-    def show(self, name: str) -> None:
-        """Show a screen by name."""
+    def show(self, name: str, push_history: bool = True) -> None:
+        """Show a screen by name.
+
+        When push_history is True the screen being left is recorded for Back
+        navigation; pass False (or use replace()) to navigate without adding a
+        Back entry. Consecutive duplicate entries are never stored.
+        """
         if name not in self._screens:
             raise KeyError(f"Screen '{name}' is not registered.")
         current_name = self._current_name()
-        
+
         # If we are already on the screen we want to go to, just refresh it and stop here
         if current_name == name:
             self._screens[name].on_enter()
             return
-            
+
         current = self._current_screen()
-        
+
         # If we are leaving a screen, trigger its cleanup function and save it to our "back" history
         if current is not None:
             current.on_leave()
-            if current_name:
+            # Skip empty names and consecutive duplicates so Back doesn't stutter.
+            if push_history and current_name and (
+                not self._history or self._history[-1] != current_name
+            ):
                 self._history.append(current_name)
-                
+
         # Actually flip the view to the new screen and trigger its startup function
         target = self._screens[name]
         self._stack.setCurrentWidget(target)
         target.on_enter()
+
+    # Navigate to a screen without recording the current one in Back history.
+    def replace(self, name: str) -> None:
+        """Switch screens without leaving a Back entry (replace, don't push)."""
+        self.show(name, push_history=False)
 
     # Works exactly like the "Back" button in a web browser, returning to the last visited screen
     def back(self) -> None:

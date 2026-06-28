@@ -19,7 +19,6 @@ import warnings
 from typing import List, Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
-from sklearn.exceptions import ConvergenceWarning
 
 from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory
 from src.application.errors.ExceptionMapper import default_registry
@@ -42,6 +41,8 @@ class ClusterRequestWorker(QThread):
 
     def run(self) -> None:
         try:
+            from sklearn.exceptions import ConvergenceWarning
+
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always", category=ConvergenceWarning)
                 bundle = self._controller.build_request_run(self._text, self._k)

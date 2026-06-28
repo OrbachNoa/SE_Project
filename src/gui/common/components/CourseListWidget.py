@@ -7,7 +7,6 @@ Each program row can be expanded to reveal its courses, grouped by academic year
 from typing import Dict, List
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -92,7 +91,7 @@ class _ProgramBlock(QWidget):
         self._header_btn.toggled.connect(self._set_expanded)
         root.addWidget(self._header_btn)
 
-        # This hidden container holds all the actual courses. It shows up when the button is clicked.
+        # Collapsible container for the course rows; shown when the header is expanded.
         self._body = QWidget()
         body_layout = QVBoxLayout(self._body)
         body_layout.setContentsMargins(4, 4, 4, 4)

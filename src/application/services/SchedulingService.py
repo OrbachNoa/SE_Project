@@ -1,6 +1,7 @@
 """Service for launching schedule generation across one or more background processes."""
 from __future__ import annotations
 
+import itertools
 import os
 import queue
 import threading
@@ -21,12 +22,19 @@ from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.logic.parallel.SearchSpacePartitioner import SearchSpacePartitioner
 from src.infrastructure.concurrency.QueueWorkSource import QueueWorkSource
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
+from src.infrastructure.concurrency.CpuTopology import (
+    performance_core_groups,
+    recommended_worker_count,
+)
 from src.application.errors.ExceptionMapper import build_process_error_payload
 from src.config import (
     DEFAULT_MAX_RESULTS,
     DEFAULT_BATCH_SIZE,
     WORK_UNITS_PER_WORKER,
     RESULT_QUEUE_BATCHES_PER_WORKER,
+    WORKER_PROCESS_COUNT,
+    WORKER_AFFINITY_ENABLED,
+    RESERVED_CORES_FOR_MAIN,
 )
 
 # Used only to read the physical core count.
@@ -35,26 +43,37 @@ import psutil
 
 
 def _default_num_processes() -> int:
-    """Pick a safe number of worker processes.
+    """Resolve the worker count: env override > config constant > CPU topology.
 
-    We use psutil to ask the OS how many physical cores it sees.
-    This helps us avoid using every logical CPU.
-
-    It does not choose P-cores for us.
-    The OS still decides where each process actually runs.
+    On hybrid CPUs the topology default is one worker per physical performance
+    (P) core -- see CpuTopology -- not every physical core, because workers
+    placed on the slow efficiency (E) cores become stragglers and (on laptops)
+    drive thermal throttling, which made the old "all physical cores" default
+    slower under sustained load.
     """
-    # Use logical = false to ask for real CPU cores, not the extra logical threads.
-    physical = psutil.cpu_count(logical=False)
-    # If the OS returned a valid physical core count, use it as the worker count.
-    if physical:
-        return max(1, physical)
-    # os.cpu_count gives logical CPUs, so we use half as a safer number.
-    return max(1, (os.cpu_count() or 2) // 2)
+    # 1. Runtime override, so the count can be tuned without code changes.
+    env_value = os.environ.get("SCHEDULER_WORKER_PROCESSES")
+    if env_value:
+        try:
+            parsed = int(env_value)
+            if parsed > 0:
+                return parsed
+        except ValueError:
+            pass  # Ignore a malformed override and fall through to the defaults.
+
+    # 2. Explicit project config wins over auto-detection.
+    if WORKER_PROCESS_COUNT is not None:
+        return max(1, int(WORKER_PROCESS_COUNT))
+
+    # 3. Auto: one worker per P-core, minus any cores reserved for the main
+    # thread -- the reservation only applies on a detected hybrid CPU; on a
+    # non-hybrid CPU this returns every physical core, unreduced.
+    return recommended_worker_count(reserved_for_main=RESERVED_CORES_FOR_MAIN)
 
 
-def _feed_work_queue(config, courses, selected_programs, slots, num_processes, work_queue, cancel_event, result_queue):
-    """This runs in its own background thread. 
-    Its only job is to break the massive scheduling problem into smaller, manageable 
+def _feed_work_queue(config, courses, selected_programs, slots, num_processes, work_queue, cancel_event, result_queue, run_id=None):
+    """This runs in its own background thread.
+    Its only job is to break the massive scheduling problem into smaller, manageable
     chunks (called 'work units') and push them into the shared work queue for the workers to grab.
     """
     try:
@@ -73,7 +92,10 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
             work_queue.put(unit)
     except Exception as e:
         # If something breaks while slicing the problem, let the main system know.
-        result_queue.put(("ERROR", build_process_error_payload(e, "work partitioning")))
+        # Wrapped with run_id (when given) so SchedulerWorker can tell this
+        # apart from a stale error left over from a just-cancelled run.
+        error_payload = build_process_error_payload(e, "work partitioning")
+        result_queue.put(("ERROR", error_payload if run_id is None else (run_id, error_payload)))
     finally:
         # We put one 'None' into the queue for every worker process.
         # When a worker pulls a 'None', it knows there is no more work left and it can shut down.
@@ -84,16 +106,17 @@ def _feed_work_queue(config, courses, selected_programs, slots, num_processes, w
         work_queue.cancel_join_thread()
 
 
-def _run_scheduler_process(slots, 
-                           courses, 
-                           selected_programs, 
-                           queue, 
-                           cancel_event, 
-                           max_results, 
-                           batch_size, 
-                           work_source, 
-                           config=None, 
-                           result_counter=None
+def _run_scheduler_process(slots,
+                           courses,
+                           selected_programs,
+                           queue,
+                           cancel_event,
+                           max_results,
+                           batch_size,
+                           work_source,
+                           config=None,
+                           result_counter=None,
+                           run_id=None,
                            ):
     """
     This is the actual code that runs INSIDE each independent background worker.
@@ -104,7 +127,7 @@ def _run_scheduler_process(slots,
         # We do this here inside the worker to avoid passing heavy objects between processes.
         selected_index = SelectedProgramIndex(courses, selected_programs, slots)
         checkers = build_checkers(config, courses, selected_programs, slots, selected_index)
-        scorer = ScheduleScorer(courses, selected_programs, selected_index)
+        scorer = ScheduleScorer(courses, selected_programs, selected_index, slots=slots)
 
         # Start the runner. It will automatically ask the 'work_source' for units of work,
         # find schedules, and push the results into the 'queue'.
@@ -118,24 +141,60 @@ def _run_scheduler_process(slots,
             work_source,
             scorer=scorer,
             result_counter=result_counter,
+            run_id=run_id,
         )
         runner.run()
     except Exception as e:
         # If the worker crashes, send an error message back to the main app.
+        # Wrapped with run_id (when given) so SchedulerWorker can tell this
+        # apart from a stale error left over from a just-cancelled run.
         if queue is not None:
-            queue.put(("ERROR", build_process_error_payload(e, "scheduling")))
+            error_payload = build_process_error_payload(e, "scheduling")
+            queue.put(("ERROR", error_payload if run_id is None else (run_id, error_payload)))
 
 
 def _drain_queue(q) -> None:
     """Empty a multiprocessing Queue of any stale leftover messages."""
     try:
-        while not q.empty():
+        while True:
             q.get_nowait()
     except (queue.Empty, ValueError, OSError):
         pass
 
 
-def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter):
+# How often an idle worker checks that its parent is still alive while
+# waiting for the next run. Short enough that a killed app does not leave
+# orphans running for long; long enough not to matter for CPU usage.
+_PARENT_LIVENESS_CHECK_SECONDS = 2.0
+
+
+def _parent_is_alive(parent_pid: int, parent_create_time: float) -> bool:
+    """True if the process at parent_pid is still the same one we started under.
+
+    Comparing create_time (not just PID) guards against the OS recycling
+    parent_pid for an unrelated process after the real parent exits.
+    """
+    try:
+        return psutil.Process(parent_pid).create_time() == parent_create_time
+    except psutil.NoSuchProcess:
+        return False
+
+
+def _apply_worker_affinity(affinity_ids) -> None:
+    """Pin this worker to a fixed set of logical CPUs (its assigned P-core).
+
+    Best-effort: any failure (unsupported platform, permission, bad id list)
+    is swallowed so a worker never dies just because it could not be pinned.
+    """
+    if not affinity_ids:
+        return
+    try:
+        psutil.Process().cpu_affinity(list(affinity_ids))
+    except (psutil.Error, OSError, ValueError, AttributeError):
+        pass
+
+
+def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter, run_id_holder, parent_pid, parent_create_time, affinity_ids=None):
     """Runs inside a long-lived worker process owned by the pool.
 
     Spawning a fresh OS process (and re-importing this whole module) on every
@@ -144,7 +203,23 @@ def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue
     on 'control_queue' for the parameters of a new run, executes it via the
     existing one-shot '_run_scheduler_process' helper, then loops back and
     waits for the next run instead of exiting.
+
+    'run_id_holder' is a separate shared Value (not part of the control
+    payload tuple itself) so each worker can tag its outgoing messages with
+    the active run id without changing the payload's shape.
+
+    Normal shutdown (app closes cleanly) sends a None sentinel through
+    control_queue -- see SchedulingService.shutdown_pool(). But if the main
+    process is killed outright (closed console window, taskkill, hard crash)
+    that sentinel never arrives, and daemon=True only auto-kills children
+    during a *normal* Python interpreter shutdown -- not when the parent is
+    killed externally. So while idle, this loop also polls for parent death
+    on its own and exits itself rather than becoming an orphan.
     """
+    # Pin to the assigned P-core once, before any work, so the OS keeps this
+    # CPU-bound worker on a fast core instead of drifting it onto an E-core.
+    _apply_worker_affinity(affinity_ids)
+
     work_source = QueueWorkSource(work_queue, cancel_event=cancel_event)
     while True:
         # Signal idle/ready *before* blocking for the next run, so whoever
@@ -152,14 +227,23 @@ def _persistent_worker_loop(control_queue, ready_queue, work_queue, result_queue
         # SchedulingService._pool_start_run) is unblocked as soon as this
         # worker is free to take a new assignment.
         ready_queue.put(True)
-        payload = control_queue.get()
+        payload = None
+        got_payload = False
+        while not got_payload:
+            try:
+                payload = control_queue.get(timeout=_PARENT_LIVENESS_CHECK_SECONDS)
+                got_payload = True
+            except queue.Empty:
+                if not _parent_is_alive(parent_pid, parent_create_time):
+                    return
         if payload is None:
             break
         courses, selected_programs, slots, config, max_results, batch_size = payload
+        run_id = run_id_holder.value
         _run_scheduler_process(
             slots, courses, selected_programs, result_queue, cancel_event,
             max_results, batch_size, work_source,
-            config=config, result_counter=result_counter,
+            config=config, result_counter=result_counter, run_id=run_id,
         )
 
 
@@ -185,7 +269,13 @@ class SchedulingService:
         self._pool_result_queue: Optional[Queue] = None
         self._pool_cancel_event = None
         self._pool_result_counter = None
+        self._pool_run_id_holder = None
         self._pool_num_processes: Optional[int] = None
+
+        # Monotonic id for each generate_async() call, used to tell a stale
+        # message from a just-cancelled run apart from the current run's
+        # messages on the shared, cross-run result queue.
+        self._run_id_counter = itertools.count(1)
 
     def warm_up_async(self, num_processes: Optional[int] = None) -> None:
         """Start the persistent worker pool on a background thread.
@@ -197,19 +287,45 @@ class SchedulingService:
             target=self.ensure_pool_started, args=(num_processes,), daemon=True
         ).start()
 
+    @staticmethod
+    def _resolve_pool_size(num_processes: Optional[int]) -> int:
+        """Return the requested pool size, validating explicit overrides."""
+        if num_processes is None:
+            return _default_num_processes()
+        if num_processes <= 0:
+            raise ValueError("num_processes must be a positive integer")
+        return int(num_processes)
+
+    def _validate_pool_size_request(self, num_processes: Optional[int]) -> None:
+        """Reject explicit pool-size changes after the persistent pool exists."""
+        if num_processes is None or self._pool_processes is None:
+            return
+
+        requested = self._resolve_pool_size(num_processes)
+        if requested != self._pool_num_processes:
+            raise ValueError(
+                "scheduler worker pool is already started with "
+                f"{self._pool_num_processes} process(es); requested {requested}. "
+                "Call shutdown_pool() before changing the process count."
+            )
+
     def ensure_pool_started(self, num_processes: Optional[int] = None) -> None:
         """Create the persistent worker pool if it isn't running yet. Idempotent."""
         if self._pool_processes is not None:
+            self._validate_pool_size_request(num_processes)
             return
         with self._pool_lock:
             if self._pool_processes is not None:
+                self._validate_pool_size_request(num_processes)
                 return
-            if num_processes is None:
-                num_processes = _default_num_processes()
+            num_processes = self._resolve_pool_size(num_processes)
 
             cancel_event = Event()
             # "q" means the value is a big number
             result_counter = Value("q", 0)
+            # Holds the active run's id, separate from the control payload so
+            # the payload's own shape never changes between runs.
+            run_id_holder = Value("q", 0)
             # Workers send found schedules here. maxsize counts pending result
             # batches, not individual schedules.
             result_queue: Queue = Queue(maxsize=max(1, num_processes * RESULT_QUEUE_BATCHES_PER_WORKER))
@@ -220,12 +336,28 @@ class SchedulingService:
             # Workers post here when they are idle and ready for a new run.
             ready_queue: Queue = Queue()
 
+            # Captured once, here in the main process, so every worker can
+            # later verify the *same* parent is still alive (not just that
+            # some process happens to occupy this pid now).
+            parent_pid = os.getpid()
+            parent_create_time = psutil.Process(parent_pid).create_time()
+
+            # One logical-id group per physical P-core, so worker i can be pinned
+            # to its own fast core. Empty when affinity is off or the CPU has no
+            # P/E split -- in that case no worker is pinned (old behaviour).
+            affinity_groups = performance_core_groups() if WORKER_AFFINITY_ENABLED else []
+
             processes: List[Process] = []
-            for _ in range(num_processes):
+            for worker_index in range(num_processes):
+                affinity_ids = (
+                    affinity_groups[worker_index % len(affinity_groups)]
+                    if affinity_groups
+                    else None
+                )
                 process = Process(
                     target=_persistent_worker_loop,
-                    args=(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter),
-                    daemon=True,  # Daemon means they will automatically die if the main app closes.
+                    args=(control_queue, ready_queue, work_queue, result_queue, cancel_event, result_counter, run_id_holder, parent_pid, parent_create_time, affinity_ids),
+                    daemon=True,  # Daemon means they will automatically die if the main app closes normally.
                 )
                 processes.append(process)
             for process in processes:
@@ -234,13 +366,14 @@ class SchedulingService:
             self._pool_num_processes = num_processes
             self._pool_cancel_event = cancel_event
             self._pool_result_counter = result_counter
+            self._pool_run_id_holder = run_id_holder
             self._pool_result_queue = result_queue
             self._pool_work_queue = work_queue
             self._pool_control_queue = control_queue
             self._pool_ready_queue = ready_queue
             self._pool_processes = processes
 
-    def _pool_start_run(self, courses, selected_programs, slots, config, max_results, batch_size) -> None:
+    def _pool_start_run(self, courses, selected_programs, slots, config, max_results, batch_size, run_id) -> None:
         """Reset the shared pool state for a new run and hand it to every worker.
 
         Blocks until every worker has returned to idle from any previous run
@@ -259,6 +392,9 @@ class SchedulingService:
         self._pool_cancel_event.clear()
         with self._pool_result_counter.get_lock():
             self._pool_result_counter.value = 0
+        # Set before the control payload is queued, so every worker reads the
+        # new run's id as soon as it picks up that payload.
+        self._pool_run_id_holder.value = run_id
         _drain_queue(self._pool_work_queue)
         _drain_queue(self._pool_result_queue)
 
@@ -302,11 +438,29 @@ class SchedulingService:
     ) -> SchedulerWorker:
         """
         This is the main engine starter. It sets up the parallel processing environment
-        and starts the whole operation in the background
+        and starts the whole operation in the background.
+
+        ``num_processes`` is only allowed to choose the persistent pool size
+        before that pool is started. Later calls with ``None`` reuse the active
+        pool; later calls with a different explicit value fail clearly.
         """
+        # Identifies this run on the shared, cross-run result queue so a
+        # message left over from a just-cancelled run can be told apart from
+        # this run's own messages.
+        run_id = next(self._run_id_counter)
+
+        # Reject an invalid config before it can reach the checkers, where an
+        # out-of-range k would otherwise just silently disable the rule.
+        if config is not None:
+            config.validate()
+
         # Build the slot list and give it to the repository for decoding packed results later.
         slots = self.build_slots(program_ids, courses, periods)
         self._repository.configure_slots(slots)
+
+        # This service starts the run, so it also owns clearing previous
+        # results -- independent of whether the GUI controller already did.
+        self._repository.clear()
 
         # Before we waste CPU time, we make sure the schedule isnt mathematically impossible
         errors = ScheduleFeasibilityValidator().validate(
@@ -316,14 +470,15 @@ class SchedulingService:
             raise InfeasibleScheduleError(errors)
 
         # Make sure the persistent pool exists (no-op if warm_up_async already
-        # started it). The pool's size is fixed the first time it is created;
+        # started it). The pool's size is fixed the first time it is created
+        # (resolved by _default_num_processes: env > config > CPU topology);
         # later calls reuse it regardless of what num_processes they ask for.
         self.ensure_pool_started(num_processes)
         active_num_processes = self._pool_num_processes
 
         # Reset the pool's shared state for this run and hand it to every
         # already-running worker -- no new OS process is created here.
-        self._pool_start_run(courses, program_ids, slots, config, max_results, DEFAULT_BATCH_SIZE)
+        self._pool_start_run(courses, program_ids, slots, config, max_results, DEFAULT_BATCH_SIZE, run_id)
 
         # This is a special worker that just watches the 'queue' and brings results to the user interface.
         self._worker = SchedulerWorker(
@@ -333,6 +488,7 @@ class SchedulingService:
             repository=self._repository,
             max_results=max_results,
             owns_processes=False,
+            expected_run_id=run_id,
         )
         self._worker.start()
 
@@ -341,7 +497,7 @@ class SchedulingService:
         feeder = threading.Thread(
             target=_feed_work_queue,
             args=(config, courses, program_ids, slots, active_num_processes,
-                  self._pool_work_queue, self._pool_cancel_event, self._pool_result_queue),
+                  self._pool_work_queue, self._pool_cancel_event, self._pool_result_queue, run_id),
             daemon=True,
         )
         feeder.start()

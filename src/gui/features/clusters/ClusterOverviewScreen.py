@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Dict, List
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QCursor, QGuiApplication
 from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -24,6 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from gui.common.BusyCursorGuard import BusyCursorGuard
 from gui.common.components.HeaderWidget import HeaderWidget
 from gui.core.screen import Screen
 from gui.features.clusters.ClusterOverviewPresenter import ClusterOverviewPresenter
@@ -41,6 +41,9 @@ class ClusterOverviewScreen(Screen):
         self._detail_name = detail_name
         self._compare_name = compare_name
         self._cards: Dict[int, ClusterCardWidget] = {}
+        # Tracks whether this screen currently holds the shared busy cursor, so
+        # repeated set_busy(False) calls (e.g. on leave) never unbalance it.
+        self._busy_active = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -71,11 +74,11 @@ class ClusterOverviewScreen(Screen):
         layout.addWidget(self._back_btn)
 
         title = QLabel("<b>Cluster overview</b>")
-        title.setStyleSheet("font-size: 16px;")
+        title.setObjectName("cluster-overview-title")
         layout.addWidget(title)
 
         self._summary_label = QLabel("")
-        self._summary_label.setStyleSheet("color: #555;")
+        self._summary_label.setObjectName("cluster-overview-summary")
         layout.addWidget(self._summary_label)
         layout.addStretch()
 
@@ -128,7 +131,7 @@ class ClusterOverviewScreen(Screen):
         row = QHBoxLayout()
         row.setSpacing(10)
         prompt = QLabel("Describe a grouping:")
-        prompt.setStyleSheet("font-weight: 600;")
+        prompt.setObjectName("cluster-request-prompt")
         row.addWidget(prompt)
 
         self._request_input = QLineEdit()
@@ -202,6 +205,12 @@ class ClusterOverviewScreen(Screen):
     def get_request_text(self) -> str:
         return self._request_input.text()
 
+    def set_request_text(self, text: str) -> None:
+        self._request_input.setText(text)
+
+    def clear_request_text(self) -> None:
+        self._request_input.clear()
+
     def set_interpretation(self, text: str) -> None:
         self._interpretation_label.setText(text)
         self._interpretation_label.setVisible(bool(text.strip()))
@@ -210,10 +219,12 @@ class ClusterOverviewScreen(Screen):
         self._busy_bar.setVisible(busy)
         self._request_btn.setEnabled(not busy)
         self._request_input.setEnabled(not busy)
-        if busy:
-            QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
-        else:
-            QGuiApplication.restoreOverrideCursor()
+        if busy and not self._busy_active:
+            BusyCursorGuard.push()
+            self._busy_active = True
+        elif not busy and self._busy_active:
+            BusyCursorGuard.pop()
+            self._busy_active = False
 
     def uncheck_card(self, cluster_id: int) -> None:
         card = self._cards.get(cluster_id)
