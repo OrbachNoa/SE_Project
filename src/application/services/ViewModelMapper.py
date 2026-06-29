@@ -29,52 +29,9 @@ from src.application.viewmodels.ClusterViewModel import (
     ClusterComparisonViewModel,
 )
 from src.logic.clustering import CriterionDisplay
-from src.logic.comparators.ScheduleScorer import (
-    MIN_MANDATORY_GAP,
-    AVG_ALL_COURSES_GAP,
-    ELECTIVE_CONFLICTS,
-    MANDATORY_SPAN,
-    MAX_EXAMS_PER_DAY,
-)
 
 # ----- helpers ---------------------------------------------------------
 from data.programs import programs_data
-
-
-def _quality_label(score: int) -> str:
-    if score >= 65:
-        return "High"
-    if score >= 35:
-        return "Medium"
-    return "Low"
-
-
-def _spread_label(score: int) -> str:
-    if score >= 65:
-        return "Wide"
-    if score >= 35:
-        return "Balanced"
-    return "Compressed"
-
-
-_COMPOSITE_LABEL_RECIPES = {
-    "student_comfort": (
-        (MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP),
-        _quality_label,
-    ),
-    "admin_load": (
-        (ELECTIVE_CONFLICTS, MAX_EXAMS_PER_DAY),
-        _quality_label,
-    ),
-    "faculty_impact": (
-        (MAX_EXAMS_PER_DAY,),
-        _quality_label,
-    ),
-    "schedule_spread": (
-        (MANDATORY_SPAN,),
-        _spread_label,
-    ),
-}
 
 
 def _program_display_name(program_id: str) -> str:
@@ -346,13 +303,13 @@ class ViewModelMapper:
             if raw_a == raw_b:
                 better_by_criterion[name] = ""
             else:
-                lower_better = CriterionDisplay.is_lower_better(name)
-                a_better = (raw_a < raw_b) if lower_better else (raw_a > raw_b)
+                # The database score representation is always higher-is-better (penalties are negative).
+                a_better = raw_a > raw_b
                 better_by_criterion[name] = "left" if a_better else "right"
 
         # Build composite ratings for both families
-        left_labels = self._compute_composite_labels(cluster_a)
-        right_labels = self._compute_composite_labels(cluster_b)
+        left_labels = self._compute_composite_labels(cluster_a, result)
+        right_labels = self._compute_composite_labels(cluster_b, result)
 
         return ClusterComparisonViewModel(
             left_title=f"Family {cluster_a.cluster_id + 1}",
@@ -373,23 +330,59 @@ class ViewModelMapper:
             better_by_criterion=better_by_criterion,
         )
 
-    def _compute_composite_labels(self, cluster) -> dict:
+    def _compute_composite_labels(self, cluster, result=None) -> dict:
         """Derive human-readable composite quality labels for a cluster.
 
-        Maps this cluster's absolute display-bar scores into High/Medium/Low
-        labels, or Wide/Balanced/Compressed for schedule spread.
+        Maps this cluster's absolute display-bar scores into dynamic 5-level
+        labels, using dataset-relative weighted criteria.
         """
-        from src.logic.clustering.CriterionDisplay import display_value_to_percentage
+        from src.logic.clustering.CriterionDisplay import display_value_to_percentage, is_lower_better
 
-        def _display_bar_score(crit, cluster):
-            """Convert this cluster's displayed criterion value into a 0-100 score."""
-            return display_value_to_percentage(
-                crit,
-                CriterionDisplay.display_value(crit, cluster.summary.get(crit, 0.0))
-            )
+        # Prefer the representative schedule's features if available, otherwise fall back to cluster averages.
+        features = cluster.representative_features or cluster.summary
+
+        # Compute dataset-relative min and max bounds for each criterion across all clusters
+        min_max_by_crit = {}
+        if result and hasattr(result, "clusters") and result.clusters:
+            for c in result.clusters:
+                feats = c.representative_features or c.summary
+                for crit, val in feats.items():
+                    if crit not in min_max_by_crit:
+                        min_max_by_crit[crit] = [val, val]
+                    else:
+                        min_max_by_crit[crit][0] = min(min_max_by_crit[crit][0], val)
+                        min_max_by_crit[crit][1] = max(min_max_by_crit[crit][1], val)
+
+        def _get_relative_score(crit, val):
+            """Normalize val to 0-100 relative to min and max values in the dataset."""
+            if crit not in min_max_by_crit:
+                return 50  # Fallback default if not in dataset
+            min_val, max_val = min_max_by_crit[crit]
+            if abs(max_val - min_val) < 1e-9:
+                return 100  # If all have the same value, it's perfect/equal
+            
+            if is_lower_better(crit):
+                # For lower-is-better: min_val is best (100), max_val is worst (0)
+                return int((max_val - val) / (max_val - min_val) * 100)
+            else:
+                # For higher-is-better: max_val is best (100), min_val is worst (0)
+                return int((val - min_val) / (max_val - min_val) * 100)
 
         labels = {}
-        for name, (criteria, labeler) in _COMPOSITE_LABEL_RECIPES.items():
-            score = sum(_display_bar_score(crit, cluster) for crit in criteria) // len(criteria)
-            labels[name] = labeler(score)
+        for name, (recipe, labeler) in CriterionDisplay.COMPOSITE_LABEL_RECIPES.items():
+            valid_scores = []
+            valid_weights = []
+            for crit, weight in recipe:
+                if crit in features:
+                    score = _get_relative_score(crit, features[crit])
+                    valid_scores.append(score * weight)
+                    valid_weights.append(weight)
+
+            if valid_scores:
+                # Re-normalize the weights to sum to 1.0
+                total_weight = sum(valid_weights)
+                score = sum(valid_scores) / total_weight
+                labels[name] = labeler(int(score))
+            else:
+                labels[name] = labeler(50)  # Default/fallback middle rating
         return labels

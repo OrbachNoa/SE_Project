@@ -279,19 +279,31 @@ QLabel#composite-label-value {{
     font-weight: bold;
     background: transparent;
 }}
-QLabel#composite-label-value[rating="high"] {{
+QLabel#composite-label-value[rating="excellent"] {{
     color: #16A34A;
 }}
-QLabel#composite-label-value[rating="low"] {{
-    color: #DC2626;
+QLabel#composite-label-value[rating="good"] {{
+    color: #22C55E;
 }}
-QLabel#composite-label-value[rating="medium"] {{
+QLabel#composite-label-value[rating="fair"] {{
     color: #D97706;
 }}
-QLabel#composite-label-value[rating="wide"] {{
-    color: #16A34A;
+QLabel#composite-label-value[rating="poor"] {{
+    color: #EA580C;
 }}
-QLabel#composite-label-value[rating="tight"] {{
+QLabel#composite-label-value[rating="critical"] {{
+    color: #DC2626;
+}}
+QLabel#composite-label-value[rating="balanced"] {{
+    color: #22C55E;
+}}
+QLabel#composite-label-value[rating="moderate"] {{
+    color: #D97706;
+}}
+QLabel#composite-label-value[rating="narrow"] {{
+    color: #EA580C;
+}}
+QLabel#composite-label-value[rating="compressed"] {{
     color: #DC2626;
 }}
 
@@ -331,9 +343,33 @@ QLabel#compare-metric-better {{
     background-color: #DCFCE7;
     color: #15803D;
     font-weight: bold;
-    border-radius: 6px;
-    padding: 3px 8px;
-    font-size: 12px;
+    border-radius: 0px;
+    padding: 8px 0px;
+    font-size: 13px;
+}}
+QLabel#compare-metric-better-arrow {{
+    background-color: #DCFCE7;
+    color: #15803D;
+    font-weight: 900;
+    border-radius: 0px;
+    padding: 8px 0px;
+    font-size: 16px;
+}}
+QLabel#compare-metric-worse {{
+    background-color: #FEE2E2;
+    color: #B91C1C;
+    font-weight: bold;
+    border-radius: 0px;
+    padding: 8px 0px;
+    font-size: 13px;
+}}
+QLabel#compare-metric-worse-arrow {{
+    background-color: #FEE2E2;
+    color: #B91C1C;
+    font-weight: 900;
+    border-radius: 0px;
+    padding: 8px 0px;
+    font-size: 16px;
 }}
 QLabel#delta-indicator {{
     color: #16A34A;
@@ -446,8 +482,13 @@ QLabel#compare-composite-name {{
     font-size: 12px;
 }}
 QScrollArea#compare-scroll,
-QFrame#compare-table-frame {{
+QWidget#compare-scroll-content {{
     background-color: transparent;
+}}
+QFrame#compare-table-frame {{
+    background-color: #FFFFFF;
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 12px;
 }}
 QLabel#compare-table-header {{
     font-weight: bold;
@@ -462,7 +503,7 @@ QLabel#compare-row-name {{
 }}
 QLabel#compare-row-value {{
     font-size: 13px;
-    padding: 2px 6px;
+    padding: 8px 0px;
 }}
 
 /* ── Migrated inline styles: calendar overlay screen ─────────────── */

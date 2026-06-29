@@ -155,8 +155,8 @@ class InputScreen(Screen):
     def _connect_events(self) -> None:
         self.program_selector_card.selection_changed.connect(self._presenter.refresh_generate_button)
         self.program_selector_card.selection_changed.connect(self.mark_inputs_dirty)
-        self.action_bar.courses_load_btn.clicked.connect(self._presenter.on_load_courses_clicked)
-        self.action_bar.periods_load_btn.clicked.connect(self._presenter.on_load_periods_clicked)
+        self.action_bar.courses_load_btn.clicked.connect(self._on_load_courses_clicked)
+        self.action_bar.periods_load_btn.clicked.connect(self._on_load_periods_clicked)
         self.action_bar.generate_btn.clicked.connect(self._on_generate_clicked)
         self.action_bar.cancel_btn.clicked.connect(self._presenter.on_cancel_clicked)
         self.action_bar.view_results_btn.clicked.connect(self._presenter.on_view_results_clicked)
@@ -405,9 +405,15 @@ class InputScreen(Screen):
         self._presenter.refresh_generate_button()
 
     def _on_load_courses_clicked(self) -> None:
+        if self._editor_widget is not None:
+            updated_vms = self._editor_widget.apply_and_get_constraints()
+            self._on_constraints_saved(updated_vms)
         self._presenter.on_load_courses_clicked()
 
     def _on_load_periods_clicked(self) -> None:
+        if self._editor_widget is not None:
+            updated_vms = self._editor_widget.apply_and_get_constraints()
+            self._on_constraints_saved(updated_vms)
         self._presenter.on_load_periods_clicked()
 
     # Logic for when Generate is clicked: save changes and start the process
