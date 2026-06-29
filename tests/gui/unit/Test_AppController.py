@@ -31,8 +31,10 @@ Conventions:
 import pytest
 from unittest.mock import MagicMock
 from src.application.AppController import AppController
+from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
 from src.application.ImportBoundary import ImportMode, ImportResult
 from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory, ErrorSeverity
+from src.logic.clustering.ExtendedFeatureComputer import MAX_REST_DAYS
 from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
 
 pytestmark = pytest.mark.usefixtures("qapp")
@@ -548,3 +550,55 @@ def test_map_error_logs_technical_detail(controller, monkeypatch):
     info, cause = logged[0]
     assert info.technical_message == "ValueError: Row 3: invalid date"
     assert cause is exc
+
+
+# ===========================================================================
+# TC-AC-024: cluster metric details recompute extended scores on demand. The
+# repository initially contains placeholder zeros for extended columns, but the
+# metrics dialog must show values computed from the concrete schedule.
+# ===========================================================================
+def test_get_cluster_schedule_scores_recomputes_extended_metrics(controller):
+    # Arrange
+    dto = ScheduleDTO(
+        assignments=[
+            AssignmentDTO(
+                course_id="CS101",
+                course_name="Algorithms",
+                instructor="I1",
+                date="2026-01-01",
+                semester="FALL",
+                moed="ALEPH",
+                program_requirements=[("P1", "OBLIGATORY")],
+            ),
+            AssignmentDTO(
+                course_id="CS102",
+                course_name="Databases",
+                instructor="I2",
+                date="2026-01-10",
+                semester="FALL",
+                moed="ALEPH",
+                program_requirements=[("P1", "OBLIGATORY")],
+            ),
+        ],
+        total_assignments=2,
+        scores={MAX_REST_DAYS: 0.0},
+    )
+    repo = MagicMock()
+    repo.get_schedules_by_ids.return_value = [dto]
+    controller._schedule_state = MagicMock()
+    controller._schedule_state.get_repository.return_value = repo
+    controller._cluster_coordinator = MagicMock()
+    controller._cluster_coordinator.gidx_at.return_value = 42
+    cluster = MagicMock()
+    cluster.member_indices = [0]
+    controller._cluster_run = MagicMock()
+    controller._cluster_run.result.get_cluster.return_value = cluster
+
+    # Act
+    scores = controller.get_cluster_schedule_scores(0, 0)
+
+    # Assert
+    assert scores[MAX_REST_DAYS] == -9.0
+    repo.update_extended_scores.assert_called_once()
+    assert repo.update_extended_scores.call_args[0][0] == [42]
+    assert repo.update_extended_scores.call_args[0][1][0][MAX_REST_DAYS] == -9.0
