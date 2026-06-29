@@ -48,8 +48,7 @@ class OverlayCalendarWidget(OutputCalendarWidget):
             detail_lines.extend(item.programs)
             body = "\n".join(detail_lines)
 
-            title_prefix = "mutual " if source == "mutual" else ""
-            exam_label = QLabel(f"{title_prefix}{item.title}\n{body}")
+            exam_label = QLabel(f"{item.title}\n{body}")
             exam_label.setWordWrap(True)
             exam_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             exam_label.setToolTip(item.tooltip)

@@ -8,6 +8,7 @@ better-value highlights and delta arrows.
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -21,7 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.common.components.HeaderWidget import HeaderWidget
-from gui.common.helpers import create_divider
+from gui.common.helpers import create_divider, create_scaled_pixmap
 from gui.core.screen import Screen
 from gui.features.clusters.ClusterComparePresenter import ClusterComparePresenter
 
@@ -174,37 +175,57 @@ class ClusterCompareScreen(Screen):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setObjectName("compare-scroll")
 
+        # Container widget for scroll area
+        scroll_content = QWidget()
+        scroll_content.setObjectName("compare-scroll-content")
+        scroll_content_layout = QHBoxLayout(scroll_content)
+        scroll_content_layout.setContentsMargins(24, 16, 24, 16)
+
         self._table_frame = QFrame()
         self._table_frame.setObjectName("compare-table-frame")
+        
         self._table = QGridLayout(self._table_frame)
-        self._table.setContentsMargins(24, 16, 24, 16)
-        self._table.setHorizontalSpacing(36)
-        self._table.setVerticalSpacing(8)
+        self._table.setContentsMargins(32, 24, 32, 24)
+        self._table.setHorizontalSpacing(0)
+        self._table.setVerticalSpacing(12)
 
-        scroll.setWidget(self._table_frame)
+        # Configure columns stretch and minimum widths:
+        # Col 0: Metric Name
+        # Col 1: Family A Value
+        # Col 2: Family A Arrow
+        # Col 3: Spacer
+        # Col 4: Family B Value
+        # Col 5: Family B Arrow
+        self._table.setColumnStretch(0, 4)
+        self._table.setColumnStretch(1, 2)
+        self._table.setColumnStretch(2, 1)
+        self._table.setColumnStretch(3, 1)
+        self._table.setColumnStretch(4, 2)
+        self._table.setColumnStretch(5, 1)
+
+        self._table.setColumnMinimumWidth(1, 120)
+        self._table.setColumnMinimumWidth(2, 40)
+        self._table.setColumnMinimumWidth(3, 80)
+        self._table.setColumnMinimumWidth(4, 120)
+        self._table.setColumnMinimumWidth(5, 40)
+
+        scroll_content_layout.addWidget(self._table_frame)
+
+        scroll.setWidget(scroll_content)
         root.addWidget(scroll, stretch=1)
 
-    def _get_arrow(self, crit_id: str) -> str:
+    def _get_arrow_pixmap(self, crit_id: str) -> QPixmap:
         from src.logic.clustering.CriterionDisplay import is_lower_better
-        return "↓" if is_lower_better(crit_id) else "↑"
+        filename = "arrowDownCompare.png" if is_lower_better(crit_id) else "arrowUpCompare.png"
+        return create_scaled_pixmap(self, f"data/assets/{filename}", 16)
 
-    def _winning_value_container(self, value_lbl: QLabel, crit_id: str) -> QWidget:
-        """Wrap the better side's value label with a directional delta arrow."""
-        value_lbl.setObjectName("compare-metric-better")
-        value_lbl.style().unpolish(value_lbl)
-        value_lbl.style().polish(value_lbl)
-
-        arrow = QLabel(self._get_arrow(crit_id))
-        arrow.setObjectName("delta-indicator")
-
-        container = QWidget()
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        layout.addStretch()
-        layout.addWidget(value_lbl)
-        layout.addWidget(arrow)
-        return container
+    def _get_arrow_tooltip(self, crit_id: str) -> str:
+        from src.logic.clustering.CriterionDisplay import is_lower_better, label
+        metric_name = label(crit_id)
+        if is_lower_better(crit_id):
+            return f"Lower value is better for '{metric_name}' \n(this family achieved a lower/better value)."
+        else:
+            return f"Higher value is better for '{metric_name}' \n(this family achieved a higher/better value)."
 
     # ── view API used by the presenter ───────────────────────────────────────
 
@@ -237,13 +258,21 @@ class ClusterCompareScreen(Screen):
                 widget.deleteLater()
 
         header_feature = QLabel("Metric")
+        header_feature.setObjectName("compare-table-header")
+        self._table.addWidget(header_feature, 0, 0)
+
         header_left = QLabel(comparison.left_title)
+        header_left.setObjectName("compare-table-header")
+        header_left.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._table.addWidget(header_left, 0, 1, 1, 2) # Span columns 1 and 2
+
+        header_spacer = QLabel("")
+        self._table.addWidget(header_spacer, 0, 3)
+
         header_right = QLabel(comparison.right_title)
-        for col, lbl in enumerate((header_feature, header_left, header_right)):
-            lbl.setObjectName("compare-table-header")
-            if col > 0:
-                lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._table.addWidget(lbl, 0, col)
+        header_right.setObjectName("compare-table-header")
+        header_right.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._table.addWidget(header_right, 0, 4, 1, 2) # Span columns 4 and 5
 
         # Render feature rows
         for row, (crit_id, label, left_val, right_val, differs) in enumerate(comparison.feature_rows, start=1):
@@ -251,27 +280,55 @@ class ClusterCompareScreen(Screen):
             name_lbl.setObjectName("compare-row-name")
 
             left_lbl = QLabel(left_val)
-            left_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            left_lbl.setObjectName("compare-row-value")
+            left_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            left_arrow = QLabel()
+            left_arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if differs and comparison.better_by_criterion.get(crit_id, "") == "left":
+                left_arrow.setPixmap(self._get_arrow_pixmap(crit_id))
+                left_arrow.setToolTip(self._get_arrow_tooltip(crit_id))
+
+            spacer_lbl = QLabel("")
+            spacer_lbl.setObjectName("compare-row-spacer")
 
             right_lbl = QLabel(right_val)
-            right_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            right_lbl.setObjectName("compare-row-value")
+            right_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            # Which side wins is precomputed from raw numeric scores in the
-            # view-model (no parsing of the display strings here).
+            right_arrow = QLabel()
+            right_arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if differs and comparison.better_by_criterion.get(crit_id, "") == "right":
+                right_arrow.setPixmap(self._get_arrow_pixmap(crit_id))
+                right_arrow.setToolTip(self._get_arrow_tooltip(crit_id))
+
             winner = comparison.better_by_criterion.get(crit_id, "") if differs else ""
 
-            self._table.addWidget(name_lbl, row, 0)
             if winner == "left":
-                self._table.addWidget(self._winning_value_container(left_lbl, crit_id), row, 1)
-                self._table.addWidget(right_lbl, row, 2)
+                left_lbl.setObjectName("compare-metric-better")
+                left_arrow.setObjectName("compare-metric-better-arrow")
+                right_lbl.setObjectName("compare-metric-worse")
+                right_arrow.setObjectName("compare-metric-worse-arrow")
             elif winner == "right":
-                self._table.addWidget(left_lbl, row, 1)
-                self._table.addWidget(self._winning_value_container(right_lbl, crit_id), row, 2)
+                left_lbl.setObjectName("compare-metric-worse")
+                left_arrow.setObjectName("compare-metric-worse-arrow")
+                right_lbl.setObjectName("compare-metric-better")
+                right_arrow.setObjectName("compare-metric-better-arrow")
             else:
-                self._table.addWidget(left_lbl, row, 1)
-                self._table.addWidget(right_lbl, row, 2)
+                left_lbl.setObjectName("compare-row-value")
+                left_arrow.setObjectName("compare-row-value")
+                right_lbl.setObjectName("compare-row-value")
+                right_arrow.setObjectName("compare-row-value")
+
+            # Force style refresh
+            for w in (left_lbl, left_arrow, right_lbl, right_arrow):
+                w.style().unpolish(w)
+                w.style().polish(w)
+
+            self._table.addWidget(name_lbl, row, 0)
+            self._table.addWidget(left_lbl, row, 1)
+            self._table.addWidget(left_arrow, row, 2)
+            self._table.addWidget(spacer_lbl, row, 3)
+            self._table.addWidget(right_lbl, row, 4)
+            self._table.addWidget(right_arrow, row, 5)
 
     def show_message(self, message: str) -> None:
         QMessageBox.information(self, "Compare", message)

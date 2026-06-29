@@ -187,7 +187,7 @@ def display_bar_score(criterion: str, display_value: float) -> int:
     if criterion == ELECTIVE_CONFLICTS:
         return _bounded_score((1.0 / (1.0 + val)) * 100)
     if criterion == MANDATORY_SPAN:
-        return _bounded_score((val / 14.0) * 100)
+        return _bounded_score((val / 28.0) * 100)
     if criterion == MAX_EXAMS_PER_DAY:
         if val <= 1.0:
             return 100
