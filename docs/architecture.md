@@ -15,83 +15,56 @@ https://yuval-keren.github.io/
 
 ## Architecture
 
-* **`src/models/` (Domain):** Contains the core data structures (`Course`, `ExamPeriod`, `ExamSchedule`, `ProgramEntry`) and Enumerations (`EvalType`, `Semester`, `Moed`, `Requirement`).
+* **`src/models/` (Domain):** Contains the core data structures and Enumerations.
 * **`src/file_io/` (Input Management):** Contains all logic regarding reading files and writing output schedules while performing validations and parsing.
-  * `validators/` (Validation):** Ensures data integrity before the engine runs.
-    * `FileValidator`: Verifies files exist, are not empty, and are valid UTF-8.
-    * `MaxProgramsValidator`: Ensures no more than 5 programs are selected at once.
-    * `ProgramExistenceValidator`: Ensures selected program codes exist in the master list.
-  * `parsers/` (Parsing):** Parses the input files into structured data.
-    * `FileParser`: Abstract parser for the input files.
-    * `CourseParser`: Parses the courses file.
-    * `ExamPeriodParser`: Parses the exam periods file.
-    * `ProgramParser`: Parses the programs file.
-    * `ParserFactory`: Creates the appropriate parser based on the input file.
-  * `writers/` (Writing):** Writes the final schedule to a file.
-    * `TextFileWriter`: Writes the final schedule to a text file.
-    * `OutputWriter`: Handles the output of the final schedules.
-* **`src/logic/` (Engine):** The brain of the system. 
-  * `checkers/`: contains the logic for checking constraints.
-    * `IConstraintsChecker`: Interface for checking constraints.
-    * `ProgramYearConflictChecker`: Checks for program-year conflicts.
-    * `MoedConflictChecker`: Checks for moed-level conflicts.
-  * `Scheduler`: Main class that runs the scheduling algorithm.
-  * `SlotBuilder`: Contains the logic for building slots.
-  * `observers/` : Contains observer classes that are used to notify the GUI of the scheduling process.
-    * `ISchedulerObserver`: Interface for observer classes.
-    * `CollectingScheduleObserver`: Observer that collects the final schedule.
-    * `StreamingScheduleObserver`: Observer that streams the final schedule step by step.
-* **`src/infrastructure` (Infrastructure):** Contains the infrastructure layer logic.
-  * `cache/`: Contains the cache logic.
-    * `CachedInputLoader` : In charge of loading input data from the cache.
-    * `DataCache` : Contains the cached data.
-    * `DiskCacheRepository` : In charge of storing the cached data in the disk.
-    * `FileChangeDetector` : Detects changes in the input files and invalidates the cache.
-  * `concurrency/`: Contains the concurrency logic.
-    * `SchedulerProcessRunner` : Runs the scheduler in a separate processes for better performance.
-    * `SchedulerWorker` : Listens to the queue and updates the GUI with the schedules per process.
-    * `QueueScheduleObserver` : Updates the queue with the schedules per process.
-  * `repositories/`: Contains the repository logic.
-    * `IDataRepository` : Interface for data repositories.
-    * `SQLiteScheduleRepository` : Repository for storing schedules in a SQLite database.
+  * `validators/` (Validation): Ensures data integrity before the engine runs.
+  * `parsers/` (Parsing): Parses the input files into structured data.
+  * `writers/` (Writing): Writes the final schedule to a file.
+  * `formatters/` (Formatting): Formats schedules for different output formats.
+* **`src/logic/` (Engine):** The brain of the system.
+  * `Scheduler.py`: Main class that runs the scheduling algorithm.
+  * `SlotBuilder.py`: Contains the logic for building slots for schedule creation.
+  * `ScheduleFeasibilityValidator.py`: Validates that a schedule is feasible before being accepted.
+  * `checkers/`: Contains the logic for checking scheduling constant constraints and user defined constraints.
+    * `config/`: Contains configuration for the checkers.
+  * `observers/`: Contains observer classes for notifying the GUI of the scheduling process.
+  * `clustering/`: Contains the clustering logic for grouping similar schedules by similarity metrics and user defined preferences.
+    * `llm/`: Contains LLM-based components for intelligent cluster labeling for user preference clustering.
+  * `comparators/`: Contains logic for comparing and scoring schedules.
+  * `feasibility/`: Contains domain-level feasibility rules applied before scheduling.
+  * `indexes/`: Contains index structures for efficient schedule lookups.
+  * `parallel/`: Contains logic for parallel scheduling execution.
+* **`src/infrastructure/` (Infrastructure):** Contains the infrastructure layer logic.
+  * `cache/`: Contains the cache logic for input data tracking.
+  * `concurrency/`: Contains the concurrency logic for scheduling.
+  * `repositories/`: Contains the repository logic for data created persistency.
 * **`src/application/` (Application):** Contains the application layer logic.
-  * `dto/` (Data Transfer Objects): contains the data transfer objects used to pass data between the GUI and the engine.
-    * `ScheduleDTO` : Contains the schedule in a format that can be used by the GUI. 
-    * `ScheduleDTOAdapter` : Adapter that converts each `Schedule` to `ScheduleDTO` pickable object.
-  * `services/` (Services): contains the service logic.
-    * `FileImportService` : Service for importing files.
-    * `SchedulingService` : Service for scheduling exams.
-    * `ScheduleExportService` : Service for exporting schedules.
-    * `InputDataMerger` : Service for merging input data.
-    * `ViewModelMapper` : Service for mapping ViewModels to DTOs.
-    * `InputCacheService` : Service for caching input data.
-  * `state/` (State Management): contains the state management logic.
-    * `AppState` : Manages the current state of the application.
-    * `InputDataState` : Manages the input data state of the application.
-    * `SchedulerResultState` : Manages the schedule results and the state of the scheduling process.
-    * `HybridScheduleResultState` : Manages the hybrid schedule results and the state of the scheduling process.
-  * `viewmodels/` (View Models): contains the view model logic.
-    * `AppController` : Manages the application state and dispatches commands.
-    * `ApplicationFacade` : Interface between the GUI and the application layer.
-    * `ImportBoundary` : Import input data using the facade.
+  * `AppController.py`: Manages the application state and dispatches commands.
+  * `ImportBoundary.py`: Import input data using the facade.
+  * `dto/` (Data Transfer Objects): Contains the data transfer objects used to pass data between the GUI and the engine.
+  * `services/` (Services): Contains the service logic that manages the domain objects.
+  * `state/` (State Management): Contains the state management logic.
+  * `viewmodels/` (View Models): Contains the view model definitions used by the GUI.
+  * `errors/` (Error Handling): Contains the application-level error handling logic.
 * **`src/gui/` (GUI):** Contains the GUI logic.
-  * `common/` (Common): contains the common GUI logic.
-    * `components/`: contains the common GUI components.
-      * `CalendarWidget.py` : used to display a calendar.
-      * `CalendarEditorWidget.py` : used to display an editable calendar.
-      * `OutputCalendarWidget.py` : used to display an output calendar.
-      * `ExclusionModel.py` : used to exclude dates from calendar for the schedule editor.
-      * `CourseListWidget.py` : used to display a list of courses.
-      * `HeaderWidget.py` : used to display the main header of the application.
-    * `helpers` : contains the helper functions for the GUI.
-  * `features/` (Features): contains the GUI features logic.
-    * `input/` : folder that contains the input feature logic including widgets and input screen presenter.
-    * `output/` : folder that contains the output feature logic including widgets and output screen presenter.
-  * `core/` (Core): contains the core GUI logic.
-    * `styles/` : folder that contains all style choices for GUI in particular a pallete of colors for the entire system as well as individual stylings per widget\feature.
-    * `app` : file containing the main application window.
-    * `screen` : file containing the different screens of the application.
-    * `ScreenRouter` : used for routing between screens based on user actions.
-* **`src/entrypoints/` (Entry Points):** Contains the entry point logic.
-  * `Main/` (Main): contains the main logic.
-* **`src/GuiMain.py` (Main):** Contains the main logic.
+  * `common/` (Common): Contains the common GUI logic.
+    * `components/`: Contains reusable GUI components.
+    * `helpers.py`: Contains helper functions for the GUI.
+    * `BusyCursorGuard.py`: Context manager that shows a busy cursor during long operations.
+    * `ScheduleExportMixin.py`: Mixin providing schedule export functionality to screens.
+  * `features/` (Features): Contains the GUI feature modules.
+    * `input/`: Contains the input feature logic.
+      * `widgets/`: Input-specific widgets.
+    * `output/`: Contains the output feature logic.
+      * `widgets/`: Output-specific widgets.
+      * `workers/`: Background workers.
+    * `clusters/`: Contains the cluster exploration feature logic.
+      * `widgets/`: Cluster-specific widgets.
+  * `core/` (Core): Contains the core GUI logic.
+    * `styles/`: Contains all style definitions for the GUI.
+    * `app.py`: The main application window.
+    * `screen.py`: Defines the different screens of the application.
+    * `ScreenRouter.py`: Used for routing between screens based on user actions.
+* **`src/main.py` (CLI Entry Point):** Contains the command-line interface entry point.
+* **`src/GuiMain.py` (GUI Entry Point):** Contains the GUI entry point and application bootstrapping logic.
+* **`src/config.py` (Configuration):** Contains global configuration constants and settings.
