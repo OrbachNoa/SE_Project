@@ -65,22 +65,15 @@ def test_invalid_program_code_produces_error_no_output(tmp_path):
     programs_path = FIXTURES / "programs_bad_code.txt"
     output_path = tmp_path / "should_not_exist.txt"
 
-    # Act + Assert — The system must raise, and must NOT create an output file.
-    raised = False
-    try:
+    # Act & Assert — The system must raise, and must NOT create an output file.
+    with pytest.raises(ValueError, match="99999"):
         run_pipeline(
             courses_file=str(courses_path),
             periods_file=str(periods_path),
             programs_file=str(programs_path),
             output_file=str(output_path),
         )
-    except ValueError as exc:
-        raised = True
-        assert "99999" in str(exc), \
-            "Error message does not reference the bad program code '99999'"
 
-    assert raised is True, \
-        "Expected a ValueError for the invalid program code, but none was raised"
     # The file must NOT exist regardless of how the system failed.
     assert not output_path.exists(), \
         "Output file should not be created when validation fails"

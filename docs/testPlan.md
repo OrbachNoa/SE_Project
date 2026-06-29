@@ -125,68 +125,29 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
 
 #### 3.2.1 Unit Tests
 
-* **Test Action Bar Widget:**
-  * Tests the ActionBarWidget for correct initial state, button rendering, mode toggle (replace/update), and signal emission when load/generate buttons are clicked.
-
 * **Test App Controller:**
   * Tests the AppController class — the application's single entry point for GUI screens — for correct delegation to its importer, scheduler, and exporter collaborators: verifying that load_file, generate_schedules, get_loaded_courses, get_loaded_periods, get_page_info, get_schedule_view, and cancel_scheduling all propagate the correct arguments and return values.
 
-* **Test Calendar Editor Widget:**
-  * Tests the CalendarEditorWidget for correct display of exam periods, date exclusion toggling, and proper rendering of excluded-date indicators.
+* **Test Cluster Request Worker:**
+  * Tests the background cluster request worker to ensure it does not preload heavy sklearn exceptions on import, keeping the startup fast.
 
-* **Test Calendar Widget:**
-  * Tests the CalendarWidget for correct month rendering and exam-date badge display, and its OutputCalendarWidget subclass for its own excluded-date styling.
-
-* **Test Course List Widget:**
-  * Tests the CourseListWidget for correct rendering of course blocks from a list of domain Course objects, and correct expand/collapse behaviour for a given program block by ID.
+* **Test Cluster Worker:**
+  * Tests the background worker responsible for computing schedule clusters via IPC.
 
 * **Test Exclusion Model:**
   * Tests the ExclusionModel for managing excluded-date state — adding, removing, and querying excluded dates, and that navigating between periods auto-saves the in-memory edits on the period being left.
 
-* **Test Input Screen:**
-  * Tests the InputScreen widget for correct rendering of the action bar and program selector card, file-load button wiring, and mode switching between replace and update.
-
 * **Test Input Screen Presenter:**
   * Tests the InputScreenPresenter for correct coordination between the InputScreen view and the AppController — verifying file load delegation, import mode forwarding, and course-list refresh after a successful load.
-
-* **Test Navigation:**
-  * Tests ScheduleResultState's current-index tracking for correct boundary guards, reset-on-set-schedules, and out-of-bounds error handling, and ViewModelMapper's navigation-context output for both empty and non-empty schedules.
-
-* **Test Output Screen:**
-  * Tests the OutputScreen widget for correct initial state, forward/backward schedule navigation, calendar month display, schedule counter updates, and back-to-input routing.
 
 * **Test Output Screen Presenter:**
   * Tests the OutputScreenPresenter for correct counter refresh, solution-bar state (next/prev enabled flags), page loading, calendar rendering from a ScheduleViewModel, background thread lifecycle management on view transitions, PDF and TXT export guards (empty schedule, zero total), and export error handling.
 
-* **Test Period Navigator:**
-  * Tests the PeriodNavigator for correct initialisation with and without periods, next/previous navigation boundary enforcement, label generation, date-list construction, and rejection of invalid date ranges.
-
-* **Test Program Selector:**
-  * Tests the ProgramSelectorDialog for correct initial selection state, checkbox toggle behaviour, and enforcement of the maximum five-program selection limit with a warning popup.
-
-* **Test Program Selector Card Widget:**
-  * Tests the ProgramSelectorCardWidget for correct initial badge and placeholder state, chip rendering after selection, mouse-click flow for both accept and cancel dialog outcomes, how a changed course list reconciles against an existing selection, and the no-courses-loaded guard that warns instead of opening the dialog.
-
-* **Test Solution Bar Widget:**
-  * Tests the SolutionBarWidget for correct initial disabled state, button tooltips, back/export click signal emission, next/previous navigation signal emission, paging signal emission, and rejection of clicks on disabled buttons.
-
-* **Test Constraints Settings Dialog:**
-  * Tests the ConstraintsSettingsDialog for correct initial state when no configuration is provided, correct threshold value returned after enabling a criterion and confirming, and None returned for a disabled criterion.
-
-* **Test Sort Config Panel:**
-  * Tests the SortConfigPanel and SortRow widgets for correct display, automatic priority badge assignment when a criterion is enabled, and correct priority order emitted after reordering.
+* **Test Schedule Pdf Exporter:**
+  * Tests the PDF export error path — verifying that a failure during HTML build or Qt printing is reported through the presenter's error-mapping callback rather than showing the raw exception.
 
 * **Test Sort Worker:**
   * Tests the SortWorker QThread for correct emission of the ready signal with sorted results, correct handling of an empty input list, and that a failure during sorting is reported through the failed signal with a structured error record.
-
-* **Test Cluster Detail Presenter:**
-  * Tests the ClusterDetailPresenter for correct error handling during cluster export and navigation — verifying that export and read failures route through the controller's error mapper and leave the screen in a recoverable state rather than crashing.
-
-* **Test Cluster Overview Presenter:**
-  * Tests the ClusterOverviewPresenter for correct handling of background ClusterWorker failures — verifying that the worker's structured error record reaches the controller's technical log in addition to the clean message shown to the user.
-
-* **Test Schedule Pdf Exporter:**
-  * Tests the PDF export error path — verifying that a failure during HTML build or Qt printing is reported through the presenter's error-mapping callback rather than showing the raw exception.
 
 #### 3.2.2 Integration Tests
 
@@ -258,27 +219,15 @@ tests/
 ├── gui/
 │   ├── unit/
 │   │   ├── Test_AppController.py
-│   │   ├── Test_ActionBarWidget.py
-│   │   ├── Test_CalendarEditorWidget.py
-│   │   ├── Test_CalendarWidget.py
-│   │   ├── Test_CourseListWidget.py
+│   │   ├── Test_ClusterRequestWorker.py
+│   │   ├── Test_ClusterWorker.py
 │   │   ├── Test_ExclusionModel.py
-│   │   ├── Test_InputScreen.py
 │   │   ├── Test_InputScreenPresenter.py
-│   │   ├── Test_OutputScreen.py
 │   │   ├── Test_OutputScreenPresenter.py
-│   │   ├── Test_PeriodNavigator.py
-│   │   ├── Test_ProgramSelector.py
-│   │   ├── Test_ProgramSelectorCardWidget.py
-│   │   ├── Test_SolutionBarWidget.py
-│   │   ├── Test_Navigation.py
-│   │   ├── Test_ConstraintsSettingsDialog.py
-│   │   ├── Test_SortConfigPanel.py
-│   │   ├── Test_SortWorker.py
-│   │   ├── Test_ClusterDetailPresenter.py
-│   │   ├── Test_ClusterOverviewPresenter.py
-│   │   └── Test_SchedulePdfExporter.py
+│   │   ├── Test_SchedulePdfExporter.py
+│   │   └── Test_SortWorker.py
 │   └── integration/
+│       ├── Test_App.py
 │       ├── Test_GUI.py
 │       ├── Test_GuiIntegration.py
 │       └── Test_Workers.py

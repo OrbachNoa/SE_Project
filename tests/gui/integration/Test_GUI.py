@@ -488,8 +488,10 @@ def test_export_pdf_actual_file(qtbot, viewmodel_mapper, tmp_path):
 # ===========================================================================
 # TC-GUI-E2E-005: test E2E flow with real components performing update loads and generating schedules.
 # ===========================================================================
-def test_update_import_and_real_pipeline(qtbot, tmp_path, make_schedule_dto):
+def test_update_import_and_real_pipeline(qtbot, tmp_path):
     # Imports locally to avoid module caching issues
+    import zlib
+    from src.application.dto.PackedScheduleCodec import pack_rows
     from src.application.services.FileImportService import FileImportService
     from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
     from src.application.state.HybridScheduleResultState import HybridScheduleResultState
@@ -598,9 +600,14 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path, make_schedule_dto):
         assert len(call_args[1]) == len(loaded_courses)
         assert len(call_args[2]) == len(loaded_periods)
         
-        # Insert a mock schedule DTO to simulate SQLite output database state
-        dto = make_schedule_dto()
-        schedule_repository.insert_batch([dto])
+        # Insert a packed batch to simulate SQLite output database state.
+        # insert_batch no longer exists; the repository's current public API
+        # stores packed rows, so configure_slots([]) plus one zero-slot row
+        # is the equivalent of "one decodable, empty-assignment schedule
+        # exists" -- enough to make count() > 0 and trigger early navigation.
+        schedule_repository.configure_slots([])
+        packed = pack_rows([b""], slot_count=0, row_count=1)
+        schedule_repository.insert_compressed_batch(zlib.compress(packed), 1)
         
         # Act 5: Simulate generation batch found to trigger router navigation
         stub_worker.schedules_batch_found.emit(1)

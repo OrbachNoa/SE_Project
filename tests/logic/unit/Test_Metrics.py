@@ -1,23 +1,35 @@
-"""Unit tests for the five schedule-scoring metric functions and the
-index-building helpers they depend on.
+"""Unit tests for the schedule-scoring metric functions and the
+index-building helpers they depend on, in src/logic/comparators/Metrics.py.
 
 The index builders (build_cohort_index, build_span_index,
-build_program_index, build_elective_index) precompute per-course lookups
-once per schedule, scoped by requirement (obligatory/elective) and program
-selection, so the metric functions themselves can run as simple lookups
-rather than re-filtering courses every call. The five metrics
-(min_mandatory_gap, avg_all_courses_gap, peak_elective_conflict,
-mandatory_span, max_exams_per_day) each capture a different aspect of
-schedule quality: tightest mandatory spacing, average spacing across all
-courses, worst single-day elective pile-up, mandatory exam-window width
-per moed group, and busiest single day per program. Each metric's tests
-verify both its main computation and its specific edge case (no pair to
-compare, single exam, empty schedule).
+build_elective_index) precompute per-course lookups once per schedule, scoped
+by requirement (obligatory/elective) and program selection, so the metric
+functions themselves can run as simple lookups rather than re-filtering
+courses every call. The remaining metrics (min_mandatory_gap,
+avg_all_courses_gap, mandatory_span, max_exams_per_day) each capture a
+different aspect of schedule quality: tightest mandatory spacing, average
+spacing across all courses, mandatory exam-window width per moed group, and
+busiest single day across the whole schedule. Each metric's tests verify
+both its main computation and its specific edge case (no pair to compare,
+single exam, empty schedule).
+
+Two functions that used to live here, build_program_index and
+peak_elective_conflict, were removed in a refactor: max_exams_per_day no
+longer takes a program index (it now counts every exam on a date globally,
+matching MaxExamsPerDayChecker), and the elective-conflict criterion is now
+computed inline inside ScheduleScorer with a different formula (total
+same-day pair-conflicts per program, matching ElectiveConflictCapChecker,
+rather than the old peak-pile-up-minus-one). Since neither has a standalone
+Metrics-level equivalent any more, their tests (formerly TC-MET-005 and
+TC-MET-013..015) were removed rather than adapted — see the markers left in
+their place below. The new ScheduleScorer-level behavior for elective
+conflicts is covered by Test_ScheduleScorer.py's TC-SCO-004.
 
 Conventions:
 - Each test carries a unique TC-MET-NNN identifier in the comment block
   above its definition, numbered sequentially, grouped under a section
-  divider per function.
+  divider per function. Removed tests leave their numbers retired rather
+  than renumbering the rest of the file.
 - Each test body is split into Arrange / Act / Assert sections.
 - `make_course`, `make_program_entry`, `make_assignment`, and
   `empty_schedule` come from the shared fixtures in tests/conftest.py.
@@ -29,11 +41,9 @@ from src.models.Enums import Requirement, Moed
 from src.logic.comparators.Metrics import (
     build_cohort_index,
     build_span_index,
-    build_program_index,
     build_elective_index,
     min_mandatory_gap,
     avg_all_courses_gap,
-    peak_elective_conflict,
     mandatory_span,
     max_exams_per_day,
 )
@@ -128,26 +138,11 @@ def test_build_span_index_returns_only_obligatory_cohorts(
 
 
 # ---------------------------------------------------------------------------
-# build_program_index TC-MET-005
+# build_program_index TC-MET-005 — removed: build_program_index was deleted
+# from Metrics.py during the ScheduleScorer refactor. max_exams_per_day no
+# longer groups by program (see TC-MET-019..021 below), so there is no
+# remaining function for this test to exercise.
 # ---------------------------------------------------------------------------
-
-# ===========================================================================
-# TC-MET-005: build_program_index — a course taught under two different
-# programs appears for both programs in the index.
-# ===========================================================================
-def test_build_program_index_course_in_two_programs(
-    make_course, make_program_entry,
-):
-    # Arrange
-    pe_a = make_program_entry(program_id="83101", year=2)
-    pe_b = make_program_entry(program_id="83102", year=2)
-    course = make_course(course_id="A", program_entries=[pe_a, pe_b])
-
-    # Act
-    index = build_program_index([course])
-
-    # Assert
-    assert index["A"] == {"83101", "83102"}
 
 
 # ---------------------------------------------------------------------------
@@ -328,82 +323,15 @@ def test_avg_all_courses_gap_includes_elective_courses(
 
 
 # ---------------------------------------------------------------------------
-# peak_elective_conflict TC-MET-013..015
+# peak_elective_conflict TC-MET-013..015 — removed: peak_elective_conflict
+# was deleted from Metrics.py during the ScheduleScorer refactor. The
+# elective-conflict criterion is now computed inline inside ScheduleScorer
+# using a different formula (total same-day pair-conflicts per program,
+# matching ElectiveConflictCapChecker) with no standalone Metrics-level
+# function exposing it any more. That behavior, including the same
+# three-same-day-electives scenario these tests used to cover, is verified
+# by Test_ScheduleScorer.py's TC-SCO-004.
 # ---------------------------------------------------------------------------
-
-# ===========================================================================
-# TC-MET-013: peak_elective_conflict — four electives piled on the same day
-# score 3 (the peak minus one), not the number of conflicting pairs.
-# ===========================================================================
-def test_peak_elective_conflict_returns_peak_minus_one_for_four_same_day(
-    make_course, make_program_entry, make_assignment, empty_schedule,
-):
-    # Arrange
-    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
-    courses = [make_course(course_id=cid, program_entries=[pe]) for cid in ("A", "B", "C", "D")]
-    elective_cohorts = build_elective_index(courses)
-
-    schedule = empty_schedule
-    for course in courses:
-        schedule.addAssignment(make_assignment(course=course, exam_date=date(2026, 6, 5)))
-
-    # Act
-    result = peak_elective_conflict(schedule, elective_cohorts)
-
-    # Assert
-    assert result == 3
-
-
-# ===========================================================================
-# TC-MET-014: peak_elective_conflict — electives spread over distinct days
-# never pile up, so the score is 0.
-# ===========================================================================
-def test_peak_elective_conflict_returns_zero_when_electives_on_different_days(
-    make_course, make_program_entry, make_assignment, empty_schedule,
-):
-    # Arrange
-    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
-    course_a = make_course(course_id="A", program_entries=[pe])
-    course_b = make_course(course_id="B", program_entries=[pe])
-    course_c = make_course(course_id="C", program_entries=[pe])
-    elective_cohorts = build_elective_index([course_a, course_b, course_c])
-
-    schedule = empty_schedule
-    schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
-    schedule.addAssignment(make_assignment(course=course_b, exam_date=date(2026, 6, 2)))
-    schedule.addAssignment(make_assignment(course=course_c, exam_date=date(2026, 6, 3)))
-
-    # Act
-    result = peak_elective_conflict(schedule, elective_cohorts)
-
-    # Assert
-    assert result == 0
-
-
-# ===========================================================================
-# TC-MET-015: peak_elective_conflict — two days with 3 electives each score
-# 2 (the worst single-day pile-up), not the total of 6 electives.
-# ===========================================================================
-def test_peak_elective_conflict_returns_worst_peak_not_total(
-    make_course, make_program_entry, make_assignment, empty_schedule,
-):
-    # Arrange
-    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
-    day_one_courses = [make_course(course_id=cid, program_entries=[pe]) for cid in ("A", "B", "C")]
-    day_two_courses = [make_course(course_id=cid, program_entries=[pe]) for cid in ("D", "E", "F")]
-    elective_cohorts = build_elective_index(day_one_courses + day_two_courses)
-
-    schedule = empty_schedule
-    for course in day_one_courses:
-        schedule.addAssignment(make_assignment(course=course, exam_date=date(2026, 6, 1)))
-    for course in day_two_courses:
-        schedule.addAssignment(make_assignment(course=course, exam_date=date(2026, 6, 2)))
-
-    # Act
-    result = peak_elective_conflict(schedule, elective_cohorts)
-
-    # Assert
-    assert result == 2
 
 
 # ---------------------------------------------------------------------------
@@ -500,7 +428,6 @@ def test_max_exams_per_day_returns_three_for_same_day_same_program(
     course_a = make_course(course_id="A", program_entries=[make_program_entry(program_id="83101", year=2)])
     course_b = make_course(course_id="B", program_entries=[make_program_entry(program_id="83101", year=3)])
     course_c = make_course(course_id="C", program_entries=[make_program_entry(program_id="83101", year=4)])
-    program_index = build_program_index([course_a, course_b, course_c])
 
     schedule = empty_schedule
     schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 5)))
@@ -508,7 +435,7 @@ def test_max_exams_per_day_returns_three_for_same_day_same_program(
     schedule.addAssignment(make_assignment(course=course_c, exam_date=date(2026, 6, 5)))
 
     # Act
-    result = max_exams_per_day(schedule, program_index)
+    result = max_exams_per_day(schedule)
 
     # Assert
     assert result == 3
@@ -527,7 +454,6 @@ def test_max_exams_per_day_returns_peak_day_across_multiple_days(
     course_b = make_course(course_id="B", program_entries=[pe])
     course_c = make_course(course_id="C", program_entries=[pe])
     course_d = make_course(course_id="D", program_entries=[pe])
-    program_index = build_program_index([course_a, course_b, course_c, course_d])
 
     schedule = empty_schedule
     schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
@@ -536,7 +462,7 @@ def test_max_exams_per_day_returns_peak_day_across_multiple_days(
     schedule.addAssignment(make_assignment(course=course_d, exam_date=date(2026, 6, 3)))
 
     # Act
-    result = max_exams_per_day(schedule, program_index)
+    result = max_exams_per_day(schedule)
 
     # Assert
     assert result == 2
@@ -548,11 +474,10 @@ def test_max_exams_per_day_returns_peak_day_across_multiple_days(
 # ===========================================================================
 def test_max_exams_per_day_returns_zero_for_empty_schedule(empty_schedule):
     # Arrange
-    program_index = build_program_index([])
     schedule = empty_schedule
 
     # Act
-    result = max_exams_per_day(schedule, program_index)
+    result = max_exams_per_day(schedule)
 
     # Assert
     assert result == 0
