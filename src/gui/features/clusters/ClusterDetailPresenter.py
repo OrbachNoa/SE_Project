@@ -176,12 +176,12 @@ class ClusterDetailPresenter(ScheduleExportMixin):
         if self._size == 0:
             return
         try:
-            schedule_vm = self._controller.get_cluster_schedule_view(self._cluster_id, self._index)
+            scores = self._controller.get_cluster_schedule_scores(self._cluster_id, self._index)
         except Exception as error:
             self._handle_error(error, {"operation": "read_schedule", "screen": "cluster_detail"}, "Could not load schedule metrics: ")
             return
 
-        if not schedule_vm or not schedule_vm.scores:
+        if not scores:
             self._view.show_message("No metrics available for this schedule.")
             return
 
@@ -190,7 +190,7 @@ class ClusterDetailPresenter(ScheduleExportMixin):
 
         summary = []
         for name in EXTENDED_CRITERIA:
-            val = schedule_vm.scores.get(name, 0.0)
+            val = scores.get(name, 0.0)
             summary.append((
                 name,
                 CriterionDisplay.label(name),

@@ -12,9 +12,10 @@ Conventions:
   fixtures (tests/conftest.py); the view has no shared fixture, so it is
   built locally by the _presenter() helper below.
 """
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.gui.features.clusters.ClusterDetailPresenter import ClusterDetailPresenter
+from src.logic.clustering.ExtendedFeatureComputer import MAX_REST_DAYS
 
 
 def _presenter(controller, router):
@@ -147,3 +148,27 @@ def test_cluster_detail_presenter_on_next_recovers_when_read_schedule_fails(mock
     assert presenter._index == 1
     assert mock_controller.map_error.call_count == 1
     assert view.show_message.call_count == 1
+
+
+# ===========================================================================
+# TC-CDP-006: on_show_metrics must ask the controller for fully materialized
+# metric scores instead of reusing the displayed schedule view, whose extended
+# scores may still be placeholder zeros.
+# ===========================================================================
+def test_cluster_detail_presenter_show_metrics_uses_controller_metric_scores(mock_controller, mock_router):
+    # Arrange
+    presenter, view = _presenter(mock_controller, mock_router)
+    mock_controller.get_cluster_schedule_scores.return_value = {MAX_REST_DAYS: -9.0}
+    mock_controller.get_cluster_schedule_view.return_value = MagicMock(scores={MAX_REST_DAYS: 0.0})
+
+    # Act
+    with patch("gui.features.clusters.widgets.AllMetricsDialog.AllMetricsDialog") as dialog_cls:
+        presenter.on_show_metrics()
+
+    # Assert
+    mock_controller.get_cluster_schedule_scores.assert_called_once_with(0, 0)
+    mock_controller.get_cluster_schedule_view.assert_not_called()
+    summary = dialog_cls.call_args.kwargs["summary"]
+    max_rest_row = next(row for row in summary if row[0] == MAX_REST_DAYS)
+    assert max_rest_row[2] == "9.0"
+    dialog_cls.return_value.exec.assert_called_once()

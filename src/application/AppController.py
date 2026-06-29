@@ -582,6 +582,28 @@ class AppController(QObject):
             dto, current_index=index_in_cluster, total=cluster.size, selected_programs=selected
         )
 
+    def get_cluster_schedule_scores(self, cluster_id: int, index_in_cluster: int) -> dict:
+        """Return all display metrics for one schedule, computing extended scores on demand."""
+        run = self._require_run()
+        cluster = run.result.get_cluster(cluster_id)
+        working_index = cluster.member_indices[index_in_cluster]
+        global_id = self._cluster_coordinator.gidx_at(working_index)
+        dto = self._cluster_dto(working_index)
+
+        from src.logic.clustering.ExtendedFeatureComputer import ExtendedFeatureComputer
+
+        scores = dict(dto.scores or {})
+        extended_scores = ExtendedFeatureComputer.compute(dto)
+        scores.update(extended_scores)
+        dto.scores = scores
+
+        repo = self._get_schedule_repository()
+        updater = getattr(repo, "update_extended_scores", None)
+        if callable(updater):
+            updater([global_id], [extended_scores])
+
+        return scores
+
     def get_representative_view(self, cluster_id: int) -> ScheduleViewModel:
         run = self._require_run()
         cluster = run.result.get_cluster(cluster_id)
