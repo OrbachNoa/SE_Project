@@ -18,10 +18,10 @@ The engine uses a Strategy-based design, preserving a clean pipeline of independ
             ┌──────────────────────── ClusteringCoordinator ────────────────────────┐
             │  (application layer: knows where vectors live — SQLite / in-memory) │
             └───────────────┬─────────────────────────────────────────────────────┘
-                            │ sampled score vectors (n, up to 13 features)
+                            │ sampled score vectors (n, up to 16 features)
                             ▼
-   ScheduleSampler ──▶ ScoreFeatureExtractor ──▶ FeatureNormalizer ──▶ AutoKSelector ──▶ KMeansClusteringStrategy
-   (≤ max_sample)      (scores → vector)         (min-max → [0,1])     (silhouette)       (k-means++, in-house)
+   ScheduleSampler ──▶ ScoreFeatureExtractor ──▶ FeatureNormalizer ──▶ AutoKSelector ──▶ ScikitLearnKMeansStrategy
+   (≤ max_sample)      (scores → vector)         (min-max → [0,1])     (silhouette)       (sklearn primary; in-house fallback)
                             │                                                                     │
                             ▼                                                                     ▼
                      ClusterSummarizer  ◀────────────  ClusteringService (orchestrator)  ──▶  ClusterResult
@@ -36,7 +36,8 @@ The engine uses a Strategy-based design, preserving a clean pipeline of independ
 | `ScoreFeatureExtractor` | Turns a schedule (or a bare score map) into a vector, in a fixed criterion order. |
 | `FeatureNormalizer` | Min-max each dimension to `[0,1]` so no single score dominates the distance calculation. |
 | `WeightedEuclideanDistanceMetric` | Calculates similarity in normalized space. The weights are what "group mostly by X" translates to. |
-| `KMeansClusteringStrategy` | The algorithm. Uses an in-house k-means++ (deterministic, no scikit-learn dependency). |
+| `ScikitLearnKMeansStrategy` | **Primary** algorithm. Wraps scikit-learn's KMeans for performance and stability. |
+| `KMeansClusteringStrategy` | **Fallback** algorithm. In-house k-means++ used when scikit-learn is not installed. |
 | `AutoKSelector` | Picks K by mean **silhouette** score over a candidate range, evaluated on a capped sub-sample for speed. |
 | `ScheduleSampler` | Draws a uniform representative sample (≤ `max_sample`) so the pipeline stays fast at scale. |
 | `ClusterSummarizer` | Generates default, dependency-free one-line descriptions from simple statistics. |
@@ -66,7 +67,7 @@ The user can describe a grouping in plain language (English or Hebrew) via the c
 3. **Default**: If no match is found, falls back to automatic grouping using all core criteria.
 
 **Supported Intent Topics:**
-Requests map to 11 possible topics which control specific combinations of the 13 available criteria (5 sort criteria + 8 extended features):
+Requests map to 12 possible topics which control specific combinations of the 16 available criteria (5 base criteria + 11 extended features):
 - `retake_time` (Moed gap)
 - `study_prep` (Free days before mandatory)
 - `daily_load` (Exams per day)
@@ -78,13 +79,14 @@ Requests map to 11 possible topics which control specific combinations of the 13
 - `conflicts` (Elective clashes)
 - `balance` (Even distribution)
 - `general` (All criteria)
+- `faculty_load` (Instructor/department load — time for instructors to grade and prepare, per-instructor and per-department)
 
 *Thresholds & K Specification*: 
 The pipeline respects numeric thresholds as emphasis boosts (e.g., "minimum 7 days" boosts retake weight). The number of clusters (K) can be explicitly requested using digits or words (e.g., "into 4 groups", "חמש קבוצות").
 
-### Supported Criteria (13 Total)
+### Supported Criteria (16 Total)
 
-The engine can cluster on any subset of 13 computed features (5 base criteria + 8 extended features).
+The engine can cluster on any subset of 16 computed features (5 base criteria + 11 extended features).
 
 **Base Sort Criteria:**
 - `MIN_MANDATORY_GAP`: Min mandatory gap (days) — *More rest between mandatory exams*
@@ -102,6 +104,9 @@ The engine can cluster on any subset of 13 computed features (5 base criteria + 
 - `BUSIEST_WEEK_COUNT`: Busiest week (exams) — *Lighter busiest week (stored negated)*
 - `MAX_REST_DAYS`: Longest rest (days) — *Longer recovery window*
 - `MANDATORY_CONSEC`: Consecutive mandatory days — *Fewer back-to-back mandatory pairs (stored negated)*
+- `B2B_EXAM_INCIDENCE`: Back-to-back exam rate — *Lower percentage of back-to-back exams (stored negated)*
+- `DEPT_EXAM_CONCURRENCY`: Dept exam concurrency — *Lower peak number of simultaneous department exams per day (stored negated)*
+- `INSTRUCTOR_EXAM_GAP`: Min instructor gap — *Larger minimum gap between exams of the same instructor*
 
 *(Note: "Stored negated" means the raw mathematical score is kept negative so that 'higher' mathematically always equates to 'better'. The UI automatically de-negates these for human-readable display.)*
 
@@ -131,7 +136,7 @@ To enable the LLM for smarter free-text understanding, create a `.env` file in t
 CLUSTER_LLM_API_KEY=your-key-here
 CLUSTER_LLM_BASE_URL=https://api.groq.com/openai/v1
 CLUSTER_LLM_MODEL=llama-3.3-70b-versatile
-CLUSTER_LLM_TIMEOUT=20
+CLUSTER_LLM_TIMEOUT=15
 ```
 
 **Recommended Free Providers:**
