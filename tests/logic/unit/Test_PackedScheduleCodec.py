@@ -2,13 +2,13 @@
 Test suite for PackedScheduleCodec.
 
 Scope   : Binary pack/unpack round-trips for compact schedule batch blobs,
-          the 16-bit size guards, magic-byte validation, selective row
-          unpacking, schedule encoding into slot-aligned date indexes, and
-          row-to-DTO reconstruction including its defensive fallback for a
-          course with no program entries.
+          the 16-bit size guards, magic-byte validation, truncated/short-blob
+          rejection, selective row unpacking, schedule encoding into
+          slot-aligned date indexes, and row-to-DTO reconstruction including
+          its defensive fallback for a course with no program entries.
 Pattern : AAA (Arrange / Act / Assert)
 Naming  : test_<component>_<scenario>
-TC-IDs  : TC-PSC-001 .. TC-PSC-013
+TC-IDs  : TC-PSC-001 .. TC-PSC-015
 Fixtures: make_course, make_period, make_assignment (tests/conftest.py)
 """
 from datetime import date
@@ -293,3 +293,38 @@ def test_full_pipeline_encode_pack_unpack_row_to_dto_round_trips(make_course, ma
     assert len(rows) == 1
     assert dto.assignments[0].date == dates[1].isoformat()
     assert dto.assignments[0].course_id == "10101"
+
+
+# TC-PSC-014
+# A blob shorter than the fixed 9-byte header (a transport that was cut off
+# before the header even finished) must fail loudly, never be misread as a
+# zero-row batch. ValueError is tolerated in case the format later hardens the
+# struct error into its own message.
+def test_unpack_rows_raises_on_truncated_header():
+    # Arrange — only part of the magic, far short of the 9-byte header.
+    truncated = b"ESPK1\x01\x00"  # 7 bytes
+
+    # Act / Assert
+    import struct
+    with pytest.raises((struct.error, ValueError)):
+        unpack_rows(truncated)
+
+
+# TC-PSC-015
+# A blob with a valid header that promises N rows but whose body was cut short
+# must raise rather than silently returning fewer (or garbage) rows — a chopped
+# batch must never decode into a partial, misaligned result.
+def test_unpack_rows_raises_on_truncated_body():
+    # Arrange — pack three 2-slot rows, then keep only the header plus one row.
+    import struct
+    rows = [
+        struct.pack("<2H", 0, 0),
+        struct.pack("<2H", 1, 1),
+        struct.pack("<2H", 2, 2),
+    ]
+    blob = pack_rows(rows, slot_count=2, row_count=3)
+    header_plus_one_row = blob[:9 + 4]  # 9-byte header + one 4-byte row
+
+    # Act / Assert — reading the second promised row runs off the buffer.
+    with pytest.raises((struct.error, ValueError)):
+        unpack_rows(header_plus_one_row)

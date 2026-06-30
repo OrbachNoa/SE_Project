@@ -19,6 +19,7 @@ Conventions:
 """
 from unittest.mock import MagicMock
 from src.gui.features.input.InputScreenPresenter import InputScreenPresenter
+from src.gui.features.input.InputScreen import InputScreen
 from src.application.ImportBoundary import ImportMode, ImportResult
 from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 
@@ -492,21 +493,28 @@ def test_presenter_on_constraints_saved_delegates_to_constraints(mock_controller
     assert view.set_generate_button_state.call_count == 1
 
 # ===========================================================================
-# TC-ISP-021: test on_enter calls refresh_generate_button so the button's
-# state is correct as soon as the screen becomes visible.
+# TC-ISP-021: entering the screen with no input files loaded must leave the
+# REAL Generate button disabled. This drives a live InputScreen and inspects
+# the actual QPushButton, rather than asserting a mock was called — it guards
+# the user flow "you cannot generate before loading courses and periods".
 # ===========================================================================
-def test_presenter_on_enter_calls_refresh_generate_button(mock_controller, mock_router):
-    # Arrange
-    view = MagicMock()
-    view.selected_program_ids.return_value = ["83101"]
-    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
-    presenter.refresh_generate_button = MagicMock()
+def test_presenter_on_enter_disables_real_generate_button_when_files_missing(
+    qapp, mock_controller, mock_router,
+):
+    # Arrange — a real InputScreen with nothing loaded yet. Force the real
+    # Generate button to the wrong (enabled) state first, so the assertion
+    # proves on_enter actively drove the widget rather than reading a stale
+    # construction-time default.
+    mock_controller.get_loaded_courses.return_value = []
+    mock_controller.get_loaded_periods.return_value = []
+    screen = InputScreen(mock_controller, mock_router)
+    screen.action_bar.generate_btn.setEnabled(True)
 
     # Act
-    presenter.on_enter()
+    screen._presenter.on_enter()
 
-    # Assert
-    assert presenter.refresh_generate_button.call_count == 1
+    # Assert — with neither courses nor periods loaded, the live button is off.
+    assert screen.action_bar.generate_btn.isEnabled() is False
 
 # ===========================================================================
 # TC-ISP-022: test refresh_generate_button's invalid-dates branch using a

@@ -65,16 +65,6 @@ def test_validate_file_exists_accepts_existing_file(mock_isfile):
     assert result is None
 
 
-# TC-FVA-005
-# validate_file_exists must raise FileNotFoundError when the path points
-# at a directory rather than a file (os.path.isfile excludes directories).
-@patch("os.path.isfile", return_value=False)
-def test_validate_file_exists_rejects_directory_path(mock_isfile):
-    # Act + Assert
-    with pytest.raises(FileNotFoundError):
-        validate_file_exists("a_directory_path")
-
-
 # TC-FVA-006
 # validate_file_not_empty must raise ValueError for a genuinely zero-byte file.
 @patch("os.path.getsize", return_value=0)

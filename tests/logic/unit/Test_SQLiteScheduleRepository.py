@@ -2,10 +2,10 @@
 Test suite for SQLiteScheduleRepository.
 
 Scope   : Persistence of compressed schedule batches, paging, lazy score updates,
-          and dynamic sort indexing.
+          dynamic sort indexing, multi-batch global id indexing, and clear().
 Pattern : AAA (Arrange / Act / Assert)
 Naming  : test_<component>_<scenario>
-TC-IDs  : TC-SSR-001, TC-SSR-002, TC-SSR-003, TC-SSR-004
+TC-IDs  : TC-SSR-001 .. TC-SSR-006
 Fixtures: tmp_path, make_course, make_period
 """
 import zlib
@@ -121,3 +121,55 @@ def test_get_schedules_by_ids_decodes_packed_blob_and_returns_dto(empty_repo, ma
     assert len(dto.assignments) == 1
     assert dto.assignments[0].course_id == "C101"
     assert dto.assignments[0].date == "2023-01-01"
+
+
+# TC-SSR-005
+# Two separately inserted batches must share one continuous global id space:
+# the second batch's schedules are indexed after the first (first_offset =
+# running total), and a sorted-page query must rank schedules from BOTH batches
+# together by score, returning their correct cross-batch global ids.
+def test_multiple_batches_share_one_global_id_space(empty_repo):
+    # Arrange
+    crit = ALL_CRITERIA[0]
+    # Batch 1 -> global ids 0, 1
+    empty_repo.insert_compressed_batch(
+        data=make_packed_blob(2), batch_count=2,
+        batch_scores=[{crit: 10.0}, {crit: 40.0}],
+    )
+    # Batch 2 -> global ids 2, 3, 4
+    empty_repo.insert_compressed_batch(
+        data=make_packed_blob(3), batch_count=3,
+        batch_scores=[{crit: 90.0}, {crit: 20.0}, {crit: 70.0}],
+    )
+
+    # Act
+    total = empty_repo.count()
+    ids_desc = empty_repo.get_sorted_ids_page(priority=[crit], offset=0, limit=5)
+
+    # Assert — count spans both batches, and batch 2's global ids (2, 3, 4)
+    # interleave with batch 1's by score in a single descending ordering.
+    assert total == 5
+    assert ids_desc == [2, 4, 1, 3, 0]  # scores 90, 70, 40, 20, 10
+
+
+# TC-SSR-006
+# clear() must reset the store to empty: count() and count_scores() return to
+# zero and a sorted-page query yields nothing, so a fresh generation run can
+# never surface a previous run's schedules.
+def test_clear_resets_counts_and_queries(empty_repo):
+    # Arrange
+    crit = ALL_CRITERIA[0]
+    empty_repo.insert_compressed_batch(
+        data=make_packed_blob(3), batch_count=3,
+        batch_scores=[{crit: 1.0}, {crit: 2.0}, {crit: 3.0}],
+    )
+
+    # Act
+    count_before = empty_repo.count()
+    empty_repo.clear()
+
+    # Assert
+    assert count_before == 3
+    assert empty_repo.count() == 0
+    assert empty_repo.count_scores() == 0
+    assert empty_repo.get_sorted_ids_page(priority=[crit], offset=0, limit=10) == []

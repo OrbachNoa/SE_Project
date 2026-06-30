@@ -74,15 +74,20 @@ def test_configure_default_logging_sets_up_when_no_handlers_exist():
     # Arrange
     root = logging.getLogger()
     original_handlers = root.handlers[:]
+    original_level = root.level
     root.handlers = []  # Clear to simulate an unconfigured state
-    
+
     try:
         # Act
         configure_default_logging(level=logging.DEBUG)
-        
+
         # Assert
         assert len(root.handlers) > 0
         assert root.level == logging.DEBUG
     finally:
-        # Cleanup
+        # Cleanup — restore BOTH handlers and level. configure_default_logging()
+        # calls logging.basicConfig(), which mutates the root logger's level to
+        # DEBUG; without restoring it the root logger would stay at DEBUG and
+        # leak that verbosity into every later test in the session.
         root.handlers = original_handlers
+        root.setLevel(original_level)

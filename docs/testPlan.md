@@ -266,7 +266,7 @@ This field tests the GUI aspect of the system and is divided into Unit Tests and
 This field tests the performance aspect of the system.
 
 * **Test Performance:**
-  * Tests the verify the 30-second constraint under realistic and maximum load scenarios. Additional tests cover scoring throughput on large result sets, sort ranking on high-volume collections, full scheduling with all threshold constraints active, and the clustering pipeline on a realistic sample size.
+  * Tests the 30-second constraint under realistic and maximum load scenarios. Additional tests cover scoring throughput on large result sets, sort ranking on high-volume collections, full scheduling with all threshold constraints active, and the clustering pipeline on a realistic sample size.
 
 # Test File Structure
 ```bash

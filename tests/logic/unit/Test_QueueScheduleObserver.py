@@ -4,21 +4,24 @@ Test suite for QueueScheduleObserver.
 Scope   : Constructor validation, on_progress duplicate suppression,
           _reserve_result_slot's global result-limit gating with
           cancel_event tripping, the run_id wrapping behaviour of _wrap()
-          across every outgoing message kind, and on_error forwarding a
-          dict payload as-is. These cases are additive to the existing
-          buffering/flush/lifecycle coverage in Test_Observers.py and do
-          not duplicate it.
+          across every outgoing message kind, on_error forwarding a dict
+          payload as-is, and the precise content of one compressed
+          SCHEDULE_BATCH payload (a zlib + packed-rows round trip). These
+          cases are additive to the existing buffering/flush/lifecycle
+          coverage in Test_Observers.py and do not duplicate it.
 Pattern : AAA (Arrange / Act / Assert)
 Naming  : test_<component>_<scenario>
-TC-IDs  : TC-QSO-001 .. TC-QSO-008
-Fixtures: make_assignment (tests/conftest.py)
+TC-IDs  : TC-QSO-001 .. TC-QSO-009
+Fixtures: make_course, make_assignment (tests/conftest.py)
 """
+import zlib
 from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
 
 from src.infrastructure.concurrency.QueueScheduleObserver import QueueScheduleObserver
+from src.application.dto.PackedScheduleCodec import is_packed_blob, unpack_rows
 from src.logic.SlotBuilder import Slot
 from src.models.Domain import ExamSchedule
 
@@ -208,3 +211,44 @@ def test_flush_buffer_is_noop_when_buffer_is_empty():
     msg_type, payload = mock_queue.put.call_args[0][0]
     assert msg_type == "FINISHED"
     assert payload is None
+
+
+# TC-QSO-009
+# A flushed SCHEDULE_BATCH payload must be a zlib-compressed packed blob that
+# decodes back to the exact per-schedule date indexes that were observed. Two
+# schedules pick different candidate dates (index 0 and index 2), so this
+# verifies the compressed transport is lossless and order-preserving — not just
+# that some batch with the right count was sent.
+def test_flush_emits_precise_compressed_schedule_batch_payload(make_course, make_assignment):
+    # Arrange — one slot offering three candidate dates; two schedules each
+    # pick a different one.
+    d0, d1, d2 = date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3)
+    course = make_course(course_id="10101")
+    assignment_first = make_assignment(course=course, exam_date=d0)
+    assignment_third = make_assignment(course=course, exam_date=d2)
+    slot = Slot(assignment_first.course, assignment_first.semester,
+                assignment_first.moed, [d0, d1, d2])
+
+    mock_queue = MagicMock()
+    observer = QueueScheduleObserver(mock_queue, cancel_event=None, batch_size=2, slots=[slot])
+
+    schedule_first = ExamSchedule()
+    schedule_first.addAssignment(assignment_first)
+    schedule_second = ExamSchedule()
+    schedule_second.addAssignment(assignment_third)
+
+    # Act — the second schedule reaches batch_size=2 and triggers one flush.
+    observer.on_schedule_found(schedule_first)
+    observer.on_schedule_found(schedule_second)
+
+    # Assert
+    msg_type, (data, count, batch_scores) = mock_queue.put_nowait.call_args[0][0]
+    assert msg_type == "SCHEDULE_BATCH"
+    assert count == 2
+    # The payload is genuinely zlib-compressed around a packed blob...
+    decompressed = zlib.decompress(data)
+    assert is_packed_blob(decompressed)
+    # ...and decodes back to the exact date indexes, in order.
+    slot_count, rows = unpack_rows(decompressed)
+    assert slot_count == 1
+    assert rows == [(0,), (2,)]
