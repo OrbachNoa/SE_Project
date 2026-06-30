@@ -17,7 +17,6 @@ Conventions:
   `mock_router` fixtures in tests/conftest.py; `view` has no shared
   fixture, so it is a local MagicMock() in every test.
 """
-import pytest
 from unittest.mock import MagicMock
 from src.gui.features.output.OutputScreenPresenter import OutputScreenPresenter
 from src.application.viewmodels.ScheduleViewModel import ScheduleViewModel, ScheduleItemViewModel

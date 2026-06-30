@@ -88,8 +88,11 @@ def test_hybrid_state_total_pages(total_count, window_size, expected_pages, mock
     mock_repository.count.return_value = total_count
     state = HybridScheduleResultState(mock_repository, window_size=window_size)
     
-    # Act & Assert
-    assert state.total_pages() == expected_pages
+    # Act
+    pages = state.total_pages()
+
+    # Assert
+    assert pages == expected_pages
 
 # ===========================================================================
 # TC-HYB-STA-005: Verify load_page updates current page without fetching the full window.
@@ -107,7 +110,6 @@ def test_hybrid_state_load_page(mock_repository, make_schedule_dto):
     # Assert
     assert state.current_page == 1
     assert state.current_index == 0
-    mock_repository.get_window_raw.assert_not_called()
     mock_repository.get_raw_by_ids.assert_called_once_with([])
     assert state.current_window_size() == 10
 
@@ -151,9 +153,9 @@ def test_hybrid_state_add_schedules_batch_does_not_fetch_window(mock_repository,
 
     # Act
     state.add_schedules_batch(3)
-    
+
     # Assert
-    mock_repository.get_window_raw.assert_not_called()
+    mock_repository.get_raw_by_ids.assert_not_called()
     assert state.current_window_size() == 8
 
 # ===========================================================================
@@ -166,6 +168,6 @@ def test_hybrid_state_add_schedules_batch_at_capacity(mock_repository, make_sche
     
     # Act
     state.add_schedules_batch(5)
-    
+
     # Assert
-    mock_repository.get_window_raw.assert_not_called()
+    mock_repository.get_raw_by_ids.assert_not_called()

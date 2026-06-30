@@ -35,8 +35,11 @@ def test_text_file_writer_write_failure_still_raises(tmp_path):
     with pytest.raises(OSError) as exc_info:
         writer.write(schedules, str(tmp_path))
 
-    # Assert
-    assert issubclass(exc_info.type, OSError)
+    # Assert — it must be a genuine OS-level failure (carrying an errno, e.g.
+    # IsADirectoryError on POSIX / PermissionError on Windows from open()), not
+    # an OSError the writer manufactured itself. pytest.raises(OSError) already
+    # pins the type, so re-asserting the type would verify nothing.
+    assert exc_info.value.errno is not None
 
 
 # ===========================================================================

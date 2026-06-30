@@ -16,7 +16,6 @@ tests/conftest.py to assemble a realistic course/schedule pair for
 exercising the base checkers end to end.
 """
 from datetime import date
-import pytest
 
 from src.models.Enums import Requirement
 from src.logic.checkers.config.CheckerFactory import build_checkers

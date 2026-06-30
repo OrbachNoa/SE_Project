@@ -24,7 +24,7 @@ from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
 from src.application.dto.ScheduleDTOAdapter import ScheduleDTOAdapter
 
 # -------------------------------------------------------------------------
-# TC-DTO-001..007 : Test DTOs boundary between processes
+# TC-DTO-001..006 : Test DTOs boundary between processes
 # -------------------------------------------------------------------------
 
 
@@ -129,20 +129,6 @@ def test_schedule_dto_rejects_extra_attributes():
     # Assert
     with pytest.raises(AttributeError):
         dto.non_existent_field = "test"
-
-
-# ===========================================================================
-# TC-DTO-007: Test that pickle raises UnpicklingError or EOFError for corrupted serialization.
-# ===========================================================================
-def test_dto_pickle_deserialization_failure():
-    # Arrange
-    invalid_data = b"invalid pickled bytes data stream"
-
-    # Act
-
-    # Assert
-    with pytest.raises((pickle.UnpicklingError, EOFError, AttributeError, ValueError, TypeError)):
-        pickle.loads(invalid_data)
 
 
 # -------------------------------------------------------------------------

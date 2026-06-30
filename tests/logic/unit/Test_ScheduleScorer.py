@@ -15,18 +15,9 @@ Fixture policy: uses the shared `make_course`, `make_program_entry`,
 fixtures are defined locally in this file.
 """
 from datetime import date
-import pytest
 
 from src.models.Enums import Requirement, Moed
-from src.logic.comparators.ScheduleScorer import (
-    ScheduleScorer,
-    _IncrementalScoreState,
-    MIN_MANDATORY_GAP,
-    AVG_ALL_COURSES_GAP,
-    ELECTIVE_CONFLICTS,
-    MANDATORY_SPAN,
-    MAX_EXAMS_PER_DAY,
-)
+from src.logic.comparators.ScheduleScorer import ScheduleScorer, MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP, ELECTIVE_CONFLICTS, MANDATORY_SPAN, MAX_EXAMS_PER_DAY
 
 
 # ---------------------------------------------------------------------------
@@ -208,13 +199,17 @@ def test_score_signs_are_correct_for_realistic_mixed_schedule(
     # Act
     result = scorer.score(schedule)
 
-    # Assert — higher-is-better criteria stay non-negative, the two
-    # negated (fewer-is-better) criteria stay non-positive.
-    assert result[MIN_MANDATORY_GAP] > 0
-    assert result[AVG_ALL_COURSES_GAP] > 0
-    assert result[ELECTIVE_CONFLICTS] <= 0
-    assert result[MANDATORY_SPAN] >= 0
-    assert result[MAX_EXAMS_PER_DAY] <= 0
+    # Assert — exact scores for this specific mixed schedule, derived from the
+    # metric definitions. The previous version only checked each criterion's
+    # sign, but three of those checks could never fail (mandatory span is
+    # always >= 0, and the two negated criteria are always <= 0), so they
+    # verified nothing. Pinning the concrete values exercises every criterion
+    # together on one realistic schedule.
+    assert result[MIN_MANDATORY_GAP] == 4.0     # M1 -> M2 in cohort (83101, 2): 4 days apart
+    assert result[AVG_ALL_COURSES_GAP] > 0      # cohort (83101, 2) has real back-to-back spacing
+    assert result[ELECTIVE_CONFLICTS] == -1.0   # E1 & E2 share June 2: one elective pair, negated
+    assert result[MANDATORY_SPAN] == 4.0        # mandatory group spans June 1 -> June 5
+    assert result[MAX_EXAMS_PER_DAY] == -2.0    # busiest day holds 2 exams, negated
 
 
 # ---------------------------------------------------------------------------

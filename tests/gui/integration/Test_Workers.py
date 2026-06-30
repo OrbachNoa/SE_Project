@@ -34,7 +34,6 @@ from unittest.mock import MagicMock, patch, ANY
 
 from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
 from src.infrastructure.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
-from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 from src.logic.parallel.WorkUnit import WorkUnit
 
 pytestmark = pytest.mark.usefixtures("qapp")
@@ -53,6 +52,11 @@ def test_worker_dispatches_messages(mock_repository):
         ("PROGRESS", 50),
         ("FINISHED", None)
     ]
+    # A real Queue.get_nowait() raises Empty once drained; SchedulerWorker's
+    # shutdown path drains the queue in a `while True` loop that relies on
+    # that exception to exit, so a bare MagicMock must be told to raise it
+    # too, or the loop (and the test) never returns.
+    mock_queue.get_nowait.side_effect = queue.Empty
 
     worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
 
@@ -84,6 +88,7 @@ def test_worker_process_crash_drainage_path(mock_repository):
     mock_cancel_event = MagicMock()
 
     mock_queue.get.side_effect = queue.Empty()
+    mock_queue.get_nowait.side_effect = queue.Empty
 
     mock_process.is_alive.return_value = False
     mock_process.exitcode = 137
@@ -131,6 +136,7 @@ def test_worker_handles_structured_error_payload(mock_repository):
     mock_process = MagicMock()
     mock_cancel_event = MagicMock()
     mock_queue.get.side_effect = [("ERROR", info.to_payload())]
+    mock_queue.get_nowait.side_effect = queue.Empty
 
     worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
     messages = []
@@ -157,6 +163,7 @@ def test_worker_unexpected_queue_read_error_is_mapped_not_raw(mock_repository):
     mock_cancel_event = MagicMock()
 
     mock_queue.get.side_effect = RuntimeError("pipe broke unexpectedly")
+    mock_queue.get_nowait.side_effect = queue.Empty
 
     worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
     messages = []
@@ -186,6 +193,7 @@ def test_worker_malformed_run_id_payload_is_mapped_not_raised(mock_repository):
     mock_cancel_event = MagicMock()
 
     mock_queue.get.side_effect = [("PROGRESS", 50)]
+    mock_queue.get_nowait.side_effect = queue.Empty
 
     worker = SchedulerWorker(
         mock_queue,
@@ -220,6 +228,10 @@ def test_worker_cancel_graceful_and_terminate(mock_repository):
 
     mock_process.is_alive.return_value = True
     mock_queue.empty.side_effect = [False, False, True]
+    # _drain_queue() drains via get_nowait() until it raises Empty (mirroring
+    # a real Queue), not via .empty(); one drained item then Empty gives the
+    # 2 calls asserted below.
+    mock_queue.get_nowait.side_effect = [None, queue.Empty()]
 
     worker = SchedulerWorker(mock_queue, mock_cancel_event, [mock_process], mock_repository)
 
@@ -326,13 +338,13 @@ def test_process_runner_memory_error_maps_to_resource(mock_obs_cls, mock_sched_c
     mock_observer = MagicMock()
     mock_obs_cls.return_value = mock_observer
 
-    queue = MagicMock()
+    runner_queue = MagicMock()
     cancel_event = MagicMock()
     work_source = MagicMock()
     work_source.get_next.side_effect = [WorkUnit(seed_dates=[]), None]
 
     runner = SchedulerProcessRunner(
-        [], [], queue, cancel_event, max_results=10, batch_size=1000, work_source=work_source
+        [], [], runner_queue, cancel_event, max_results=10, batch_size=1000, work_source=work_source
     )
 
     # Act
@@ -348,6 +360,7 @@ def test_process_runner_memory_error_maps_to_resource(mock_obs_cls, mock_sched_c
     # payload it receives over the queue, with last_error reflecting it.
     worker_queue = MagicMock()
     worker_queue.get.side_effect = [("ERROR", payload)]
+    worker_queue.get_nowait.side_effect = queue.Empty
     worker_process = MagicMock()
     worker = SchedulerWorker(worker_queue, MagicMock(), [worker_process], mock_repository)
     messages = []

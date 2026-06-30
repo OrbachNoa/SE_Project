@@ -1,31 +1,33 @@
-"""Unit tests for SortWorker — the background QThread that runs sort scoring.
+"""
+Test suite for the output-screen sort components.
 
-SortWorker wraps a call to the controller's compute_sort_data() so the GUI
-thread isn't blocked while large result sets are scored and ordered. Tests
-cover the happy path (the `ready` signal carries the controller's result),
-an empty priority list completing normally rather than erroring, and that a
-failure inside compute_sort_data is reported through `failed` with a clean,
-user-safe message plus a structured AppErrorInfo on `last_error` — never
-the raw exception text.
+Consolidates the two sort-related units that previously lived in separate
+single-purpose files: SortWorker (the background QThread that scores and
+orders a large result set off the GUI thread) and SortLifecyclePresenter
+(which starts, tracks, and safely retires that worker). Each component keeps
+its own section and its original TC-ID family.
 
-Conventions:
-- Each test carries a unique TC-SW-NNN identifier in the comment block
-  above its definition, numbered sequentially.
-- Each test body is split into Arrange / Act / Assert sections.
-- Tests use the shared `qapp` fixture (tests/conftest.py) via
-  `pytestmark = pytest.mark.usefixtures("qapp")`; the controller is a plain
-  MagicMock since no conftest fixture models this worker's specific
-  collaborator. The failure-path test calls `worker.run()` synchronously
-  instead of `start()`/`qtbot.waitSignal`, since it does not depend on the
-  thread actually executing in the background.
+Scope   : SortWorker run/ready/failed behaviour and error mapping, plus
+          SortLifecyclePresenter's start/stop/retire lifecycle management.
+Pattern : AAA (Arrange / Act / Assert)
+Naming  : test_<component>_<scenario>
+TC-IDs  : TC-SW-001..003 (SortWorker), TC-GUI-SLP-001..002 (SortLifecyclePresenter)
+Fixtures: qapp (tests/conftest.py)
 """
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.gui.features.output.workers.SortWorker import SortWorker
+from src.gui.features.output.SortLifecyclePresenter import SortLifecyclePresenter
 
 pytestmark = pytest.mark.usefixtures("qapp")
 
+
+# ===========================================================================
+# SortWorker
+#   The background QThread that runs the controller's compute_sort_data()
+#   off the GUI thread.
+# ===========================================================================
 
 # ===========================================================================
 # TC-SW-001: starting the worker runs compute_sort_data on the controller
@@ -89,3 +91,49 @@ def test_sort_worker_reports_failure_with_structured_error():
     assert "MemoryError" not in messages[0]
     assert worker.last_error is not None
     assert worker.last_error.code == "RESOURCE_MEMORY_EXHAUSTED"
+
+
+# ===========================================================================
+# SortLifecyclePresenter
+#   Starts, tracks, and safely stops the background sort worker.
+# ===========================================================================
+
+# TC-GUI-SLP-001
+# SortLifecyclePresenter must instantiate and return a SortWorker on start.
+@patch("src.gui.features.output.SortLifecyclePresenter.SortWorker")
+def test_sort_lifecycle_starts_worker(MockWorker):
+    # Arrange
+    controller = MagicMock()
+    presenter = SortLifecyclePresenter(controller)
+
+    # Act
+    worker = presenter.start(["priority1"])
+
+    # Assert
+    MockWorker.assert_called_once_with(controller, ["priority1"])
+    assert presenter.worker == MockWorker.return_value
+    assert worker == MockWorker.return_value
+
+
+# TC-GUI-SLP-002
+# SortLifecyclePresenter must disconnect and retire active workers on stop.
+def test_sort_lifecycle_stops_and_retires_worker():
+    # Arrange
+    controller = MagicMock()
+    presenter = SortLifecyclePresenter(controller)
+
+    mock_worker = MagicMock()
+    mock_worker.isRunning.return_value = True
+    presenter.worker = mock_worker
+
+    # Act
+    presenter.stop()
+
+    # Assert
+    mock_worker.ready.disconnect.assert_called_once()
+    mock_worker.failed.disconnect.assert_called_once()
+    mock_worker.quit.assert_called_once()
+    mock_worker.finished.connect.assert_called_once()
+
+    assert mock_worker in presenter.retired_workers
+    assert presenter.worker is None

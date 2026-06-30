@@ -119,7 +119,13 @@ def test_clustering_service_fit_on_empty_schedules_raises():
 # ===========================================================================
 def test_clustering_service_scales_estimated_size_when_sampled():
     # Arrange
-    schedules = [ScheduleDTO(scores={MANDATORY_SPAN: 5.0}) for _ in range(3)]
+    schedules = [
+        ScheduleDTO(scores={
+            MIN_MANDATORY_GAP: 5.0, AVG_ALL_COURSES_GAP: 5.0,
+            ELECTIVE_CONFLICTS: 0.0, MANDATORY_SPAN: 5.0, MAX_EXAMS_PER_DAY: -1.0,
+        })
+        for _ in range(3)
+    ]
     service = ClusteringService(ClusterConfig(k_mode="fixed", k=1, seed=42))
     service.fit(schedules, population_size=30)
 

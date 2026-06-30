@@ -19,10 +19,8 @@ Conventions:
   local helper with no conftest equivalent.
 """
 from datetime import date
-from unittest.mock import MagicMock
-import pytest
 
-from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.models.Enums import EvalType, Requirement
 from src.models.ExamSchedule import ExamAssignment
 from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
 from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
