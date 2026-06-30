@@ -15,10 +15,10 @@ Scheduling correctness: completeness, conflict detection, backtracking
 Schedule generation must complete within 30 seconds
 
 ## 3. Test Layers
-Tests are devided into 3 main layers: Logic, GUI, and Performance.
+Tests are divided into 3 main layers: Logic, GUI, and Performance.
 
 ### 3.1 Logic Tests
-This field tests the core logic of the system and is devided into Unit Tests and Integration Tests.
+This field tests the core logic of the system and is divided into Unit Tests and Integration Tests.
 
 #### 3.1.1 Unit Tests
 
@@ -97,9 +97,6 @@ This field tests the core logic of the system and is devided into Unit Tests and
 * **Test Base Excel Writer:**
   * Validates BaseExcelWriter.write() in src/file_io/writers/BaseExcelWriter.py: the falsy-path no-op, real workbook/table/header/row generation (verified by re-reading the saved .xlsx with openpyxl), the empty-rows edge case, and column-width auto-sizing against None/blank cells.
 
-* **Test Boundary DTOs:**
-  * Tests BoundaryDTOs for correct field storage and pickling.
-
 * **Test Cached Input Loader:**
   * Tests the input loader's cache-hit and cache-miss/changed logic, confirming it parses files only when necessary and updates the cache.
 
@@ -116,13 +113,13 @@ This field tests the core logic of the system and is devided into Unit Tests and
   * Tests the negated schedule comparators (e.g. MaxExamsPerDay) for correct descending sort orders.
 
 * **Test Constraint Metadata:**
-  * Tests the verifies the ConstraintMeta dataclass construction and the exact field values (field_name, min_k, max_k, default_k, unit) declared for each optional scheduling rule in the CONSTRAINTS tuple.
+  * Verifies the ConstraintMeta dataclass construction and the exact field values (field_name, min_k, max_k, default_k, unit) declared for each optional scheduling rule in the CONSTRAINTS tuple.
 
 * **Test CPU Topology:**
   * Tests the deterministic coverage of the platform-independent parts of CPU topology detection — the non-Windows short circuit for _windows_pcore_groups(), the psutil-backed logical/physical core counters, the HT-arithmetic fallback grouping for both a recognizable hybrid layout and a non-hybrid layout, and recommended_worker_count()'s reservation behaviour on the hybrid path versus the full-physical-count behaviour on the non-hybrid path.
 
 * **Test Cube Collector Observer:**
-  * Tests the verifies on_schedule_found() builds one WorkUnit per call with the correct seed_dates extracted from the schedule's assignments, that collected units accumulate across multiple calls, and that the remaining IScheduleObserver methods (on_progress, should_cancel, on_finished, on_error) are pure no-ops that never raise.
+  * Verifies on_schedule_found() builds one WorkUnit per call with the correct seed_dates extracted from the schedule's assignments, that collected units accumulate across multiple calls, and that the remaining IScheduleObserver methods (on_progress, should_cancel, on_finished, on_error) are pure no-ops that never raise.
 
 * **Test Domain:**
   * Tests the core domain classes (Course, ExamPeriod, ExamSchedule) for state correctness.
@@ -143,10 +140,10 @@ This field tests the core logic of the system and is devided into Unit Tests and
   * Tests the try_load()'s four branches (no cache, mismatched file-set keys, detector reports a change, true cache hit) and persist()'s serialize-then-save pipeline, including the hashes attached to the saved DataCache.
 
 * **Test Input Data Merger:**
-  * Tests the rEPLACE mode delegating straight to state.replace_courses/ replace_periods, UPDATE mode merging courses (dedup by courseId, incoming wins) and periods (dedup by (semester, moed), incoming wins), and an unsupported mode raising ValueError. A real InputDataState is used (not a mock) so the merge logic genuinely runs end to end against production state methods.
+  * Tests the REPLACE mode delegating straight to state.replace_courses/ replace_periods, UPDATE mode merging courses (dedup by courseId, incoming wins) and periods (dedup by (semester, moed), incoming wins), and an unsupported mode raising ValueError. A real InputDataState is used (not a mock) so the merge logic genuinely runs end to end against production state methods.
 
 * **Test Mandatory Span Gap Rule:**
-  * Tests the verifies the early-exit branches (no config, no exam_span, no mandatory gap), the satisfiable case where two mandatory-exam groups can coexist, and the infeasible case where the forced earliest/latest dates of two mandatory-exam groups in the same (program, year) cohort can never satisfy the minimum gap given the required exam span.
+  * Verifies the early-exit branches (no config, no exam_span, no mandatory gap), the satisfiable case where two mandatory-exam groups can coexist, and the infeasible case where the forced earliest/latest dates of two mandatory-exam groups in the same (program, year) cohort can never satisfy the minimum gap given the required exam span.
 
 * **Test Packed Schedule Codec:**
   * Tests the binary pack/unpack round-trips for compact schedule batch blobs, the 16-bit size guards, magic-byte validation, selective row unpacking, schedule encoding into slot-aligned date indexes, and row-to-DTO reconstruction including its defensive fallback for a course with no program entries.
@@ -170,13 +167,13 @@ This field tests the core logic of the system and is devided into Unit Tests and
   * Tests the save() creating the parent directory before delegating to the injected writer's write() with an adapted DTO, and format() delegating to the writer's formatSchedule().
 
 * **Test Search Space Partitioner:**
-  * Tests the verifies SearchSpacePartitioner.partition() against an empty slot list, a small realistic slot list that splits into the desired number of units with plausible seed_dates, and the pruning of dead units (seeds whose continuation has zero valid children). Also covers WorkUnit as a small frozen dataclass: construction and field access.
+  * Verifies SearchSpacePartitioner.partition() against an empty slot list, a small realistic slot list that splits into the desired number of units with plausible seed_dates, and the pruning of dead units (seeds whose continuation has zero valid children). Also covers WorkUnit as a small frozen dataclass: construction and field access.
 
 * **Test Selected Program Index:**
-  * Tests the verifies construction (__init__, from_slots), program-membership checks (includes), per-course/per-slot entry lookups including the entries_for_slot fallback path, has_entries_for_course, and the slot-grouping methods (slots_by_program_year, slots_by_program, slots_by_program_year_semester_moed) together with the internal _group_slots caching behavior.
+  * Verifies construction (__init__, from_slots), program-membership checks (includes), per-course/per-slot entry lookups including the entries_for_slot fallback path, has_entries_for_course, and the slot-grouping methods (slots_by_program_year, slots_by_program, slots_by_program_year_semester_moed) together with the internal _group_slots caching behavior.
 
 * **Test Sort Criteria:**
-  * Tests the verifies label_for() behavior for resolving criterion labels.
+  * Verifies label_for() behavior for resolving criterion labels.
 
 * **Test Validators:**
   * Tests the Validators component.
@@ -211,18 +208,15 @@ This field tests the core logic of the system and is devided into Unit Tests and
   * Tests the HybridScheduleResultState class for correct SQLite-backed window management, including efficient page loading, count delegation, and database pagination.
 
 ### 3.2 GUI Tests
-This field tests the GUI aspect of the system and is devided into Unit Tests and Integration Tests.
+This field tests the GUI aspect of the system and is divided into Unit Tests and Integration Tests.
 
 #### 3.2.1 Unit Tests
 
 * **Test App Controller:**
   * Tests the AppController class — the application's single entry point for GUI screens — for correct delegation to its importer, scheduler, and exporter collaborators: verifying that load_file, generate_schedules, get_loaded_courses, get_loaded_periods, get_page_info, get_schedule_view, and cancel_scheduling all propagate the correct arguments and return values.
 
-* **Test Cluster Request Worker:**
-  * Tests the background cluster request worker to ensure it does not preload heavy sklearn exceptions on import, keeping the startup fast.
-
-* **Test Cluster Worker:**
-  * Tests the background worker responsible for computing schedule clusters via IPC.
+* **Test Cluster Workers:**
+  * Tests the background cluster workers for correct off-thread behaviour: ClusterWorker running the clustering coordinator's prepare()/cluster(k) lifecycle and mapping failures to clean user messages via the error registry, and ClusterRequestWorker keeping its module cheap to import (no eager scikit-learn load at startup).
 
 * **Test Exclusion Model:**
   * Tests the ExclusionModel for managing excluded-date state — adding, removing, and querying excluded dates, and that navigating between periods auto-saves the in-memory edits on the period being left.
@@ -239,9 +233,6 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
 * **Test Sort Worker:**
   * Tests the SortWorker QThread for correct emission of the ready signal with sorted results, correct handling of an empty input list, and that a failure during sorting is reported through the failed signal with a structured error record.
 
-* **Test Screen Router:**
-  * Tests the ScreenRouter for managing the navigation history stack, tracking current views, and preventing duplicate history entries.
-
 * **Test Input Import Presenter:**
   * Tests the InputImportPresenter for managing file selection dialogs, import mode toggling (replace vs update), and reporting import success/failure to the user.
 
@@ -257,17 +248,8 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
 * **Test Sort Lifecycle Presenter:**
   * Tests the SortLifecyclePresenter for safely launching and retiring the background SortWorker thread during schedule re-ordering.
 
-* **Test Cluster Overview Presenter:**
-  * Tests the ClusterOverviewPresenter for handling K-value inputs, triggering clustering jobs, and routing users to comparison or detail views based on selections.
-
-* **Test Cluster Detail Presenter:**
-  * Tests the ClusterDetailPresenter for paginating schedules within a single cluster family and handling expired sessions gracefully.
-
-* **Test Cluster Compare Presenter:**
-  * Tests the ClusterComparePresenter for fetching side-by-side cluster representations and delegating to the calendar overlay.
-
-* **Test Cluster Calendar Overlay Presenter:**
-  * Tests the ClusterCalendarOverlayPresenter for accurately merging and coloring mutually shared schedule items versus family-specific schedule items.
+* **Test Cluster Presenters:**
+  * Tests the cluster presenter components (Overview, Detail, Compare, Calendar Overlay) for correct cluster UI logic: ClusterOverviewPresenter handling K-value inputs and routing to comparison/detail views, ClusterDetailPresenter paginating schedules within a family and handling expired sessions, ClusterComparePresenter fetching side-by-side representations, and ClusterCalendarOverlayPresenter merging mutually shared schedule items versus family-specific ones.
 
 * **Test Period Navigator:**
   * Tests the PeriodNavigator widget logic for safely moving forward and backward through available exam periods while ensuring bounds are respected.
@@ -276,9 +258,6 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
 
 * **Test GUI:**
   * Tests the end-to-end GUI tests using `pytest-qt` (qtbot) that simulate complete user flows headlessly; covering file loading (replace and update modes), program selection, schedule generation, router navigation, dropdown-based PDF export, and full real-pipeline execution with actual parsers and a SQLite repository.
-
-* **Test GUI Integration:**
-  * Tests that the ScreenRouter correctly registers, transitions between, and tracks history for the InputScreen and OutputScreen.
 
 * **Test Workers:**
   * Tests the SchedulerWorker QThread and SchedulerProcessRunner concurrency layer; covering IPC message dispatching, crash drainage, graceful cancellation, process termination, and error propagation via the queue.
@@ -305,16 +284,11 @@ tests/
 ├── gui
 │   ├── integration
 │   │   ├── Test_GUI.py
-│   │   ├── Test_GuiIntegration.py
 │   │   └── Test_Workers.py
 │   ├── unit
 │   │   ├── Test_AppController.py
-│   │   ├── Test_ClusterCalendarOverlayPresenter.py
-│   │   ├── Test_ClusterComparePresenter.py
-│   │   ├── Test_ClusterDetailPresenter.py
-│   │   ├── Test_ClusterOverviewPresenter.py
-│   │   ├── Test_ClusterRequestWorker.py
-│   │   ├── Test_ClusterWorker.py
+│   │   ├── Test_ClusterPresenters.py
+│   │   ├── Test_ClusterWorkers.py
 │   │   ├── Test_ConstraintsPresenter.py
 │   │   ├── Test_ExclusionModel.py
 │   │   ├── Test_GenerationPresenter.py
@@ -323,7 +297,6 @@ tests/
 │   │   ├── Test_OutputScreenPresenter.py
 │   │   ├── Test_PeriodNavigator.py
 │   │   ├── Test_SchedulePdfExporter.py
-│   │   ├── Test_ScreenRouter.py
 │   │   ├── Test_SolutionPagingPresenter.py
 │   │   ├── Test_SortLifecyclePresenter.py
 │   │   └── Test_SortWorker.py

@@ -21,14 +21,8 @@ Conventions:
 from datetime import date
 import pytest
 
-from src.models.Enums import EvalType, Semester, Moed, Requirement
-from src.models.Domain import (
-    Course,
-    ProgramEntry,
-    ExamPeriod,
-    ExamAssignment,
-    ExamSchedule,
-)
+from src.models.Enums import EvalType, Semester, Moed
+from src.models.Domain import ExamPeriod, ExamSchedule
 
 
 # ---------------------------------------------------------------------------

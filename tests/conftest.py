@@ -117,13 +117,6 @@ def empty_schedule():
     return ExamSchedule()
 
 
-@pytest.fixture
-def collector_observer():
-    """Provides a fresh observer to collect schedules in test cases."""
-    # to be implemented under src by someone else
-    pass
-
-
 @pytest.fixture(scope="session")
 def qapp():
     """Ensures a single QApplication instance exists for all PyQt tests."""

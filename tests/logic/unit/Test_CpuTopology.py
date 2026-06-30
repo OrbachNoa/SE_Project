@@ -23,7 +23,6 @@ the production code — it is left unverified as genuinely OS-API-dependent,
 per the task brief.
 """
 import psutil
-import pytest
 
 from src.infrastructure.concurrency import CpuTopology
 

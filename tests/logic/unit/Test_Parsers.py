@@ -9,8 +9,7 @@ validation (default and custom separators, partial/missing separators),
 each parser's happy path against a well-formed fixture, field-level
 rejection of invalid values (bad requirement/evaluation/semester/moed,
 malformed or impossible dates, non-5-digit program codes), duplicate
-detection (duplicate course IDs, duplicate program entries within one
-course, duplicate (semester, moed) period pairs), the empty-file edge
+detection (duplicate (semester, moed) period pairs), the empty-file edge
 case for both CoursesFileParser and ProgramsFileParser, and
 ParserFactory's registry lookup/registration/multi-file parsing.
 

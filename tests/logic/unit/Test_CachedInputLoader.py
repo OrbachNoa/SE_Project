@@ -8,11 +8,10 @@ Naming  : test_<component>_<scenario>
 TC-IDs  : TC-CIL-001, TC-CIL-002, TC-CIL-003
 Fixtures: make_course, make_period
 """
-import pytest
 from unittest.mock import MagicMock
 
 from src.infrastructure.cache.CachedInputLoader import CachedInputLoader
-from src.application.state.InputDataState import DataCache, InputDataState
+from src.application.state.InputDataState import InputDataState
 
 
 # TC-CIL-001

@@ -37,7 +37,6 @@ make_assignment factory fixtures from tests/conftest.py to build courses
 and schedules; no other shared fixtures from conftest.py are used.
 """
 from datetime import date
-import pytest
 
 from src.models.Enums import Requirement
 from src.models.ExamSchedule import ExamSchedule

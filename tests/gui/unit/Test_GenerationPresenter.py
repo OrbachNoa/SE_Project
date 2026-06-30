@@ -22,10 +22,14 @@ def test_generation_presenter_blocks_invalid_start():
     
     # Act
     presenter.on_generate_clicked(["prog1"], lambda: False, show_error)
-    
-    # Assert
-    show_error.assert_called_once()
+
+    # Assert — the invalid selection is reported, generation never starts,
+    # and the view is never switched into running mode.
+    show_error.assert_called_once_with(
+        "Please select at least one study program before generating a schedule."
+    )
     controller.generate_schedules.assert_not_called()
+    view.set_running_mode.assert_not_called()
 
 
 # TC-GUI-GEN-002
@@ -37,14 +41,17 @@ def test_generation_presenter_starts_generation():
     router = MagicMock()
     
     presenter = GenerationPresenter(view, controller, router, "output")
-    
+    show_error = MagicMock()
+
     # Act
-    presenter.on_generate_clicked(["prog1"], lambda: True, MagicMock())
-    
-    # Assert
+    presenter.on_generate_clicked(["prog1"], lambda: True, show_error)
+
+    # Assert — a valid selection enters running mode, hides stale results,
+    # starts generation with the selected programs, and raises no error.
     view.set_running_mode.assert_called_with(True, "Initialising scheduler...")
     view.set_view_results_visible.assert_called_with(False)
     controller.generate_schedules.assert_called_once_with(["prog1"])
+    show_error.assert_not_called()
 
 
 # TC-GUI-GEN-003
@@ -79,15 +86,16 @@ def test_generation_presenter_navigates_to_output():
     
     # Act
     presenter.on_early_results_ready()
-    
-    # Assert
+
+    # Assert — early results navigate to the output screen exactly once.
     view.set_view_results_visible.assert_called_with(True)
     router.show.assert_called_once_with("output")
-    
-    # Ensure it only navigates once
+
+    # A later search-finished must exit running mode but NOT navigate again.
     router.reset_mock()
     presenter.on_search_finished()
     router.show.assert_not_called()
+    view.set_running_mode.assert_called_with(False, "")
 
 
 # TC-GUI-GEN-005
@@ -100,10 +108,14 @@ def test_generation_presenter_handles_no_results():
     
     presenter = GenerationPresenter(view, controller, router, "output")
     presenter._result_count = MagicMock(return_value=0)
-    
+
     # Act
     presenter.on_search_finished()
-    
-    # Assert
-    view.set_validation_message.assert_called_once()
+
+    # Assert — finishing with zero results exits running mode, shows the
+    # "no schedules" validation message, and does not navigate.
+    view.set_running_mode.assert_called_with(False, "")
+    view.set_validation_message.assert_called_once_with(
+        "No valid schedules found. Try adjusting programs or exam dates."
+    )
     router.show.assert_not_called()

@@ -24,7 +24,7 @@ from datetime import date
 import pytest
 from unittest.mock import MagicMock, patch
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
-from PyQt6.QtWidgets import QStackedWidget, QMessageBox, QFileDialog
+from PyQt6.QtWidgets import QStackedWidget
 from src.gui.core.ScreenRouter import ScreenRouter
 from src.gui.features.input.InputScreen import InputScreen
 from src.gui.features.output.OutputScreen import OutputScreen
@@ -155,8 +155,8 @@ def test_schedule_generation_flow(qtbot, viewmodel_mapper):
     input_screen.prompt_for_file = MagicMock(side_effect=[courses_path, periods_path])
     # Mock file dialog and message boxes
     with patch("gui.features.output.widgets.SchedulePdfExporter.QFileDialog.getSaveFileName") as mock_save, \
-         patch("src.gui.features.input.InputScreen.QMessageBox.information") as mock_info, \
-         patch("src.gui.features.input.InputScreen.QMessageBox.critical") as mock_critical:
+         patch("src.gui.features.input.InputScreen.QMessageBox.information"), \
+         patch("src.gui.features.input.InputScreen.QMessageBox.critical"):
         # Mock save file dialog
         mock_save.return_value = (pdf_path, "PDF Files (*.pdf)")
         # Configure mock responses from controller/facade
@@ -256,7 +256,7 @@ def test_export_pdf_flow(qtbot, viewmodel_mapper):
     input_screen.prompt_for_file = MagicMock(side_effect=[courses_path, periods_path])
     output_screen.export_schedule_pdf = MagicMock()
     
-    with patch("src.gui.features.input.InputScreen.QMessageBox.information") as mock_info:
+    with patch("src.gui.features.input.InputScreen.QMessageBox.information"):
         controller.load_file.side_effect = [
             ImportResult(success=True, loaded_count=10, errors=[]),
             ImportResult(success=True, loaded_count=2, errors=[])
@@ -329,7 +329,7 @@ def test_update_import_and_generate(qtbot, viewmodel_mapper):
     
     input_screen.prompt_for_file = MagicMock(side_effect=[courses_path, periods_path])
     
-    with patch("src.gui.features.input.InputScreen.QMessageBox.information") as mock_info:
+    with patch("src.gui.features.input.InputScreen.QMessageBox.information"):
         controller.load_file.side_effect = [
             ImportResult(success=True, loaded_count=5, errors=[]),
             ImportResult(success=True, loaded_count=1, errors=[])
@@ -556,7 +556,7 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path):
     input_screen.prompt_for_file = MagicMock(side_effect=[courses_path, periods_path])
     
     # We mock input QMessageBox to prevent UI popup blocking
-    with patch("src.gui.features.input.InputScreen.QMessageBox") as mock_input_msg, \
+    with patch("src.gui.features.input.InputScreen.QMessageBox"), \
          patch("src.application.services.SchedulingService.SchedulingService.generate_async") as mock_generate_async:
         
         stub_worker = StubWorker()
@@ -611,6 +611,16 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path):
         
         # Act 5: Simulate generation batch found to trigger router navigation
         stub_worker.schedules_batch_found.emit(1)
-        
+
         # Assert router successfully transitioned to the Output Screen
         assert router._current_name() == "output"
+
+        # Teardown — finish the simulated run so the controller stops its
+        # progress QTimer. generate_schedules() starts a 500 ms polling timer
+        # (AppController._start_progress_timer) that is only stopped on the
+        # search_finished / cancel paths. Without this emit the timer outlives
+        # the test: qtbot deletes this screen's QLabel at teardown, then a later
+        # 500 ms poll fires progress_updated into that deleted QLabel and raises
+        # "RuntimeError: wrapped C/C++ object of type QLabel has been deleted"
+        # during whatever test happens to be running at that moment.
+        stub_worker.search_finished.emit()

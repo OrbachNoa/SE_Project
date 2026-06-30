@@ -17,7 +17,6 @@ Conventions:
   tests/conftest.py; `view` has no shared fixture, so it is a local
   MagicMock() in every test.
 """
-import pytest
 from unittest.mock import MagicMock
 from src.gui.features.input.InputScreenPresenter import InputScreenPresenter
 from src.application.ImportBoundary import ImportMode, ImportResult

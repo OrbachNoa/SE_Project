@@ -8,10 +8,8 @@ Naming  : test_<component>_<scenario>
 TC-IDs  : TC-SSR-001, TC-SSR-002, TC-SSR-003, TC-SSR-004
 Fixtures: tmp_path, make_course, make_period
 """
-import sqlite3
 import zlib
 from datetime import date
-from unittest.mock import MagicMock
 
 import pytest
 

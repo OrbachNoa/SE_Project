@@ -21,7 +21,6 @@ Conventions:
   actually needs a ProgramEntry, not as a blanket signature default.
 """
 from unittest.mock import MagicMock
-import pytest
 
 from src.file_io.validators.MaxProgramsValidator import MaxProgramsValidator
 from src.file_io.validators.ProgramExistenceValidator import ProgramExistenceValidator

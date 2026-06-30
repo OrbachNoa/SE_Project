@@ -24,7 +24,6 @@ directly in each test rather than via the empty_schedule fixture.
 """
 
 from datetime import date
-import pytest
 
 from src.models.Enums import Requirement
 from src.models.ExamSchedule import ExamSchedule

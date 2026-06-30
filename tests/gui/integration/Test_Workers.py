@@ -34,7 +34,6 @@ from unittest.mock import MagicMock, patch, ANY
 
 from src.infrastructure.concurrency.SchedulerWorker import SchedulerWorker
 from src.infrastructure.concurrency.SchedulerProcessRunner import SchedulerProcessRunner
-from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 from src.logic.parallel.WorkUnit import WorkUnit
 
 pytestmark = pytest.mark.usefixtures("qapp")

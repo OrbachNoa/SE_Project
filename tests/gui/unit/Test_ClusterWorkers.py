@@ -1,15 +1,18 @@
 """
-Test suite for ClusterWorker.
+Test suite for the cluster background workers.
 
-Scope   : The background QThread that runs ClusteringCoordinator.prepare()
-          and .cluster(k) off the GUI thread. Covers the success path
-          (prepare() skipped when already prepared, finished emits the run)
-          and the failure path (an exception is mapped to a clean user
-          message via the registry, with last_error populated distinctly
-          from the raw exception text).
+Consolidates the tests for the two cluster-related background workers in
+src/infrastructure/concurrency — ClusterWorker (runs the clustering
+coordinator off the GUI thread) and ClusterRequestWorker (the LLM-backed
+free-text request worker) — which previously lived in two separate files,
+one of them holding a single import-behaviour test. Each worker keeps its
+own section and its original TC-ID family.
+
+Scope   : ClusterWorker prepare/cluster lifecycle and error mapping, plus
+          ClusterRequestWorker's lazy-import guard.
 Pattern : AAA (Arrange / Act / Assert)
 Naming  : test_<component>_<scenario>
-TC-IDs  : TC-CW-001 .. TC-CW-005
+TC-IDs  : TC-CW-001..005 (ClusterWorker), TC-CRW-001 (ClusterRequestWorker)
 Fixtures: qapp (tests/conftest.py)
 
 ClusterWorker.run() does `from sklearn.exceptions import ConvergenceWarning`
@@ -20,9 +23,9 @@ control flow (prepare/cluster/finished.emit) without requiring the real
 dependency to be installed, mirroring how ClusterWorker only needs the one
 symbol, ConvergenceWarning, to exist and be a Warning subclass.
 """
+import importlib
 import sys
-import types
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -30,8 +33,6 @@ from src.infrastructure.concurrency.ClusterWorker import ClusterWorker
 
 pytestmark = pytest.mark.usefixtures("qapp")
 
-
-from unittest.mock import patch
 
 @pytest.fixture
 def stub_sklearn_exceptions():
@@ -47,6 +48,13 @@ def stub_sklearn_exceptions():
         "sklearn.exceptions": fake_exceptions
     }):
         yield ConvergenceWarning
+
+
+# ===========================================================================
+# ClusterWorker
+#   The background QThread that runs ClusteringCoordinator.prepare() and
+#   .cluster(k) off the GUI thread.
+# ===========================================================================
 
 # TC-CW-001
 # When the coordinator is not yet prepared, run() must call prepare() before
@@ -162,3 +170,22 @@ def test_run_reports_memory_error_as_resource_failure(stub_sklearn_exceptions):
     assert len(messages) == 1
     assert "MemoryError" not in messages[0]
     assert worker.last_error.code == "RESOURCE_MEMORY_EXHAUSTED"
+
+
+# ===========================================================================
+# ClusterRequestWorker
+#   The LLM-backed free-text request worker — its module must stay cheap to
+#   import (no eager scikit-learn import at startup).
+# ===========================================================================
+
+# TC-CRW-001: Ensure ClusterRequestWorker does not preload heavy sklearn exception modules.
+def test_cluster_request_worker_import_does_not_load_sklearn_exceptions():
+    # Arrange
+    sys.modules.pop("src.infrastructure.concurrency.ClusterRequestWorker", None)
+    sys.modules.pop("sklearn.exceptions", None)
+
+    # Act
+    importlib.import_module("src.infrastructure.concurrency.ClusterRequestWorker")
+
+    # Assert
+    assert "sklearn.exceptions" not in sys.modules

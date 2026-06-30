@@ -12,17 +12,10 @@ helper below, since these tests only need a `scores` dict and have no
 need for the domain-object factories (make_course, make_period, etc.)
 defined in conftest.py.
 """
-import pytest
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.application.state.ScheduleReranker import rerank
-from src.logic.comparators.ScheduleScorer import (
-    MIN_MANDATORY_GAP,
-    AVG_ALL_COURSES_GAP,
-    ELECTIVE_CONFLICTS,
-    MANDATORY_SPAN,
-    MAX_EXAMS_PER_DAY,
-)
+from src.logic.comparators.ScheduleScorer import AVG_ALL_COURSES_GAP, ELECTIVE_CONFLICTS, MANDATORY_SPAN, MAX_EXAMS_PER_DAY
 
 
 def _dto(scores: dict) -> ScheduleDTO:

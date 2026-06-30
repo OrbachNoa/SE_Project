@@ -8,7 +8,6 @@ TC-IDs  : TC-EL-001, TC-EL-002, TC-EL-003
 Fixtures: caplog
 """
 import logging
-import pytest
 
 from src.application.errors.ErrorLogger import ErrorLogger, configure_default_logging
 from src.application.errors.ErrorModel import AppErrorInfo, ErrorCategory, ErrorSeverity

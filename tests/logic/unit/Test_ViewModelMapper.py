@@ -18,10 +18,8 @@ inline than to thread through an additional fixture layer.
 """
 import pytest
 from src.application.services.ViewModelMapper import ViewModelMapper
-from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
-from src.models.Course import Course
-from src.models.Enums import EvalType, Semester, Requirement, Moed
-from src.models.ExamPeriod import ExamPeriod
+from src.application.dto.ScheduleDTO import ScheduleDTO
+from src.models.Enums import EvalType, Semester, Moed
 from datetime import date
 
 # -----------------------------------------------------------------

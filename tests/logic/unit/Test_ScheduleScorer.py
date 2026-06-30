@@ -15,18 +15,9 @@ Fixture policy: uses the shared `make_course`, `make_program_entry`,
 fixtures are defined locally in this file.
 """
 from datetime import date
-import pytest
 
 from src.models.Enums import Requirement, Moed
-from src.logic.comparators.ScheduleScorer import (
-    ScheduleScorer,
-    _IncrementalScoreState,
-    MIN_MANDATORY_GAP,
-    AVG_ALL_COURSES_GAP,
-    ELECTIVE_CONFLICTS,
-    MANDATORY_SPAN,
-    MAX_EXAMS_PER_DAY,
-)
+from src.logic.comparators.ScheduleScorer import ScheduleScorer, MIN_MANDATORY_GAP, AVG_ALL_COURSES_GAP, ELECTIVE_CONFLICTS, MANDATORY_SPAN, MAX_EXAMS_PER_DAY
 
 
 # ---------------------------------------------------------------------------

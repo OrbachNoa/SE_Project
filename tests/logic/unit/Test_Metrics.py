@@ -35,7 +35,6 @@ Conventions:
   `empty_schedule` come from the shared fixtures in tests/conftest.py.
 """
 from datetime import date
-import pytest
 
 from src.models.Enums import Requirement, Moed
 from src.logic.comparators.Metrics import (
