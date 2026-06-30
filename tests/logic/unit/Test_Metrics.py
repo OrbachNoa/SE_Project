@@ -322,17 +322,6 @@ def test_avg_all_courses_gap_includes_elective_courses(
     assert result == 4.0
 
 
-# ---------------------------------------------------------------------------
-# peak_elective_conflict TC-MET-013..015 — removed: peak_elective_conflict
-# was deleted from Metrics.py during the ScheduleScorer refactor. The
-# elective-conflict criterion is now computed inline inside ScheduleScorer
-# using a different formula (total same-day pair-conflicts per program,
-# matching ElectiveConflictCapChecker) with no standalone Metrics-level
-# function exposing it any more. That behavior, including the same
-# three-same-day-electives scenario these tests used to cover, is verified
-# by Test_ScheduleScorer.py's TC-SCO-004.
-# ---------------------------------------------------------------------------
-
 
 # ---------------------------------------------------------------------------
 # mandatory_span TC-MET-016..018

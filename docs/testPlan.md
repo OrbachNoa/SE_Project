@@ -224,10 +224,10 @@ tests/
 │   │   ├── Test_ExclusionModel.py
 │   │   ├── Test_InputScreenPresenter.py
 │   │   ├── Test_OutputScreenPresenter.py
+│   │   ├── Test_PeriodNavigator.py
 │   │   ├── Test_SchedulePdfExporter.py
 │   │   └── Test_SortWorker.py
 │   └── integration/
-│       ├── Test_App.py
 │       ├── Test_GUI.py
 │       ├── Test_GuiIntegration.py
 │       └── Test_Workers.py

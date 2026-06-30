@@ -31,40 +31,22 @@ from src.infrastructure.concurrency.ClusterWorker import ClusterWorker
 pytestmark = pytest.mark.usefixtures("qapp")
 
 
+from unittest.mock import patch
+
 @pytest.fixture
 def stub_sklearn_exceptions():
-    """Install a minimal sklearn.exceptions module exposing ConvergenceWarning.
-
-    Restores the previous module state afterwards so this fixture never
-    leaks a fake sklearn into other tests.
-    """
-    had_sklearn = "sklearn" in sys.modules
-    had_exceptions = "sklearn.exceptions" in sys.modules
-    prev_sklearn = sys.modules.get("sklearn")
-    prev_exceptions = sys.modules.get("sklearn.exceptions")
-
-    sklearn_pkg = sys.modules.get("sklearn") or types.ModuleType("sklearn")
-    exceptions_mod = types.ModuleType("sklearn.exceptions")
-
+    """Install a minimal sklearn.exceptions module exposing ConvergenceWarning using patch.dict."""
     class ConvergenceWarning(UserWarning):
         pass
 
-    exceptions_mod.ConvergenceWarning = ConvergenceWarning
-    sklearn_pkg.exceptions = exceptions_mod
-    sys.modules["sklearn"] = sklearn_pkg
-    sys.modules["sklearn.exceptions"] = exceptions_mod
+    fake_exceptions = MagicMock()
+    fake_exceptions.ConvergenceWarning = ConvergenceWarning
 
-    yield ConvergenceWarning
-
-    if had_exceptions:
-        sys.modules["sklearn.exceptions"] = prev_exceptions
-    else:
-        sys.modules.pop("sklearn.exceptions", None)
-    if had_sklearn:
-        sys.modules["sklearn"] = prev_sklearn
-    else:
-        sys.modules.pop("sklearn", None)
-
+    with patch.dict(sys.modules, {
+        "sklearn": MagicMock(),
+        "sklearn.exceptions": fake_exceptions
+    }):
+        yield ConvergenceWarning
 
 # TC-CW-001
 # When the coordinator is not yet prepared, run() must call prepare() before

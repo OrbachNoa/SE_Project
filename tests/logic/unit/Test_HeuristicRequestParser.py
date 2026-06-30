@@ -17,6 +17,13 @@ import importlib
 
 import pytest
 
+import json
+import os
+
+FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "fixtures", "parser_inputs.json")
+with open(FIXTURE_PATH, "r", encoding="utf-8") as _f:
+    INPUTS = json.load(_f)
+
 from src.logic.clustering.ClusterConfig import ClusterConfig, K_MODE_AUTO, K_MODE_FIXED
 from src.logic.clustering.ClusteringScorer import EXTENDED_CRITERIA
 from src.logic.clustering.llm.HeuristicRequestParser import HeuristicRequestParser
@@ -36,7 +43,7 @@ def test_heuristic_request_parser_matches_english_keyword_to_criterion():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("I want more rest between exams")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_matches_english_keyword_to_criterion"])
 
     # Assert
     assert config.criteria == (MIN_MANDATORY_GAP,)
@@ -50,7 +57,7 @@ def test_heuristic_request_parser_matches_a_second_english_keyword_to_criterion(
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("please group by elective conflicts")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_matches_a_second_english_keyword_to_criterion"])
 
     # Assert
     assert config.criteria == (ELECTIVE_CONFLICTS,)
@@ -64,7 +71,7 @@ def test_heuristic_request_parser_matches_hebrew_keyword_to_criterion():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("מנוחה בין בחינות")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_matches_hebrew_keyword_to_criterion"])
 
     # Assert
     assert config.criteria == (MIN_MANDATORY_GAP,)
@@ -78,7 +85,7 @@ def test_heuristic_request_parser_matches_a_second_hebrew_keyword_to_criterion()
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("עומס ביום אחד")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_matches_a_second_hebrew_keyword_to_criterion"])
 
     # Assert
     assert config.criteria == (MAX_EXAMS_PER_DAY,)
@@ -92,7 +99,7 @@ def test_heuristic_request_parser_english_emphasis_boosts_weight_to_three():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("group mostly by spacing")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_english_emphasis_boosts_weight_to_three"])
 
     # Assert
     assert config.weights == {AVG_ALL_COURSES_GAP: 3.0}
@@ -107,7 +114,7 @@ def test_heuristic_request_parser_hebrew_emphasis_boosts_weight_to_three():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("בעיקר לפי עומס")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_hebrew_emphasis_boosts_weight_to_three"])
 
     # Assert
     assert config.weights == {MAX_EXAMS_PER_DAY: 3.0}
@@ -122,7 +129,7 @@ def test_heuristic_request_parser_without_emphasis_word_applies_no_weight_boost(
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("please group by elective conflicts")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_without_emphasis_word_applies_no_weight_boost"])
 
     # Assert
     assert config.weights == {}
@@ -136,7 +143,7 @@ def test_heuristic_request_parser_extracts_k_from_divided_into_n_groups():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("divided into 3 groups")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_extracts_k_from_divided_into_n_groups"])
 
     # Assert
     assert config.k_mode == K_MODE_FIXED
@@ -151,7 +158,7 @@ def test_heuristic_request_parser_extracts_k_from_n_groups_suffix():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("6 clusters please")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_extracts_k_from_n_groups_suffix"])
 
     # Assert
     assert config.k_mode == K_MODE_FIXED
@@ -166,7 +173,7 @@ def test_heuristic_request_parser_extracts_k_from_hebrew_digit_pattern():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("תן לי 3 קבוצות")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_extracts_k_from_hebrew_digit_pattern"])
 
     # Assert
     assert config.k_mode == K_MODE_FIXED
@@ -181,7 +188,7 @@ def test_heuristic_request_parser_extracts_k_from_spelled_out_english_number():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("six groups please")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_extracts_k_from_spelled_out_english_number"])
 
     # Assert
     assert config.k_mode == K_MODE_FIXED
@@ -196,7 +203,7 @@ def test_heuristic_request_parser_extracts_k_from_spelled_out_hebrew_number():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("תן לי שלוש קבוצות")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_extracts_k_from_spelled_out_hebrew_number"])
 
     # Assert
     assert config.k_mode == K_MODE_FIXED
@@ -211,7 +218,7 @@ def test_heuristic_request_parser_ignores_a_digit_with_no_group_word():
     parser = HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("at least 4 days between exams")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_ignores_a_digit_with_no_group_word"])
 
     # Assert
     assert config.k_mode == K_MODE_AUTO
@@ -242,7 +249,7 @@ def test_heuristic_request_parser_falls_back_to_default_on_value_error(monkeypat
     parser = module.HeuristicRequestParser()
 
     # Act
-    config, _ = parser.parse("I want more rest between exams")
+    config, _ = parser.parse(INPUTS["test_heuristic_request_parser_falls_back_to_default_on_value_error"])
 
     # Assert
     assert config is real_default
@@ -277,7 +284,7 @@ def test_heuristic_request_parser_interpretation_hebrew_branch_for_hebrew_text()
     parser = HeuristicRequestParser()
 
     # Act
-    config, interpretation = parser.parse("מנוחה בין בחינות")
+    config, interpretation = parser.parse(INPUTS["test_heuristic_request_parser_interpretation_hebrew_branch_for_hebrew_text"])
 
     # Assert
     assert interpretation.startswith("קיבוץ לפי")
