@@ -94,10 +94,100 @@ This field tests the core logic of the system and is devided into Unit Tests and
 * **Test Text File Writer:**
   * Tests the TextFileWriter's write-failure path — verifying that a write failure propagates as a real OSError rather than being caught and locally reported.
 
+* **Test Base Excel Writer:**
+  * Validates BaseExcelWriter.write() in src/file_io/writers/BaseExcelWriter.py: the falsy-path no-op, real workbook/table/header/row generation (verified by re-reading the saved .xlsx with openpyxl), the empty-rows edge case, and column-width auto-sizing against None/blank cells.
+
+* **Test Boundary DTOs:**
+  * Tests BoundaryDTOs for correct field storage and pickling.
+
+* **Test Cached Input Loader:**
+  * Tests the input loader's cache-hit and cache-miss/changed logic, confirming it parses files only when necessary and updates the cache.
+
+* **Test Checkers:**
+  * Tests the individual threshold checkers and their feasibility bounds.
+
+* **Test Cluster Request Translator:**
+  * Tests the ClusterRequestTranslator for safely parsing UI cluster requests.
+
+* **Test Clustering Coordinator:**
+  * Tests the prepare()'s ValueError guards (empty population, no readable score vectors) and its happy path populating is_prepared/flat_criteria; cluster()'s RuntimeError when called before prepare(); and run_on_schedules()'s ValueError on an empty schedule list plus its happy path. The repository collaborator is a duck-typed mock (count_scores/read_score_vectors); ClusterConfig/ClusteringService run for real, exercising this environment's pure-Python clustering fallback (no sklearn required).
+
+* **Test Comparators Negated:**
+  * Tests the negated schedule comparators (e.g. MaxExamsPerDay) for correct descending sort orders.
+
+* **Test Constraint Metadata:**
+  * Tests the verifies the ConstraintMeta dataclass construction and the exact field values (field_name, min_k, max_k, default_k, unit) declared for each optional scheduling rule in the CONSTRAINTS tuple.
+
+* **Test CPU Topology:**
+  * Tests the deterministic coverage of the platform-independent parts of CPU topology detection — the non-Windows short circuit for _windows_pcore_groups(), the psutil-backed logical/physical core counters, the HT-arithmetic fallback grouping for both a recognizable hybrid layout and a non-hybrid layout, and recommended_worker_count()'s reservation behaviour on the hybrid path versus the full-physical-count behaviour on the non-hybrid path.
+
+* **Test Cube Collector Observer:**
+  * Tests the verifies on_schedule_found() builds one WorkUnit per call with the correct seed_dates extracted from the schedule's assignments, that collected units accumulate across multiple calls, and that the remaining IScheduleObserver methods (on_progress, should_cancel, on_finished, on_error) are pure no-ops that never raise.
+
+* **Test Domain:**
+  * Tests the core domain classes (Course, ExamPeriod, ExamSchedule) for state correctness.
+
+* **Test Error Logger:**
+  * Tests the errorLogger message formatting, severity mapping, and default configuration logic.
+
+* **Test Extended Feature Computer:**
+  * Tests the ExtendedFeatureComputer for correct matrix aggregations and edge cases.
+
+* **Test File Validator:**
+  * Validates validate_language, validate_file_exists, validate_file_not_empty, and validate_all_files in src/file_io/validators/FileValidator.py.
+
+* **Test Heuristic Request Parser:**
+  * Tests the dependency-free keyword parsing of free-text clustering requests into a validated ClusterConfig, covering criterion keyword matching (English and Hebrew), emphasis-word weight boosting, K extraction from digit and spelled-out number patterns, the ValueError-to-default() fallback, and both language branches of the interpretation sentence.
+
+* **Test Input Cache Service:**
+  * Tests the try_load()'s four branches (no cache, mismatched file-set keys, detector reports a change, true cache hit) and persist()'s serialize-then-save pipeline, including the hashes attached to the saved DataCache.
+
+* **Test Input Data Merger:**
+  * Tests the rEPLACE mode delegating straight to state.replace_courses/ replace_periods, UPDATE mode merging courses (dedup by courseId, incoming wins) and periods (dedup by (semester, moed), incoming wins), and an unsupported mode raising ValueError. A real InputDataState is used (not a mock) so the merge logic genuinely runs end to end against production state methods.
+
+* **Test Mandatory Span Gap Rule:**
+  * Tests the verifies the early-exit branches (no config, no exam_span, no mandatory gap), the satisfiable case where two mandatory-exam groups can coexist, and the infeasible case where the forced earliest/latest dates of two mandatory-exam groups in the same (program, year) cohort can never satisfy the minimum gap given the required exam span.
+
+* **Test Packed Schedule Codec:**
+  * Tests the binary pack/unpack round-trips for compact schedule batch blobs, the 16-bit size guards, magic-byte validation, selective row unpacking, schedule encoding into slot-aligned date indexes, and row-to-DTO reconstruction including its defensive fallback for a course with no program entries.
+
+* **Test Parsers:**
+  * Tests the Parsers component.
+
+* **Test Queue Schedule Observer:**
+  * Tests the constructor validation, on_progress duplicate suppression, _reserve_result_slot's global result-limit gating with cancel_event tripping, the run_id wrapping behaviour of _wrap() across every outgoing message kind, and on_error forwarding a dict payload as-is. These cases are additive to the existing buffering/flush/lifecycle coverage in Test_Observers.py and do not duplicate it.
+
+* **Test Queue Work Source:**
+  * Tests the get_next()'s cancel-event short circuit, its retry loop across one or more queue.Empty timeouts before a real item arrives, and its None-sentinel stop signal.
+
+* **Test SQLite Schedule Repository:**
+  * Tests the persistence of compressed schedule batches, paging, lazy score updates, and dynamic sort indexing.
+
+* **Test Schedule Csv Formatter:**
+  * Validates format_schedule_csv() in src/file_io/formatters/ScheduleCsvFormatter.py — the falsy-input short circuit, date sorting, instructor fallback, HTML/subtitle cleanup, tooltip-derived metadata, evaluation-type suffix, and the Programs column fallback placeholder.
+
+* **Test Schedule Export Service:**
+  * Tests the save() creating the parent directory before delegating to the injected writer's write() with an adapted DTO, and format() delegating to the writer's formatSchedule().
+
+* **Test Search Space Partitioner:**
+  * Tests the verifies SearchSpacePartitioner.partition() against an empty slot list, a small realistic slot list that splits into the desired number of units with plausible seed_dates, and the pruning of dead units (seeds whose continuation has zero valid children). Also covers WorkUnit as a small frozen dataclass: construction and field access.
+
+* **Test Selected Program Index:**
+  * Tests the verifies construction (__init__, from_slots), program-membership checks (includes), per-course/per-slot entry lookups including the entries_for_slot fallback path, has_entries_for_course, and the slot-grouping methods (slots_by_program_year, slots_by_program, slots_by_program_year_semester_moed) together with the internal _group_slots caching behavior.
+
+* **Test Sort Criteria:**
+  * Tests the verifies label_for() behavior for resolving criterion labels.
+
+* **Test Validators:**
+  * Tests the Validators component.
+
+* **Test View Model Mapper:**
+  * Tests the View Model Mapper component.
+
 #### 3.1.2 Integration Tests
 
 * **Test Behavioural:**
-  * High-level correctness tests for the scheduling algorithm. Verify properties that span multiple classes, including no duplicate schedules, every returned schedule passing every active conflict check, configurable gap and maximum-exams-per-day constraints, impossible-constraint detection, and the full scoring-and-ranking pipeline.
+  * Tests the high-level correctness tests for the scheduling algorithm. Verify properties that span multiple classes, including no duplicate schedules, every returned schedule passing every active conflict check, configurable gap and maximum-exams-per-day constraints, impossible-constraint detection, and the full scoring-and-ranking pipeline.
 
 * **Test Feasibility Validator:**
   * Tests ScheduleFeasibilityValidator and the feasibility rules. Verifies that the validator returns an empty list for valid configurations, accumulates errors from multiple violated rules, and that structural rules and threshold-based rules contribute independently to the error list. Also covers the feasibility_bound() method of each configurable threshold checker, verifying that mathematically impossible configurations are detected before the scheduler begins, and that FeasibilityContext.selected_set correctly filters programs when a selection is provided.
@@ -149,10 +239,43 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
 * **Test Sort Worker:**
   * Tests the SortWorker QThread for correct emission of the ready signal with sorted results, correct handling of an empty input list, and that a failure during sorting is reported through the failed signal with a structured error record.
 
+* **Test Screen Router:**
+  * Tests the ScreenRouter for managing the navigation history stack, tracking current views, and preventing duplicate history entries.
+
+* **Test Input Import Presenter:**
+  * Tests the InputImportPresenter for managing file selection dialogs, import mode toggling (replace vs update), and reporting import success/failure to the user.
+
+* **Test Constraints Presenter:**
+  * Tests the ConstraintsPresenter for updating configuration settings into the controller and notifying the view of unsaved changes.
+
+* **Test Generation Presenter:**
+  * Tests the GenerationPresenter for initiating the scheduling process, reacting to early-finish signals, and managing cancellation requests.
+
+* **Test Solution Paging Presenter:**
+  * Tests the SolutionPagingPresenter for paginating through large sets of generated schedules, caching bounds safely, and updating the UI navigation controls.
+
+* **Test Sort Lifecycle Presenter:**
+  * Tests the SortLifecyclePresenter for safely launching and retiring the background SortWorker thread during schedule re-ordering.
+
+* **Test Cluster Overview Presenter:**
+  * Tests the ClusterOverviewPresenter for handling K-value inputs, triggering clustering jobs, and routing users to comparison or detail views based on selections.
+
+* **Test Cluster Detail Presenter:**
+  * Tests the ClusterDetailPresenter for paginating schedules within a single cluster family and handling expired sessions gracefully.
+
+* **Test Cluster Compare Presenter:**
+  * Tests the ClusterComparePresenter for fetching side-by-side cluster representations and delegating to the calendar overlay.
+
+* **Test Cluster Calendar Overlay Presenter:**
+  * Tests the ClusterCalendarOverlayPresenter for accurately merging and coloring mutually shared schedule items versus family-specific schedule items.
+
+* **Test Period Navigator:**
+  * Tests the PeriodNavigator widget logic for safely moving forward and backward through available exam periods while ensuring bounds are respected.
+
 #### 3.2.2 Integration Tests
 
 * **Test GUI:**
-  * End-to-end GUI tests using `pytest-qt` (qtbot) that simulate complete user flows headlessly; covering file loading (replace and update modes), program selection, schedule generation, router navigation, dropdown-based PDF export, and full real-pipeline execution with actual parsers and a SQLite repository.
+  * Tests the end-to-end GUI tests using `pytest-qt` (qtbot) that simulate complete user flows headlessly; covering file loading (replace and update modes), program selection, schedule generation, router navigation, dropdown-based PDF export, and full real-pipeline execution with actual parsers and a SQLite repository.
 
 * **Test GUI Integration:**
   * Tests that the ScreenRouter correctly registers, transitions between, and tracks history for the InputScreen and OutputScreen.
@@ -164,73 +287,107 @@ This field tests the GUI aspect of the system and is devided into Unit Tests and
 This field tests the performance aspect of the system.
 
 * **Test Performance:**
-  * Verify the 30-second constraint under realistic and maximum load scenarios. Additional tests cover scoring throughput on large result sets, sort ranking on high-volume collections, full scheduling with all threshold constraints active, and the clustering pipeline on a realistic sample size.
+  * Tests the verify the 30-second constraint under realistic and maximum load scenarios. Additional tests cover scoring throughput on large result sets, sort ranking on high-volume collections, full scheduling with all threshold constraints active, and the clustering pipeline on a realistic sample size.
 
 # Test File Structure
 ```bash
 tests/
-├── conftest.py
-├── fixtures/
-│   ├── courses_valid.txt
-│   ├── courses_no_exams.txt
+├── fixtures
 │   ├── courses_conflict.txt
-│   ├── periods_valid.txt
+│   ├── courses_no_exams.txt
+│   ├── courses_valid.txt
 │   ├── periods_one_day.txt
-│   ├── programs_valid.txt
-│   ├── programs_single.txt
+│   ├── periods_valid.txt
 │   ├── programs_bad_code.txt
-│   └── programs_too_many.txt
-├── logic/
-│   ├── unit/
-│   │   ├── Test_Domain.py
-│   │   ├── Test_BoundaryDTOs.py
-│   │   ├── Test_Checkers.py
-│   │   ├── Test_ThresholdCheckers.py
-│   │   ├── Test_SlotBuilder.py
-│   │   ├── Test_Validators.py
-│   │   ├── Test_Parsers.py
-│   │   ├── Test_Observers.py
-│   │   ├── Test_DataCache.py
-│   │   ├── Test_ViewModelMapper.py
-│   │   ├── Test_SchedulerEngine.py
-│   │   ├── Test_Metrics.py
-│   │   ├── Test_ScheduleScorer.py
-│   │   ├── Test_ScheduleReranker.py
-│   │   ├── Test_CheckerFactory.py
-│   │   ├── Test_Comparators.py
-│   │   ├── Test_ComparatorsNegated.py
-│   │   ├── Test_ClusteringFeatures.py
-│   │   ├── Test_ClusteringDistanceMetrics.py
-│   │   ├── Test_ClusteringAlgorithms.py
-│   │   ├── Test_ClusteringService.py
-│   │   ├── Test_ErrorMapping.py
-│   │   ├── Test_ErrorMappingContext.py
-│   │   ├── Test_FileImportService.py
-│   │   └── Test_TextFileWriter.py
-│   └── integration/
-│       ├── Test_ApplicationState.py
-│       ├── Test_SchedulingService.py
-│       ├── Test_HybridState.py
-│       ├── Test_Behavioural.py
-│       ├── Test_FeasibilityValidator.py
-│       ├── Test_Integration.py
-│       ├── Test_Main.py
-│       └── Test_Output.py
-├── gui/
-│   ├── unit/
+│   ├── programs_single.txt
+│   ├── programs_too_many.txt
+│   └── programs_valid.txt
+├── gui
+│   ├── integration
+│   │   ├── Test_GUI.py
+│   │   ├── Test_GuiIntegration.py
+│   │   └── Test_Workers.py
+│   ├── unit
 │   │   ├── Test_AppController.py
+│   │   ├── Test_ClusterCalendarOverlayPresenter.py
+│   │   ├── Test_ClusterComparePresenter.py
+│   │   ├── Test_ClusterDetailPresenter.py
+│   │   ├── Test_ClusterOverviewPresenter.py
 │   │   ├── Test_ClusterRequestWorker.py
 │   │   ├── Test_ClusterWorker.py
+│   │   ├── Test_ConstraintsPresenter.py
 │   │   ├── Test_ExclusionModel.py
+│   │   ├── Test_GenerationPresenter.py
+│   │   ├── Test_InputImportPresenter.py
 │   │   ├── Test_InputScreenPresenter.py
 │   │   ├── Test_OutputScreenPresenter.py
 │   │   ├── Test_PeriodNavigator.py
 │   │   ├── Test_SchedulePdfExporter.py
+│   │   ├── Test_ScreenRouter.py
+│   │   ├── Test_SolutionPagingPresenter.py
+│   │   ├── Test_SortLifecyclePresenter.py
 │   │   └── Test_SortWorker.py
-│   └── integration/
-│       ├── Test_GUI.py
-│       ├── Test_GuiIntegration.py
-│       └── Test_Workers.py
-└── performance/
-    └── Test_Performance.py
+│   └── conftest.py
+├── logic
+│   ├── integration
+│   │   ├── Test_ApplicationState.py
+│   │   ├── Test_Behavioural.py
+│   │   ├── Test_FeasibilityValidator.py
+│   │   ├── Test_HybridState.py
+│   │   ├── Test_Integration.py
+│   │   ├── Test_Main.py
+│   │   ├── Test_Output.py
+│   │   └── Test_SchedulingService.py
+│   └── unit
+│       ├── Test_BaseExcelWriter.py
+│       ├── Test_BoundaryDTOs.py
+│       ├── Test_CachedInputLoader.py
+│       ├── Test_CheckerFactory.py
+│       ├── Test_Checkers.py
+│       ├── Test_ClusterRequestTranslator.py
+│       ├── Test_ClusteringAlgorithms.py
+│       ├── Test_ClusteringCoordinator.py
+│       ├── Test_ClusteringDistanceMetrics.py
+│       ├── Test_ClusteringFeatures.py
+│       ├── Test_ClusteringService.py
+│       ├── Test_Comparators.py
+│       ├── Test_ComparatorsNegated.py
+│       ├── Test_ConstraintMetadata.py
+│       ├── Test_CpuTopology.py
+│       ├── Test_CubeCollectorObserver.py
+│       ├── Test_DataCache.py
+│       ├── Test_Domain.py
+│       ├── Test_ErrorLogger.py
+│       ├── Test_ErrorMapping.py
+│       ├── Test_ErrorMappingContext.py
+│       ├── Test_ExtendedFeatureComputer.py
+│       ├── Test_FileImportService.py
+│       ├── Test_FileValidator.py
+│       ├── Test_HeuristicRequestParser.py
+│       ├── Test_InputCacheService.py
+│       ├── Test_InputDataMerger.py
+│       ├── Test_MandatorySpanGapRule.py
+│       ├── Test_Metrics.py
+│       ├── Test_Observers.py
+│       ├── Test_PackedScheduleCodec.py
+│       ├── Test_Parsers.py
+│       ├── Test_QueueScheduleObserver.py
+│       ├── Test_QueueWorkSource.py
+│       ├── Test_SQLiteScheduleRepository.py
+│       ├── Test_ScheduleCsvFormatter.py
+│       ├── Test_ScheduleExportService.py
+│       ├── Test_ScheduleReranker.py
+│       ├── Test_ScheduleScorer.py
+│       ├── Test_SchedulerEngine.py
+│       ├── Test_SearchSpacePartitioner.py
+│       ├── Test_SelectedProgramIndex.py
+│       ├── Test_SlotBuilder.py
+│       ├── Test_SortCriteria.py
+│       ├── Test_TextFileWriter.py
+│       ├── Test_ThresholdCheckers.py
+│       ├── Test_Validators.py
+│       └── Test_ViewModelMapper.py
+├── performance
+│   └── Test_Performance.py
+└── conftest.py
 ```
