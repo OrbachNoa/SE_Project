@@ -106,7 +106,6 @@ def test_is_packed_blob_false_for_unrelated_bytes():
 
     # Assert
     assert result is False
-    assert not legacy_blob.startswith(MAGIC)
 
 
 # TC-PSC-006

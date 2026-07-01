@@ -24,14 +24,14 @@ def test_import_presenter_cancels_dialog_silently():
     view = MagicMock()
     controller = MagicMock()
     on_loaded = MagicMock()
-    
+
     view.prompt_for_file.return_value = ""  # User cancelled dialog
     presenter = InputImportPresenter(view, controller, on_loaded)
-    
+
     # Act
     presenter.on_load_courses(ImportMode.REPLACE)
     presenter.on_load_periods(ImportMode.REPLACE)
-    
+
     # Assert
     assert not presenter.courses_loaded
     assert not presenter.periods_loaded
@@ -46,15 +46,15 @@ def test_import_presenter_handles_import_failure():
     view = MagicMock()
     controller = MagicMock()
     on_loaded = MagicMock()
-    
+
     view.prompt_for_file.return_value = "fake_path.csv"
     controller.load_file.return_value = DummyResult(success=False, errors=["Format error"])
-    
+
     presenter = InputImportPresenter(view, controller, on_loaded)
-    
+
     # Act
     presenter.on_load_courses(ImportMode.REPLACE)
-    
+
     # Assert
     assert not presenter.courses_loaded
     view.show_import_error.assert_called_once_with("courses", "Format error")
@@ -68,16 +68,16 @@ def test_import_presenter_handles_import_success():
     view = MagicMock()
     controller = MagicMock()
     on_loaded = MagicMock()
-    
+
     view.prompt_for_file.return_value = "fake_path.csv"
     controller.load_file.return_value = DummyResult(success=True, loaded_count=5)
     controller.get_loaded_courses.return_value = ["course1"]
-    
+
     mapper = MagicMock()
     mapper.to_program_vms.return_value = ["prog_vms"]
     mapper.to_program_courses_vm.return_value = ["course_vms"]
     controller.get_mapper.return_value = mapper
-    
+
     presenter = InputImportPresenter(view, controller, on_loaded)
 
     # Act

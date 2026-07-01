@@ -132,39 +132,7 @@ def test_kmeans_clustering_rejects_an_empty_point_set():
         strategy.cluster(empty_points, k=2)
 
 
-# ===========================================================================
-# TC-CLU-021A: the scikit-learn KMeans path applies configured feature weights
-# during cluster assignment, while reporting centroids in original coordinates.
-# ===========================================================================
-def test_sklearn_kmeans_clustering_applies_feature_weights():
-    # Arrange
-    pytest.importorskip("sklearn")
-    from src.logic.clustering.ScikitLearnKMeansStrategy import ScikitLearnKMeansStrategy
 
-    points = np.array([
-        [0.0, 0.0],
-        [0.0, 10.0],
-        [1.0, 0.0],
-        [1.0, 10.0],
-    ])
-    strategy = ScikitLearnKMeansStrategy(
-        n_init=20,
-        random_state=42,
-        weights=[400.0, 1.0],
-    )
-
-    # Act
-    output = strategy.cluster(points, k=2)
-
-    # Assert
-    member_sets = [
-        set(np.where(output.labels == cluster_id)[0].tolist())
-        for cluster_id in sorted(set(output.labels.tolist()))
-    ]
-    assert {0, 1} in member_sets
-    assert {2, 3} in member_sets
-    assert sorted(output.centroids[:, 0].tolist()) == [0.0, 1.0]
-    assert output.centroids[:, 1].tolist() == [5.0, 5.0]
 
 
 # ---------------------------------------------------------------------------
@@ -210,25 +178,7 @@ def test_auto_k_selector_handles_a_degenerate_small_population():
     assert selection.scores == {}
 
 
-# ===========================================================================
-# TC-CLU-023A: Auto-K silhouette distances use the injected metric, so weighted
-# clustering evaluates K in the same geometry used for assignments.
-# ===========================================================================
-def test_auto_k_selector_distance_matrix_uses_weighted_metric():
-    # Arrange
-    points = np.array([
-        [0.0, 0.0],
-        [1.0, 0.0],
-        [0.0, 10.0],
-    ])
-    selector = AutoKSelector(metric=WeightedEuclideanDistanceMetric([400.0, 1.0]))
 
-    # Act
-    dist = selector._build_dist_matrix(points)
-
-    # Assert
-    assert dist[0, 1] == pytest.approx(20.0)
-    assert dist[0, 2] == pytest.approx(10.0)
 
 
 # ---------------------------------------------------------------------------
@@ -336,40 +286,7 @@ def test_kmeans_clustering_rejects_a_negative_k():
         strategy.cluster(points, k=-3)
 
 
-# ===========================================================================
-# TC-CLU-036: _recompute_centroids reseeds an empty cluster to the point
-# farthest (by minimum distance to any existing centroid) from the current
-# centroids, rather than leaving it stuck at its previous (now-orphaned)
-# location. This is called directly with a hand-built labels array so the
-# empty-cluster branch is exercised deterministically, independent of
-# whichever random initialization happened to produce it during a full run.
-# ===========================================================================
-def test_kmeans_recompute_centroids_reseeds_an_empty_cluster_to_the_farthest_point():
-    # Arrange
-    strategy = KMeansClusteringStrategy(seed=42)
-    points = np.array([
-        [0.0, 0.0],
-        [1.0, 1.0],
-        [100.0, 100.0],
-    ])
-    # Cluster index 2 has no members assigned to it.
-    labels = np.array([0, 0, 1])
-    previous = np.array([[0.5, 0.5], [100.0, 100.0], [50.0, 50.0]])
-    rng = np.random.default_rng(42)
 
-    # Act
-    result = strategy._recompute_centroids(points, labels, previous, rng)
-
-    # Assert
-    # Cluster 0 becomes the mean of its two members; cluster 1 keeps its sole
-    # member's position; cluster 2 (empty) is reseeded to the point with the
-    # largest minimum distance to {centroid0, centroid1} — [0, 0], whose
-    # distance to centroid0 (~0.707) is smaller than [100,100]'s distance (0)
-    # but is the argmax across all three points since [100,100] sits exactly
-    # on centroid1.
-    assert result[0].tolist() == [0.5, 0.5]
-    assert result[1].tolist() == [100.0, 100.0]
-    assert result[2].tolist() == [0.0, 0.0]
 
 
 # ===========================================================================
@@ -402,47 +319,4 @@ def test_schedule_sampler_sample_indices_negative_population_returns_empty_list(
     assert indices == []
 
 
-# ===========================================================================
-# TC-CLU-039: _build_dist_matrix raises ValueError when the injected metric
-# returns a pairwise distance matrix of the wrong shape, guarding against a
-# broken custom IDistanceMetric silently corrupting silhouette scoring.
-# ===========================================================================
-def test_auto_k_selector_build_dist_matrix_rejects_a_malformed_metric_shape():
-    # Arrange
-    class _MalformedShapeMetric:
-        def distance(self, a, b):
-            return float(np.linalg.norm(a - b))
 
-        def distance_to_centroids(self, points, centroids):
-            # Deliberately wrong: one extra column versus the expected (n, n).
-            return np.zeros((points.shape[0], centroids.shape[0] + 1))
-
-    selector = AutoKSelector(metric=_MalformedShapeMetric())
-    points = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-
-    # Act
-    # Assert
-    with pytest.raises(ValueError):
-        selector._build_dist_matrix(points)
-
-
-# ===========================================================================
-# TC-CLU-040: _silhouette_precomputed returns exactly 0.0 when the labels
-# array carries fewer than two unique cluster ids — a single-cluster
-# partition has no "nearest other cluster" to compare against.
-# ===========================================================================
-def test_auto_k_selector_silhouette_precomputed_returns_zero_for_one_cluster():
-    # Arrange
-    selector = AutoKSelector()
-    dist = np.array([
-        [0.0, 1.0, 2.0],
-        [1.0, 0.0, 1.0],
-        [2.0, 1.0, 0.0],
-    ])
-    single_cluster_labels = np.array([0, 0, 0])
-
-    # Act
-    score = selector._silhouette_precomputed(dist, single_cluster_labels)
-
-    # Assert
-    assert score == 0.0

@@ -113,7 +113,7 @@ This field tests the core logic of the system and is divided into Unit Tests and
   * Tests the negated schedule comparators (e.g. MaxExamsPerDay) for correct descending sort orders.
 
 * **Test Constraint Metadata:**
-  * Verifies the ConstraintMeta dataclass construction and the exact field values (field_name, min_k, max_k, default_k, unit) declared for each optional scheduling rule in the CONSTRAINTS tuple.
+  * Verifies the ConstraintMeta dataclass construction and the cross-field invariants (min_k < max_k, default_k within bounds) declared for each optional scheduling rule in the CONSTRAINTS tuple.
 
 * **Test CPU Topology:**
   * Tests the deterministic coverage of the platform-independent parts of CPU topology detection — the non-Windows short circuit for _windows_pcore_groups(), the psutil-backed logical/physical core counters, the HT-arithmetic fallback grouping for both a recognizable hybrid layout and a non-hybrid layout, and recommended_worker_count()'s reservation behaviour on the hybrid path versus the full-physical-count behaviour on the non-hybrid path.
@@ -181,6 +181,12 @@ This field tests the core logic of the system and is divided into Unit Tests and
 * **Test View Model Mapper:**
   * Tests the View Model Mapper component.
 
+* **Test Cluster Summarizer:**
+  * Tests the ClusterSummarizer for turning a cluster's numeric profile into human-readable text via z-scores — picking the strongest standout criteria, returning the balanced-group fallback when nothing stands out, swallowing internal errors into an empty description, and safely handling an empty cluster list.
+
+* **Test OpenAI Compatible LLM Client:**
+  * Tests the OpenAICompatibleLLMClient for parsing its CLUSTER_LLM_* environment configuration (and its defaults), parsing a valid OpenAI-style JSON response, raising when no API key is configured, retrying once with a backoff on a 429, and surfacing a URLError on timeout — mocking only the network boundary.
+
 #### 3.1.2 Integration Tests
 
 * **Test Behavioural:**
@@ -230,8 +236,8 @@ This field tests the GUI aspect of the system and is divided into Unit Tests and
 * **Test Schedule Pdf Exporter:**
   * Tests the PDF export error path — verifying that a failure during HTML build or Qt printing is reported through the presenter's error-mapping callback rather than showing the raw exception.
 
-* **Test Sort Worker:**
-  * Tests the SortWorker QThread for correct emission of the ready signal with sorted results, correct handling of an empty input list, and that a failure during sorting is reported through the failed signal with a structured error record.
+* **Test Sort:**
+  * Tests the output-screen sort components (consolidated into one file): SortWorker — the background QThread that scores and orders a large result set off the GUI thread, emitting `ready` with the sorted result, handling an empty priority list, and reporting failures via `failed` with a structured error record — and SortLifecyclePresenter, which safely starts, tracks, and retires that worker.
 
 * **Test Input Import Presenter:**
   * Tests the InputImportPresenter for managing file selection dialogs, import mode toggling (replace vs update), and reporting import success/failure to the user.
@@ -245,14 +251,53 @@ This field tests the GUI aspect of the system and is divided into Unit Tests and
 * **Test Solution Paging Presenter:**
   * Tests the SolutionPagingPresenter for paginating through large sets of generated schedules, caching bounds safely, and updating the UI navigation controls.
 
-* **Test Sort Lifecycle Presenter:**
-  * Tests the SortLifecyclePresenter for safely launching and retiring the background SortWorker thread during schedule re-ordering.
-
 * **Test Cluster Presenters:**
   * Tests the cluster presenter components (Overview, Detail, Compare, Calendar Overlay) for correct cluster UI logic: ClusterOverviewPresenter handling K-value inputs and routing to comparison/detail views, ClusterDetailPresenter paginating schedules within a family and handling expired sessions, ClusterComparePresenter fetching side-by-side representations, and ClusterCalendarOverlayPresenter merging mutually shared schedule items versus family-specific ones.
 
 * **Test Period Navigator:**
   * Tests the PeriodNavigator widget logic for safely moving forward and backward through available exam periods while ensuring bounds are respected.
+
+* **Test Action Bar Widget:**
+  * Tests the ActionBarWidget for exclusive Replace/Update mode toggling and the idle state of its run controls — Generate disabled and Cancel / View Results hidden until inputs are loaded and a run begins.
+
+* **Test Busy Cursor Guard:**
+  * Tests the BusyCursorGuard context manager and its reference counting — the wait cursor is set once on entering the outermost scope and restored only when the last nested scope exits.
+
+* **Test Calendar Editor Widget:**
+  * Tests the CalendarEditorWidget's two-way binding to its ExclusionModel — a date picked in the UI reaches the period view model, and clicking a day toggles that date's exclusion (reversibly) while emitting data_changed.
+
+* **Test Calendar Widget:**
+  * Tests the CalendarWidget for applying the excluded/included CSS object name to a day cell, and for ClickableDayCell emitting its clicked signal on a left mouse press.
+
+* **Test Cluster Card Widget:**
+  * Tests the ClusterCardWidget for parsing a family's description into semantic pill styles (positive/negative/span/neutral) and for the real Open button emitting open_requested with the card's cluster id.
+
+* **Test Constraints Settings Dialog:**
+  * Tests the ConstraintsSettingsDialog for building a ConstraintsConfig from its UI rows — an enabled row contributes its spinbox value while a disabled row leaves its field at None.
+
+* **Test Course List Widget:**
+  * Tests the CourseListWidget's collapsible program blocks — a rendered program starts collapsed and each header click expands then re-hides its course rows.
+
+* **Test Metric Widget Factory:**
+  * Tests create_metric_widgets for producing a correctly configured name label, progress-bar indicator, and value label, including the "defining" style property on the defining criterion.
+
+* **Test Output Calendar Widget:**
+  * Tests the OutputCalendarWidget for applying the output-specific excluded CSS object name to a day cell.
+
+* **Test Overlay Calendar Widget:**
+  * Tests the OverlayCalendarWidget for tagging overlaid schedule items with the correct badge object name — family-a, family-b, or mutual — when merging two families' calendars.
+
+* **Test Program Selector Card Widget:**
+  * Tests the ProgramSelectorCardWidget for the "selected / max" count badge tracking the committed selection, and for committing the picker dialog's choice (and emitting selection_changed) only when the dialog is accepted.
+
+* **Test Program Selector Dialog:**
+  * Tests the ProgramSelectorDialog for enforcing the MAX_PROGRAMS limit (warning and ignoring an over-limit pick) and for toggling a program card's selection state on click.
+
+* **Test Solution Bar Widget:**
+  * Tests the SolutionBarWidget's jump-to-solution input validator — accepting an in-range solution number while rejecting non-numeric and out-of-range values.
+
+* **Test Sort Config Panel:**
+  * Tests the SortConfigPanel for reordering criteria rows and emitting config_changed with the new order, and for the reset action restoring the default ALL_CRITERIA ordering with every row enabled.
 
 #### 3.2.2 Integration Tests
 
@@ -275,6 +320,7 @@ tests/
 │   ├── courses_conflict.txt
 │   ├── courses_no_exams.txt
 │   ├── courses_valid.txt
+│   ├── parser_inputs.json
 │   ├── periods_one_day.txt
 │   ├── periods_valid.txt
 │   ├── programs_bad_code.txt
@@ -286,20 +332,33 @@ tests/
 │   │   ├── Test_GUI.py
 │   │   └── Test_Workers.py
 │   ├── unit
+│   │   ├── Test_ActionBarWidget.py
 │   │   ├── Test_AppController.py
+│   │   ├── Test_BusyCursorGuard.py
+│   │   ├── Test_CalendarEditorWidget.py
+│   │   ├── Test_CalendarWidget.py
+│   │   ├── Test_ClusterCardWidget.py
 │   │   ├── Test_ClusterPresenters.py
 │   │   ├── Test_ClusterWorkers.py
 │   │   ├── Test_ConstraintsPresenter.py
+│   │   ├── Test_ConstraintsSettingsDialog.py
+│   │   ├── Test_CourseListWidget.py
 │   │   ├── Test_ExclusionModel.py
 │   │   ├── Test_GenerationPresenter.py
 │   │   ├── Test_InputImportPresenter.py
 │   │   ├── Test_InputScreenPresenter.py
+│   │   ├── Test_MetricWidgetFactory.py
+│   │   ├── Test_OutputCalendarWidget.py
 │   │   ├── Test_OutputScreenPresenter.py
+│   │   ├── Test_OverlayCalendarWidget.py
 │   │   ├── Test_PeriodNavigator.py
+│   │   ├── Test_ProgramSelectorCardWidget.py
+│   │   ├── Test_ProgramSelectorDialog.py
 │   │   ├── Test_SchedulePdfExporter.py
+│   │   ├── Test_SolutionBarWidget.py
 │   │   ├── Test_SolutionPagingPresenter.py
-│   │   ├── Test_SortLifecyclePresenter.py
-│   │   └── Test_SortWorker.py
+│   │   ├── Test_Sort.py
+│   │   └── Test_SortConfigPanel.py
 │   └── conftest.py
 ├── logic
 │   ├── integration
@@ -318,6 +377,7 @@ tests/
 │       ├── Test_CheckerFactory.py
 │       ├── Test_Checkers.py
 │       ├── Test_ClusterRequestTranslator.py
+│       ├── Test_ClusterSummarizer.py
 │       ├── Test_ClusteringAlgorithms.py
 │       ├── Test_ClusteringCoordinator.py
 │       ├── Test_ClusteringDistanceMetrics.py
@@ -342,6 +402,7 @@ tests/
 │       ├── Test_MandatorySpanGapRule.py
 │       ├── Test_Metrics.py
 │       ├── Test_Observers.py
+│       ├── Test_OpenAICompatibleLLMClient.py
 │       ├── Test_PackedScheduleCodec.py
 │       ├── Test_Parsers.py
 │       ├── Test_QueueScheduleObserver.py

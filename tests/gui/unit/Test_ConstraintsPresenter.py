@@ -17,13 +17,13 @@ def test_constraints_presenter_opens_dialog(MockDialog):
     view = MagicMock()
     controller = MagicMock()
     on_changed = MagicMock()
-    
+
     controller.get_constraints_config.return_value = "fake_config"
     presenter = ConstraintsPresenter(view, controller, on_changed)
-    
+
     # Act
     presenter.on_settings_clicked()
-    
+
     # Assert
     MockDialog.assert_called_once_with(
         on_apply=presenter._apply_constraints_config,
@@ -40,15 +40,15 @@ def test_constraints_presenter_applies_config():
     view = MagicMock()
     # Ensure view has mark_inputs_dirty method
     view.mark_inputs_dirty = MagicMock()
-    
+
     controller = MagicMock()
     on_changed = MagicMock()
-    
+
     presenter = ConstraintsPresenter(view, controller, on_changed)
-    
+
     # Act
     presenter._apply_constraints_config("new_config")
-    
+
     # Assert
     controller.set_constraints_config.assert_called_once_with("new_config")
     view.mark_inputs_dirty.assert_called_once()
@@ -62,12 +62,12 @@ def test_constraints_presenter_saves_periods():
     view = MagicMock()
     controller = MagicMock()
     on_changed = MagicMock()
-    
+
     presenter = ConstraintsPresenter(view, controller, on_changed)
-    
+
     # Act
     presenter.on_constraints_saved(["vm1", "vm2"])
-    
+
     # Assert
     controller.update_exam_periods.assert_called_once_with(["vm1", "vm2"])
     on_changed.assert_called_once()

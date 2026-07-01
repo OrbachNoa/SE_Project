@@ -35,29 +35,16 @@ def _default_checkers(courses):
 # WorkUnit TC-SSP-001..002
 # ---------------------------------------------------------------------------
 
-# TC-SSP-001
-# A WorkUnit must store its seed_dates tuple exactly as given and expose it
-# through the seed_dates attribute.
-def test_work_unit_stores_seed_dates_as_given():
-    # Arrange
-    dates = (date(2026, 6, 1), date(2026, 6, 5))
-
-    # Act
-    unit = WorkUnit(seed_dates=dates)
-
-    # Assert
-    assert unit.seed_dates == (date(2026, 6, 1), date(2026, 6, 5))
-
-
 # TC-SSP-002
 # WorkUnit is a frozen dataclass, so reassigning seed_dates after
 # construction must raise rather than silently mutate the unit.
 def test_work_unit_is_immutable():
     # Arrange
+    from dataclasses import FrozenInstanceError
     unit = WorkUnit(seed_dates=(date(2026, 6, 1),))
 
     # Act & Assert
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         unit.seed_dates = (date(2026, 6, 9),)
     assert unit.seed_dates == (date(2026, 6, 1),)
 

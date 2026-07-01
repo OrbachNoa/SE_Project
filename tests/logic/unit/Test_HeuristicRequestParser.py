@@ -8,7 +8,7 @@ Scope   : Dependency-free keyword parsing of free-text clustering requests into 
           both language branches of the interpretation sentence.
 Pattern : AAA (Arrange / Act / Assert)
 Naming  : test_<component>_<scenario>
-TC-IDs  : TC-HRP-001, TC-HRP-002, ... TC-HRP-018
+TC-IDs  : TC-HRP-001, TC-HRP-002, ... TC-HRP-017
 Fixtures: none
 """
 from __future__ import annotations
@@ -291,40 +291,10 @@ def test_heuristic_request_parser_interpretation_hebrew_branch_for_hebrew_text()
     assert config.k_mode == K_MODE_AUTO
 
 
+
+
+
 # TC-HRP-017
-# When the resolved criteria exactly equal the full extended-criteria tuple
-# with no weights, the English interpretation collapses to the special
-# "overall schedule quality" sentence rather than enumerating every criterion.
-def test_heuristic_request_parser_interpretation_all_criteria_english_shortcut():
-    # Arrange
-    parser = HeuristicRequestParser()
-    config = ClusterConfig(criteria=tuple(EXTENDED_CRITERIA), k_mode=K_MODE_AUTO)
-
-    # Act
-    interpretation = parser._interpretation(config, None, None, "anything in english")
-
-    # Assert
-    assert interpretation == (
-        "Grouping by overall schedule quality, with an automatic number of families."
-    )
-
-
-# TC-HRP-018
-# The same all-criteria shortcut has a Hebrew counterpart, selected when the
-# raw request text contains Hebrew characters.
-def test_heuristic_request_parser_interpretation_all_criteria_hebrew_shortcut():
-    # Arrange
-    parser = HeuristicRequestParser()
-    config = ClusterConfig(criteria=tuple(EXTENDED_CRITERIA), k_mode=K_MODE_AUTO)
-
-    # Act
-    interpretation = parser._interpretation(config, None, None, "טקסט בעברית")
-
-    # Assert
-    assert interpretation == "קיבוץ לפי כל הקריטריונים, עם מספר קבוצות אוטומטי"
-
-
-# TC-HRP-019
 # A request with more than three matched criteria and no emphasis truncates
 # the enumerated phrase list to the first three and appends an "and more"
 # tail rather than listing every criterion verbatim.

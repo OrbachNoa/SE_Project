@@ -8,7 +8,7 @@ subsystem as a single numbered family:
   - Test_ClusteringFeatures.py          TC-CLU-001..010 (feature extraction)
   - Test_ClusteringDistanceMetrics.py    TC-CLU-011..016 (distance metrics)
   - Test_ClusteringAlgorithms.py         TC-CLU-017..027 (clustering strategies)
-  - Test_ClusteringService.py (this file) TC-CLU-028..032 (end-to-end orchestration)
+  - Test_ClusteringService.py (this file) TC-CLU-028..033 (end-to-end orchestration)
 
 Every test body follows the Arrange/Act/Assert structure, with each section
 marked by its own exact comment so the setup, the call under test, and the
@@ -88,12 +88,9 @@ def test_clustering_service_cluster_before_fit_raises():
     # Arrange
     service = ClusteringService(ClusterConfig(k_mode="fixed", k=2))
 
-    # Act
-    act = lambda: service.cluster()
-
-    # Assert
+    # Act & Assert
     with pytest.raises(RuntimeError):
-        act()
+        service.cluster()
 
 
 # ===========================================================================
@@ -104,12 +101,9 @@ def test_clustering_service_fit_on_empty_schedules_raises():
     # Arrange
     service = ClusteringService(ClusterConfig(k_mode="fixed", k=2))
 
-    # Act
-    act = lambda: service.fit([])
-
-    # Assert
+    # Act & Assert
     with pytest.raises(ValueError):
-        act()
+        service.fit([])
 
 
 # ===========================================================================

@@ -163,12 +163,12 @@ def test_viewmodel_mapper_to_program_view_models(make_course):
 def test_viewmodel_mapper_to_program_vms_filtering_and_sorting(make_course, make_program_entry):
     # Arrange
     mapper = ViewModelMapper()
-    
+
     # Program 83102 has 1 exam course and 1 project course
     p2 = make_program_entry(program_id="83102")
     c1 = make_course(course_id="201", evaluation=EvalType.EXAM, program_entries=[p2])
     c2 = make_course(course_id="202", evaluation=EvalType.PROJECT, program_entries=[p2])
-    
+
     # Program 83101 has 1 exam course
     p1 = make_program_entry(program_id="83101")
     c3 = make_course(course_id="101", evaluation=EvalType.EXAM, program_entries=[p1])
@@ -181,7 +181,7 @@ def test_viewmodel_mapper_to_program_vms_filtering_and_sorting(make_course, make
     assert len(vms) == 2
     assert vms[0].program_id == "83101"
     assert vms[0].course_count == 1  # c3 is EXAM
-    
+
     assert vms[1].program_id == "83102"
     assert vms[1].course_count == 1  # c1 is EXAM, c2 is PROJECT (non-exam ignored)
 
@@ -213,10 +213,10 @@ def test_viewmodel_mapper_to_program_courses_vm(make_course):
 def test_viewmodel_mapper_to_program_courses_vm_multi_program_and_sorting(make_course, make_program_entry):
     # Arrange
     mapper = ViewModelMapper()
-    
+
     p1 = make_program_entry(program_id="83101")
     p2 = make_program_entry(program_id="83102")
-    
+
     # c1 belongs to both programs 83101 and 83102
     c1 = make_course(course_id="102", program_entries=[p1, p2])
     # c2 belongs to 83101 only
@@ -235,7 +235,7 @@ def test_viewmodel_mapper_to_program_courses_vm_multi_program_and_sorting(make_c
     assert len(vms[0].courses) == 2
     assert vms[0].courses[0].course_id == "101"
     assert vms[0].courses[1].course_id == "102"
-    
+
     # Program 83102
     assert vms[1].program_id == "83102"
     assert len(vms[1].courses) == 1

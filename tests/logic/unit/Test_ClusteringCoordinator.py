@@ -157,7 +157,7 @@ def test_cluster_happy_path_returns_run_with_correct_gidx_mapping(mock_repositor
     assert total_members == 6
     # Every member position maps back to one of the real schedule ids.
     all_positions = [w for c in run.result.clusters for w in c.member_indices]
-    assert set(run.gidx_for(all_positions)) <= set(ids)
+    assert set(run.gidx_for(all_positions)) == set(ids)
 
 
 # TC-CC-007
@@ -205,5 +205,5 @@ def test_run_on_schedules_happy_path_clusters_in_memory_schedules(mock_repositor
     mock_repository.count_scores.assert_not_called()
     mock_repository.read_score_vectors.assert_not_called()
     assert run.result.k == 2
-    assert set(run.gidx_by_working_index) <= {0, 1, 2, 3}
+    assert set(run.gidx_by_working_index) == {0, 1, 2, 3}
     assert sum(c.size for c in run.result.clusters) == 4

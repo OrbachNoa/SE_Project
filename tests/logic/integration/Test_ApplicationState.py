@@ -34,11 +34,11 @@ def test_input_data_state_mutators(make_course, make_period):
     c1 = make_course(course_id="10101")
     c2 = make_course(course_id="10102")
     p1 = make_period(semester=Semester.FALL)
-    
+
     # Act
     state.replace_courses([c1, c2])
     state.replace_periods([p1])
-    
+
     # Assert
     assert state.get_courses() == [c1, c2]
     assert state.get_periods() == [p1]
@@ -75,10 +75,10 @@ def test_input_data_state_to_cache(make_course, make_period):
     )
     state.replace_courses([course])
     state.replace_periods([period])
-    
+
     # Act
     cache = state.to_cache()
-    
+
     # Assert
     assert isinstance(cache, DataCache)
     assert len(cache.courses) == 1
@@ -98,11 +98,11 @@ def test_input_data_state_load_cache(make_data_cache):
     # Arrange
     state = InputDataState()
     cache = make_data_cache()
-    
+
     # Act
     state.load_cache(cache)
-    
-    # Assert 
+
+    # Assert
     # courses assert
     rebuilt_courses = state.get_courses()
     assert len(rebuilt_courses) == 1
@@ -111,7 +111,7 @@ def test_input_data_state_load_cache(make_data_cache):
     assert c.evaluation == EvalType.EXAM
     assert c.programEntries[0].programId == "83101"
     assert c.programEntries[0].semester == Semester.FALL
-    
+
     # periods assert
     rebuilt_periods = state.get_periods()
     assert len(rebuilt_periods) == 1
@@ -142,10 +142,10 @@ def test_schedule_result_state_set_schedules(make_schedule_dto):
     # Arrange
     state = ScheduleResultState()
     dto1 = make_schedule_dto()
-    
+
     # Act
     state.set_schedules([dto1])
-    
+
     # Assert
     assert state.count() == 1
     assert state.get_schedule(0) == dto1
@@ -161,10 +161,10 @@ def test_schedule_result_state_add_schedule(make_schedule_dto):
     dto1 = make_schedule_dto()
     dto2 = make_schedule_dto()
     state.set_schedules([dto1])
-    
+
     # Act
     state.add_schedule(dto2)
-    
+
     # Assert
     assert state.count() == 2
     assert state.get_schedule(0) == dto1
@@ -181,7 +181,7 @@ def test_schedule_result_state_get_schedule_index_error(bad_index, make_schedule
     state = ScheduleResultState()
     dto = make_schedule_dto()
     state.set_schedules([dto, dto])
-    
+
     # Act & Assert
     with pytest.raises(IndexError):
         state.get_schedule(bad_index)
@@ -209,10 +209,10 @@ def test_schedule_result_state_current_index_updates(valid_index, make_schedule_
     state = ScheduleResultState()
     dto = make_schedule_dto()
     state.set_schedules([dto, dto, dto])
-    
+
     # Act
     state.current_index = valid_index
-    
+
     # Assert
     assert state.current_index == valid_index
 
@@ -227,7 +227,7 @@ def test_schedule_result_state_current_index_out_of_bounds(bad_index, make_sched
     state = ScheduleResultState()
     dto = make_schedule_dto()
     state.set_schedules([dto, dto, dto])
-    
+
     # Act & Assert
     with pytest.raises(IndexError):
         state.current_index = bad_index

@@ -145,7 +145,7 @@ def test_every_returned_schedule_is_complete(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
+    # Assert
     # - expect more than 0 valid schedules
     # - expect every schedule to have exactly 4 assignments
     assert len(schedules) > 0
@@ -182,7 +182,7 @@ def test_scheduler_uses_injected_custom_checker(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
+    # Assert
     # - expect an empty list instead of crashing
     # - expect the custom checker to be called
     assert schedules == []
@@ -214,7 +214,7 @@ def test_courses_shared_across_programs_are_scheduled_once(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
+    # Assert
     # - expect more than 0 valid schedules
     # - expect every schedule to have exactly one assignment whose course is the shared course
     assert len(schedules) > 0
@@ -227,7 +227,7 @@ def test_courses_shared_across_programs_are_scheduled_once(
 
 # ===========================================================================
 # TC-ENG-007: Only EXAM courses are scheduled.
-# Check that courses like projects or attendance-only are ignored 
+# Check that courses like projects or attendance-only are ignored
 # by the scheduler.
 # ===========================================================================
 def test_only_exam_courses_are_scheduled(
@@ -251,7 +251,7 @@ def test_only_exam_courses_are_scheduled(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
+    # Assert
     # - expect more than 0 valid schedules
     # - expect only the EXAM course to appear in any schedule
     assert len(schedules) > 0
@@ -262,7 +262,7 @@ def test_only_exam_courses_are_scheduled(
 
 # ===========================================================================
 # TC-ENG-008: Program with no EXAM courses returns empty schedule.
-# If a study program only has 'Project' or 'Attendance' courses, 
+# If a study program only has 'Project' or 'Attendance' courses,
 # the system should just return an empty schedule.
 # ===========================================================================
 def test_program_with_only_non_exam_courses_returns_empty_schedule(

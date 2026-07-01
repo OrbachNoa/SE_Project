@@ -175,7 +175,7 @@ def test_slot_builder_rejects_missing_period_for_required_course_semester(
     # Act & Assert
     with pytest.raises(ValueError) as excinfo:
         SlotBuilder([period_spri], selected_programs=["83101"]).build([course])
-    
+
     assert "no exam period is defined for that semester" in str(excinfo.value)
 
 

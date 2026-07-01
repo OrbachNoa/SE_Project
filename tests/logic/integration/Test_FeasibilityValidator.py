@@ -34,7 +34,9 @@ from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleErro
 from src.logic.feasibility.NonEmptyDomainRule import NonEmptyDomainRule
 from src.logic.feasibility.MoedOrderDomainRule import MoedOrderDomainRule
 from src.logic.checkers.config.ConstraintsConfig import ConstraintsConfig
-
+from src.logic.checkers.ElectiveConflictCapChecker import ElectiveConflictCapChecker
+from src.logic.checkers.ExamSpanChecker import ExamSpanChecker
+from src.logic.checkers.MinDaysBetweenExamsChecker import MinDaysBetweenExamsChecker, GapScope
 
 # ---------------------------------------------------------------------------
 # ScheduleFeasibilityValidator — valid setup TC-FEA-001
@@ -318,10 +320,6 @@ def test_validate_accumulates_errors_from_every_violated_rule(
 # ---------------------------------------------------------------------------
 # Threshold checkers' feasibility_bound() — imports added for this section.
 # ---------------------------------------------------------------------------
-from src.logic.checkers.ElectiveConflictCapChecker import ElectiveConflictCapChecker
-from src.logic.checkers.ExamSpanChecker import ExamSpanChecker
-from src.logic.checkers.MinDaysBetweenExamsChecker import MinDaysBetweenExamsChecker, GapScope
-
 
 # ===========================================================================
 # TC-FEA-012: ElectiveConflictCapChecker.feasibility_bound — three electives
