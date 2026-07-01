@@ -20,7 +20,12 @@ from src.logic.clustering.ExtendedFeatureComputer import (
     MANDATORY_CONSEC,
 )
 from src.logic.clustering.llm.ClusterRequestTranslator import ClusterRequestTranslator
+from src.logic.clustering.llm.ClusterTranslationError import ClusterTranslationError
+from src.logic.clustering.llm.ILLMClient import ILLMClient
 from src.logic.comparators.ScheduleScorer import MIN_MANDATORY_GAP
+
+import pytest
+from unittest.mock import MagicMock
 
 
 # ===========================================================================
@@ -74,3 +79,40 @@ def test_llm_consecutive_threshold_boosts_all_topic_criteria():
     assert config.weights[MANDATORY_CONSEC] == 5.0
     assert config.weights[B2B_EXAM_INCIDENCE] == 5.0
     assert config.weights[MIN_MANDATORY_GAP] == 1.8
+
+
+# ===========================================================================
+# TC-CRT-003: a configured LLM that fails must raise ClusterTranslationError
+# rather than silently degrading to the keyword parser -- a transient/real
+# failure should surface as an error the caller can report, not a result the
+# user never asked for.
+# ===========================================================================
+def test_translate_configured_llm_failure_raises_and_does_not_fall_back():
+    # Arrange
+    llm = MagicMock(spec=ILLMClient)
+    llm.is_available.return_value = True
+    llm.complete.side_effect = RuntimeError("connection refused")
+    translator = ClusterRequestTranslator(llm)
+
+    # Act / Assert
+    with pytest.raises(ClusterTranslationError):
+        translator.translate("group by rest days")
+    llm.complete.assert_called_once()
+
+
+# ===========================================================================
+# TC-CRT-004: when no LLM is configured (is_available() is False), translate
+# must fall through to the keyword parser instead of attempting a call.
+# ===========================================================================
+def test_translate_unavailable_llm_falls_back_to_heuristic():
+    # Arrange
+    llm = MagicMock(spec=ILLMClient)
+    llm.is_available.return_value = False
+    translator = ClusterRequestTranslator(llm)
+
+    # Act
+    result = translator.translate("group by rest days")
+
+    # Assert
+    assert result.source == "heuristic"
+    llm.complete.assert_not_called()
