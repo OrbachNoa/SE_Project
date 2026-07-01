@@ -231,3 +231,44 @@ def test_schedule_result_state_current_index_out_of_bounds(bad_index, make_sched
     # Act & Assert
     with pytest.raises(IndexError):
         state.current_index = bad_index
+
+
+# ===========================================================================
+# TC-AS-013: _merge_periods must merge existing and incoming exclusions,
+# unioning them and restricting them to the incoming period's date range.
+# ===========================================================================
+def test_merge_periods_unions_excluded_dates(make_period):
+    # Arrange
+    from src.application.services.InputDataMerger import _merge_periods
+    
+    # Existing period has exclusions on June 2 and June 5
+    p_existing = make_period(
+        semester=Semester.FALL,
+        moed=Moed.ALEPH,
+        start=date(2026, 6, 1),
+        end=date(2026, 6, 10),
+        excluded=[date(2026, 6, 2), date(2026, 6, 5)]
+    )
+    
+    # Incoming period has start/end date updated to June 3 .. June 8,
+    # and has a new exclusion on June 4. (June 2 is now outside the range, June 5 is within)
+    p_incoming = make_period(
+        semester=Semester.FALL,
+        moed=Moed.ALEPH,
+        start=date(2026, 6, 3),
+        end=date(2026, 6, 8),
+        excluded=[date(2026, 6, 4)]
+    )
+    
+    # Act
+    merged = _merge_periods([p_existing], [p_incoming])
+    
+    # Assert
+    assert len(merged) == 1
+    m = merged[0]
+    assert m.startDate == date(2026, 6, 3)
+    assert m.endDate == date(2026, 6, 8)
+    # Excluded dates should be unioned but restricted to range June 3 .. June 8.
+    # June 5 (from existing) and June 4 (from incoming) are preserved.
+    # June 2 (from existing) is excluded because it falls outside the new range.
+    assert m.excludedDates == {date(2026, 6, 4), date(2026, 6, 5)}

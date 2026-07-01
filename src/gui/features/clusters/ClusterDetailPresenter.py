@@ -43,7 +43,6 @@ class ClusterDetailPresenter(ScheduleExportMixin):
             self._size = self._cluster_controller.get_cluster_size(self._cluster_id)
             if self._size == 0:
                 self._view.show_message("The clustering session has expired. \nRedirecting to overview to recompute clusters.")
-                self._router.back()
                 return
             self._view.set_periods(self._available_periods())
         except Exception as error:
@@ -73,7 +72,6 @@ class ClusterDetailPresenter(ScheduleExportMixin):
         self._view.show_message(
             "New results have finished generating. \nGo back to the overview to see the updated families."
         )
-        self._router.back()
 
     def on_back(self) -> None:
         self._router.back()

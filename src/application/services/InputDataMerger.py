@@ -40,7 +40,24 @@ def _merge_courses(existing: List, incoming: List) -> List:
 
 
 def _merge_periods(existing: List, incoming: List) -> List:
+    from src.models.ExamPeriod import ExamPeriod
     by_key = {(p.semester, p.moed): p for p in existing}
     for p in incoming:
-        by_key[(p.semester, p.moed)] = p
+        key = (p.semester, p.moed)
+        if key in by_key:
+            existing_p = by_key[key]
+            # Merge excluded dates from both periods, keeping only those within the new range
+            merged_exclusions = {
+                d for d in existing_p.excludedDates.union(p.excludedDates)
+                if p.startDate <= d <= p.endDate
+            }
+            by_key[key] = ExamPeriod(
+                semester=p.semester,
+                moed=p.moed,
+                start_date=p.startDate,
+                end_date=p.endDate,
+                excluded_dates=merged_exclusions,
+            )
+        else:
+            by_key[key] = p
     return list(by_key.values())
