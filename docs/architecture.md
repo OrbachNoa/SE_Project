@@ -8,10 +8,10 @@ The following diagram illustrates the core structure, domain models, parsers, va
 ![UML Diagram](./UmlDiagram.png)
 
 **Version 2.0:**
-<a href="https://yuval-keren.github.io/" target="_blank">View Architecture Blueprint in a New Tab</a>
+<a href="https://yuval-keren.github.io/" target="_blank">View Architecture Blueprint v2.0</a>
 
-**Version 3.0:**
-<a href="./Architecture_blueprint.html" target="_blank">View Architecture Blueprint in a New Tab</a>
+**Version 34.0:**
+<a href="./Architecture_blueprint.html" download="Architecture_blueprint.html">Click here to download v34.0 architecture blueprint</a>
 
 ## Architecture
 
