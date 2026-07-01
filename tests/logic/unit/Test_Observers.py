@@ -20,12 +20,13 @@ Conventions:
 """
 import pytest
 import zlib
-import pickle
 from unittest.mock import MagicMock
 from datetime import date
 from src.infrastructure.concurrency.QueueScheduleObserver import QueueScheduleObserver
 from src.logic.observers.CollectingScheduleObserver import CollectingScheduleObserver
 from src.logic.observers.StreamingScheduleObserver import StreamingScheduleObserver
+from src.logic.SlotBuilder import Slot
+from src.application.dto.PackedScheduleCodec import unpack_rows, row_to_dto
 from src.models.Domain import ExamSchedule
 
 
@@ -64,11 +65,13 @@ def test_queue_schedule_observer_buffering_and_flush(make_assignment):
     # Arrange
     mock_queue = MagicMock()
     mock_cancel_event = MagicMock()
-    observer = QueueScheduleObserver(mock_queue, mock_cancel_event, batch_size=2)
-    
+    assignment = make_assignment(exam_date=date(2026, 6, 1))
+    slot = Slot(assignment.course, assignment.semester, assignment.moed, [assignment.date])
+    observer = QueueScheduleObserver(mock_queue, mock_cancel_event, batch_size=2, slots=[slot])
+
     schedule = ExamSchedule()
-    schedule.addAssignment(make_assignment(exam_date=date(2026, 6, 1)))
-    
+    schedule.addAssignment(assignment)
+
     # Act
     observer.on_schedule_found(schedule)
     call_count_after_first = mock_queue.put_nowait.call_count
@@ -83,10 +86,12 @@ def test_queue_schedule_observer_buffering_and_flush(make_assignment):
     assert call_count_after_second == 1
     assert msg_type == "SCHEDULE_BATCH"
     assert count == 2
-    assert batch_scores == []
-    buffer = pickle.loads(zlib.decompress(data))
-    assert len(buffer) == 2
-    assert buffer[0].assignments[0].course_id == "10101"
+    # No scorer was given, so each recorded schedule contributes an empty dict.
+    assert batch_scores == [{}, {}]
+    slot_count, rows = unpack_rows(zlib.decompress(data))
+    assert len(rows) == 2
+    dto = row_to_dto(rows[0], [slot])
+    assert dto.assignments[0].course_id == "10101"
 
 
 # ===========================================================================
@@ -96,10 +101,12 @@ def test_queue_schedule_observer_lifecycle(make_assignment):
     # Arrange
     mock_queue = MagicMock()
     mock_cancel_event = MagicMock()
-    observer = QueueScheduleObserver(mock_queue, mock_cancel_event, batch_size=5)
+    assignment = make_assignment(exam_date=date(2026, 6, 1))
+    slot = Slot(assignment.course, assignment.semester, assignment.moed, [assignment.date])
+    observer = QueueScheduleObserver(mock_queue, mock_cancel_event, batch_size=5, slots=[slot])
     schedule = ExamSchedule()
-    schedule.addAssignment(make_assignment(exam_date=date(2026, 6, 1)))
-    
+    schedule.addAssignment(assignment)
+
     # Act
     observer.on_progress(75)
     progress_call = mock_queue.put_nowait.call_args[0][0]
@@ -130,8 +137,8 @@ def test_queue_schedule_observer_lifecycle(make_assignment):
     assert batch_flush_call_count == 1
     assert msg_type == "SCHEDULE_BATCH"
     assert batch_size == 1
-    buffer = pickle.loads(zlib.decompress(batch_data))
-    assert len(buffer) == 1
+    slot_count, rows = unpack_rows(zlib.decompress(batch_data))
+    assert len(rows) == 1
     assert finished_call_count == 1
     assert finished_type == "FINISHED"
     assert finished_payload is None
@@ -143,7 +150,7 @@ def test_queue_schedule_observer_lifecycle(make_assignment):
 def test_queue_schedule_observer_with_null_cancel_event():
     # Arrange
     mock_queue = MagicMock()
-    observer = QueueScheduleObserver(mock_queue, cancel_event=None, batch_size=5)
+    observer = QueueScheduleObserver(mock_queue, cancel_event=None, batch_size=5, slots=[])
     
     # Act
     cancelled = observer.should_cancel()

@@ -153,9 +153,11 @@ def test_typical_load_under_30_seconds(make_course, make_program_entry,
         f"{elapsed:.2f}s, exceeding the {MAX_EXECUTION_SECONDS}s "
         f"performance budget."
     )
-    # Sanity check — the run actually produced something (not just
-    # returning early on an unrelated error).
-    assert schedules is not None
+    # Sanity check — the run actually produced schedules, proving a real
+    # search happened and the timing is not an early return on an unrelated
+    # error. `observer.schedules` is always a list, so a non-empty check is
+    # required here; `is not None` would pass vacuously.
+    assert len(schedules) > 0
 
 
 # ===========================================================================
@@ -191,7 +193,8 @@ def test_maximum_load_under_30_seconds(make_course, make_program_entry,
         f"10 excluded dates) took {elapsed:.2f}s, exceeding the "
         f"{MAX_EXECUTION_SECONDS}s performance budget."
     )
-    assert schedules is not None
+    # Sanity check — a real search produced schedules (not an early return).
+    assert len(schedules) > 0
 
 
 # ---------------------------------------------------------------------------

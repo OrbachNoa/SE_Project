@@ -9,8 +9,7 @@ validation (default and custom separators, partial/missing separators),
 each parser's happy path against a well-formed fixture, field-level
 rejection of invalid values (bad requirement/evaluation/semester/moed,
 malformed or impossible dates, non-5-digit program codes), duplicate
-detection (duplicate course IDs, duplicate program entries within one
-course, duplicate (semester, moed) period pairs), the empty-file edge
+detection (duplicate (semester, moed) period pairs), the empty-file edge
 case for both CoursesFileParser and ProgramsFileParser, and
 ParserFactory's registry lookup/registration/multi-file parsing.
 
@@ -223,41 +222,17 @@ def test_courses_parser_accepts_sentence_case_requirement(
 
 
 # ===========================================================================
-# TC-PRS-010: Test that invalid Requirement values are rejected.
-# A course requirement must be either 'Obligatory' or 'Elective'.
-# Anything else should cause an error.
+# TC-PRS-010..011: Test that invalid course fields (requirement, evaluation) are rejected.
 # ===========================================================================
-def test_courses_parser_rejects_invalid_requirement(tmp_path):
-    # Arrange — Create a course with a bad requirement ('Recommended').
-    fixture = tmp_path / "course_bad_requirement.txt"
+@pytest.mark.parametrize("req_line, eval_line", [
+    ("83101,1,FALL,Recommended", "Exam"),  # TC-PRS-010: bad requirement ('Recommended')
+    ("83101,1,FALL,Obligatory", "Quiz"),   # TC-PRS-011: bad evaluation ('Quiz')
+])
+def test_courses_parser_rejections(tmp_path, req_line, eval_line):
+    # Arrange
+    fixture = tmp_path / "course_bad.txt"
     fixture.write_text(
-        "Calculus 1\n"
-        "10101\n"
-        "Dr. Cohen\n"
-        "83101,1,FALL,Recommended\n"
-        "Exam\n",
-        encoding="utf-8",
-    )
-
-    # Act + Assert — The system must raise a ValueError.
-    with pytest.raises(ValueError):
-        CoursesFileParser().parse(str(fixture))
-
-
-
-# ===========================================================================
-# TC-PRS-011: Test that invalid Evaluation values are rejected.
-# A course evaluation must be 'Exam', 'Project', or 'Attendance'.
-# ===========================================================================
-def test_courses_parser_rejects_invalid_evaluation(tmp_path):
-    # Arrange — Create a course with a bad evaluation ('Quiz').
-    fixture = tmp_path / "course_bad_evaluation.txt"
-    fixture.write_text(
-        "Calculus 1\n"
-        "10101\n"
-        "Dr. Cohen\n"
-        "83101,1,FALL,Obligatory\n"
-        "Quiz\n",
+        f"Calculus 1\n10101\nDr. Cohen\n{req_line}\n{eval_line}\n",
         encoding="utf-8",
     )
 
@@ -339,79 +314,26 @@ def test_exam_periods_parser_expands_excluded_date_range(tmp_path):
 
 
 # ===========================================================================
-# TC-PRS-015: An exam period whose start date is NOT strictly less than
-# its end date must cause a parse error.
+# TC-PRS-015..018: Test that invalid periods (bad dates, ranges, semester, moed) are rejected.
 # ===========================================================================
-@pytest.mark.parametrize("start,end", [
-    ("11-03-2026", "11-03-2026"),   # start == end  → invalid
-    ("11-03-2026", "01-03-2026"),   # start  > end  → invalid
+@pytest.mark.parametrize("line1, line2", [
+    ("FALL, Aleph", "11-03-2026, 11-03-2026"),  # TC-PRS-015: start == end
+    ("FALL, Aleph", "11-03-2026, 01-03-2026"),  # TC-PRS-015: start > end
+    ("FALL, Aleph", "2026-03-11, 30-06-2026"),  # TC-PRS-016: bad format
+    ("FALL, Aleph", "11/03/2026, 30-06-2026"),  # TC-PRS-016: wrong sep
+    ("FALL, Aleph", "11-Mar-2026, 30-06-2026"), # TC-PRS-016: letters
+    ("FALL, Aleph", "11032026, 30-06-2026"),    # TC-PRS-016: no dashes
+    ("FALL, Aleph", "32-03-2026, 30-06-2026"),  # TC-PRS-016: impossible day
+    ("FALL, Aleph", "11-13-2026, 30-06-2026"),  # TC-PRS-016: impossible month
+    ("WINTER, Aleph", "01-02-2026, 28-02-2026"),# TC-PRS-017: bad semester
+    ("FALL, Delta", "01-02-2026, 28-02-2026"),  # TC-PRS-018: bad moed
 ])
-def test_exam_periods_parser_rejects_non_strict_date_range(tmp_path, start, end):
-    # Arrange — single period with an invalid date range.
-    fixture = tmp_path / "periods_bad_range.txt"
-    fixture.write_text(
-        f"FALL, Aleph\n{start}, {end}\n",
-        encoding="utf-8",
-    )
+def test_exam_periods_parser_rejections(tmp_path, line1, line2):
+    # Arrange — single period with an invalid property.
+    fixture = tmp_path / "periods_bad.txt"
+    fixture.write_text(f"{line1}\n{line2}\n", encoding="utf-8")
+    
     # Act + Assert
-    with pytest.raises(ValueError):
-        ExamPeriodsFileParser().parse(str(fixture))
-
-
-# ===========================================================================
-# TC-PRS-016: Invalid date formats — wrong order, letters, missing dashes —
-# must cause a parse error.
-# ===========================================================================
-@pytest.mark.parametrize("bad_date", [
-    "2026-03-11",   # not DD-MM-YYYY
-    "11/03/2026",   # wrong separator
-    "11-Mar-2026",  # month as letters
-    "11032026",     # missing dashes
-    "32-03-2026",   # impossible day
-    "11-13-2026",   # impossible month
-])
-def test_exam_periods_parser_rejects_invalid_date_formats(tmp_path, bad_date):
-    # Arrange — single period whose start date is invalid.
-    fixture = tmp_path / "periods_bad_date.txt"
-    fixture.write_text(
-        f"FALL, Aleph\n{bad_date}, 30-06-2026\n",
-        encoding="utf-8",
-    )
-    # Act + Assert
-    with pytest.raises(ValueError):
-        ExamPeriodsFileParser().parse(str(fixture))
-
-
-# ===========================================================================
-# TC-PRS-017: Test that invalid Semester values are rejected.
-# A semester must be 'FALL', 'SPRI', or 'SUMM'.
-# ===========================================================================
-def test_exam_periods_parser_rejects_invalid_semester(tmp_path):
-    # Arrange — Create a period with a bad semester ('WINTER').
-    fixture = tmp_path / "periods_bad_semester.txt"
-    fixture.write_text(
-        "WINTER, Aleph\n01-02-2026, 28-02-2026\n",
-        encoding="utf-8",
-    )
-
-    # Act + Assert — The system must raise a ValueError.
-    with pytest.raises(ValueError):
-        ExamPeriodsFileParser().parse(str(fixture))
-
-
-# ===========================================================================
-# TC-PRS-018: Test that invalid Moed values are rejected.
-# A moed must be 'Aleph', 'Bet', or 'Gimel'.
-# ===========================================================================
-def test_exam_periods_parser_rejects_invalid_moed(tmp_path):
-    # Arrange — Create a period with a bad moed ('Delta').
-    fixture = tmp_path / "periods_bad_moed.txt"
-    fixture.write_text(
-        "FALL, Delta\n01-02-2026, 28-02-2026\n",
-        encoding="utf-8",
-    )
-
-    # Act + Assert — The system must raise a ValueError.
     with pytest.raises(ValueError):
         ExamPeriodsFileParser().parse(str(fixture))
 

@@ -5,13 +5,13 @@ empty-input rejection), AutoKSelector (silhouette-driven K choice and the
 degenerate-population shortcut), and ScheduleSampler (index sampling and the
 guard against a non-positive sample size).
 
-This file owns TC-CLU-017..027 as one segment of a TC-CLU numbering family shared
-across four sibling files, each covering a different facet of the clustering
-subsystem: Test_ClusteringFeatures.py (TC-CLU-001..010, feature extraction and
-normalization), Test_ClusteringDistanceMetrics.py (TC-CLU-011..016, distance
-metrics), this file (TC-CLU-017..027, clustering algorithms), and
-Test_ClusteringService.py (TC-CLU-028..032, the service that wires the pipeline
-together).
+This file owns TC-CLU-017..027 and TC-CLU-034..040 as one segment of a TC-CLU
+numbering family shared across four sibling files, each covering a different
+facet of the clustering subsystem: Test_ClusteringFeatures.py (TC-CLU-001..010,
+feature extraction and normalization), Test_ClusteringDistanceMetrics.py
+(TC-CLU-011..016, distance metrics), this file (TC-CLU-017..027 and
+TC-CLU-034..040, clustering algorithms), and Test_ClusteringService.py
+(TC-CLU-028..033, the service that wires the pipeline together).
 
 Every test body follows the Arrange/Act/Assert structure, each step marked with
 its own comment. No shared fixtures from tests/conftest.py are used here: every
@@ -299,3 +299,150 @@ def test_schedule_sampler_rejects_a_non_positive_max_sample():
     # Assert
     with pytest.raises(ValueError):
         ScheduleSampler(max_sample=0)
+
+
+# ---------------------------------------------------------------------------
+# Additional KMeansClusteringStrategy / AutoKSelector / ScheduleSampler
+# coverage: TC-CLU-034..040
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# TC-CLU-034: cluster() with k=0 raises ValueError instead of silently
+# producing a meaningless zero-cluster partition.
+# ===========================================================================
+def test_kmeans_clustering_rejects_a_zero_k():
+    # Arrange
+    strategy = KMeansClusteringStrategy(seed=42)
+    points = np.array([[0.0, 0.0], [1.0, 1.0]])
+
+    # Act
+    # Assert
+    with pytest.raises(ValueError):
+        strategy.cluster(points, k=0)
+
+
+# ===========================================================================
+# TC-CLU-035: cluster() with a negative k raises ValueError, the same
+# guard that rejects k=0.
+# ===========================================================================
+def test_kmeans_clustering_rejects_a_negative_k():
+    # Arrange
+    strategy = KMeansClusteringStrategy(seed=42)
+    points = np.array([[0.0, 0.0], [1.0, 1.0]])
+
+    # Act
+    # Assert
+    with pytest.raises(ValueError):
+        strategy.cluster(points, k=-3)
+
+
+# ===========================================================================
+# TC-CLU-036: _recompute_centroids reseeds an empty cluster to the point
+# farthest (by minimum distance to any existing centroid) from the current
+# centroids, rather than leaving it stuck at its previous (now-orphaned)
+# location. This is called directly with a hand-built labels array so the
+# empty-cluster branch is exercised deterministically, independent of
+# whichever random initialization happened to produce it during a full run.
+# ===========================================================================
+def test_kmeans_recompute_centroids_reseeds_an_empty_cluster_to_the_farthest_point():
+    # Arrange
+    strategy = KMeansClusteringStrategy(seed=42)
+    points = np.array([
+        [0.0, 0.0],
+        [1.0, 1.0],
+        [100.0, 100.0],
+    ])
+    # Cluster index 2 has no members assigned to it.
+    labels = np.array([0, 0, 1])
+    previous = np.array([[0.5, 0.5], [100.0, 100.0], [50.0, 50.0]])
+    rng = np.random.default_rng(42)
+
+    # Act
+    result = strategy._recompute_centroids(points, labels, previous, rng)
+
+    # Assert
+    # Cluster 0 becomes the mean of its two members; cluster 1 keeps its sole
+    # member's position; cluster 2 (empty) is reseeded to the point with the
+    # largest minimum distance to {centroid0, centroid1} — [0, 0], whose
+    # distance to centroid0 (~0.707) is smaller than [100,100]'s distance (0)
+    # but is the argmax across all three points since [100,100] sits exactly
+    # on centroid1.
+    assert result[0].tolist() == [0.5, 0.5]
+    assert result[1].tolist() == [100.0, 100.0]
+    assert result[2].tolist() == [0.0, 0.0]
+
+
+# ===========================================================================
+# TC-CLU-037: sample_indices(0) returns an empty list rather than raising or
+# returning a non-empty range, matching the "nothing to sample" contract.
+# ===========================================================================
+def test_schedule_sampler_sample_indices_zero_population_returns_empty_list():
+    # Arrange
+    sampler = ScheduleSampler(max_sample=10, seed=42)
+
+    # Act
+    indices = sampler.sample_indices(0)
+
+    # Assert
+    assert indices == []
+
+
+# ===========================================================================
+# TC-CLU-038: sample_indices() with a negative population_size also returns
+# an empty list, the same defensive branch as population_size == 0.
+# ===========================================================================
+def test_schedule_sampler_sample_indices_negative_population_returns_empty_list():
+    # Arrange
+    sampler = ScheduleSampler(max_sample=10, seed=42)
+
+    # Act
+    indices = sampler.sample_indices(-5)
+
+    # Assert
+    assert indices == []
+
+
+# ===========================================================================
+# TC-CLU-039: _build_dist_matrix raises ValueError when the injected metric
+# returns a pairwise distance matrix of the wrong shape, guarding against a
+# broken custom IDistanceMetric silently corrupting silhouette scoring.
+# ===========================================================================
+def test_auto_k_selector_build_dist_matrix_rejects_a_malformed_metric_shape():
+    # Arrange
+    class _MalformedShapeMetric:
+        def distance(self, a, b):
+            return float(np.linalg.norm(a - b))
+
+        def distance_to_centroids(self, points, centroids):
+            # Deliberately wrong: one extra column versus the expected (n, n).
+            return np.zeros((points.shape[0], centroids.shape[0] + 1))
+
+    selector = AutoKSelector(metric=_MalformedShapeMetric())
+    points = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+
+    # Act
+    # Assert
+    with pytest.raises(ValueError):
+        selector._build_dist_matrix(points)
+
+
+# ===========================================================================
+# TC-CLU-040: _silhouette_precomputed returns exactly 0.0 when the labels
+# array carries fewer than two unique cluster ids — a single-cluster
+# partition has no "nearest other cluster" to compare against.
+# ===========================================================================
+def test_auto_k_selector_silhouette_precomputed_returns_zero_for_one_cluster():
+    # Arrange
+    selector = AutoKSelector()
+    dist = np.array([
+        [0.0, 1.0, 2.0],
+        [1.0, 0.0, 1.0],
+        [2.0, 1.0, 0.0],
+    ])
+    single_cluster_labels = np.array([0, 0, 0])
+
+    # Act
+    score = selector._silhouette_precomputed(dist, single_cluster_labels)
+
+    # Assert
+    assert score == 0.0

@@ -28,7 +28,7 @@ Conventions:
 from datetime import date
 import pytest
 
-from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.models.Enums import Semester, Moed, Requirement
 from src.logic.Scheduler import Scheduler
 from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
 from src.logic.checkers.MoedOrderChecker import MoedOrderChecker

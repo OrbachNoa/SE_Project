@@ -17,9 +17,9 @@ Conventions:
   tests/conftest.py; `view` has no shared fixture, so it is a local
   MagicMock() in every test.
 """
-import pytest
 from unittest.mock import MagicMock
 from src.gui.features.input.InputScreenPresenter import InputScreenPresenter
+from src.gui.features.input.InputScreen import InputScreen
 from src.application.ImportBoundary import ImportMode, ImportResult
 from src.application.viewmodels.ProgramViewModel import ProgramViewModel
 
@@ -295,3 +295,308 @@ def test_presenter_on_early_results_ready(mock_controller, mock_router):
     assert view.set_view_results_visible.call_args[0] == (True,)
     assert mock_router.show.call_count == 1
     assert mock_router.show.call_args[0] == ("output",)
+
+# ===========================================================================
+# TC-ISP-012: test load periods (clicked) handles success, mirroring the
+# courses-side success test.
+# ===========================================================================
+def test_presenter_on_load_periods_clicked_success(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    view.prompt_for_file.return_value = "periods.csv"
+    view.is_replace_mode_selected.return_value = True
+
+    res = ImportResult(success=True, loaded_count=4, errors=[])
+    mock_controller.load_file.return_value = res
+    mock_controller.get_loaded_periods.return_value = []
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_load_periods_clicked()
+
+    # Assert
+    assert mock_controller.load_file.call_count == 1
+    assert mock_controller.load_file.call_args[0] == ("periods.csv", "periods", ImportMode.REPLACE)
+    assert presenter._periods_loaded is True
+    assert view.mark_periods_loaded.call_count == 1
+    assert view.mark_periods_loaded.call_args[0] == (4,)
+
+# ===========================================================================
+# TC-ISP-013: test load periods (clicked) handles failure, mirroring the
+# courses-side failure test.
+# ===========================================================================
+def test_presenter_on_load_periods_clicked_failure(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    view.prompt_for_file.return_value = "periods.csv"
+    view.is_replace_mode_selected.return_value = False
+
+    res = ImportResult(success=False, loaded_count=0, errors=["Bad date range"])
+    mock_controller.load_file.return_value = res
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_load_periods_clicked()
+
+    # Assert
+    assert mock_controller.load_file.call_args[0] == ("periods.csv", "periods", ImportMode.UPDATE)
+    assert presenter._periods_loaded is False
+    assert view.show_import_error.call_count == 1
+    assert view.show_import_error.call_args[0] == ("periods", "Bad date range")
+
+# ===========================================================================
+# TC-ISP-014: test on_load_periods (direct, mode-supplied) shows the period
+# editor when the mapped view models list is non-empty.
+# ===========================================================================
+def test_presenter_on_load_periods_direct_shows_editor(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    view.prompt_for_file.return_value = "periods.csv"
+
+    res = ImportResult(success=True, loaded_count=1, errors=[])
+    mock_controller.load_file.return_value = res
+    periods = ["period-stub"]
+    mock_controller.get_loaded_periods.return_value = periods
+    mapper = MagicMock()
+    period_vms = [MagicMock(name="period_vm")]
+    mapper.to_period_edit_vms.return_value = period_vms
+    mock_controller.get_mapper.return_value = mapper
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_load_periods(ImportMode.UPDATE)
+
+    # Assert
+    assert mock_controller.load_file.call_args[0] == ("periods.csv", "periods", ImportMode.UPDATE)
+    assert view.show_period_editor.call_count == 1
+    assert view.show_period_editor.call_args[0] == (period_vms,)
+
+# ===========================================================================
+# TC-ISP-015: test on_cancel_clicked delegates to the generation collaborator
+# — cancels scheduling, resets running mode, and clears progress text.
+# ===========================================================================
+def test_presenter_on_cancel_clicked_delegates_to_generation(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_cancel_clicked()
+
+    # Assert
+    assert mock_controller.cancel_scheduling.call_count == 1
+    assert view.set_running_mode.call_count == 1
+    assert view.set_running_mode.call_args[0] == (False, "")
+    assert view.set_progress_text.call_count == 1
+    assert view.set_progress_text.call_args[0] == ("",)
+
+# ===========================================================================
+# TC-ISP-016: test on_search_finished delegates to the generation
+# collaborator and navigates when schedules were found.
+# ===========================================================================
+def test_presenter_on_search_finished_delegates_to_generation(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    mock_controller.get_page_info.return_value = {"total_count": 2}
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_search_finished()
+
+    # Assert
+    assert view.set_running_mode.call_args[0] == (False, "")
+    assert mock_router.show.call_count == 1
+    assert mock_router.show.call_args[0] == ("output",)
+
+# ===========================================================================
+# TC-ISP-017: test on_error_occurred delegates to the generation
+# collaborator, surfacing the scheduler error via the view.
+# ===========================================================================
+def test_presenter_on_error_occurred_delegates_to_generation(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_error_occurred("Disk is full.")
+
+    # Assert
+    assert view.set_running_mode.call_args[0] == (False, "")
+    assert view.show_scheduler_error.call_count == 1
+    assert view.show_scheduler_error.call_args[0] == ("Disk is full.",)
+
+# ===========================================================================
+# TC-ISP-018: test on_view_results_clicked routes directly to the output
+# screen, bypassing GenerationPresenter entirely (no generation state is
+# touched).
+# ===========================================================================
+def test_presenter_on_view_results_clicked_routes_directly(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    # Act
+    presenter.on_view_results_clicked()
+
+    # Assert
+    assert mock_router.show.call_count == 1
+    assert mock_router.show.call_args[0] == ("output",)
+    assert mock_controller.generate_schedules.call_count == 0
+    assert view.set_running_mode.call_count == 0
+
+# ===========================================================================
+# TC-ISP-019: test on_settings_clicked delegates to ConstraintsPresenter,
+# opening the dialog with the controller's current configuration.
+# ===========================================================================
+def test_presenter_on_settings_clicked_delegates_to_constraints(mock_controller, mock_router):
+    # Arrange
+    from unittest.mock import patch
+
+    view = MagicMock()
+    current_config = MagicMock(name="current_config")
+    mock_controller.get_constraints_config.return_value = current_config
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+
+    with patch(
+        "gui.features.input.ConstraintsPresenter.ConstraintsSettingsDialog"
+    ) as mock_dialog_cls:
+        mock_dialog_instance = MagicMock()
+        mock_dialog_cls.return_value = mock_dialog_instance
+
+        # Act
+        presenter.on_settings_clicked()
+
+        # Assert
+        assert mock_controller.get_constraints_config.call_count == 1
+        _, kwargs = mock_dialog_cls.call_args
+        assert kwargs["current_config"] is current_config
+        assert mock_dialog_instance.exec.call_count == 1
+
+# ===========================================================================
+# TC-ISP-020: test on_constraints_saved delegates to ConstraintsPresenter,
+# pushing the updated period view models then refreshing the generate button.
+# ===========================================================================
+def test_presenter_on_constraints_saved_delegates_to_constraints(mock_controller, mock_router):
+    # Arrange
+    view = MagicMock()
+    view.selected_program_ids.return_value = ["83101"]
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+    updated_vms = [MagicMock(name="period_vm")]
+
+    # Act
+    presenter.on_constraints_saved(updated_vms)
+
+    # Assert
+    assert mock_controller.update_exam_periods.call_count == 1
+    assert mock_controller.update_exam_periods.call_args[0] == (updated_vms,)
+    # on_changed == refresh_generate_button, which always re-validates programs.
+    assert view.set_generate_button_state.call_count == 1
+
+# ===========================================================================
+# TC-ISP-021: entering the screen with no input files loaded must leave the
+# REAL Generate button disabled. This drives a live InputScreen and inspects
+# the actual QPushButton, rather than asserting a mock was called — it guards
+# the user flow "you cannot generate before loading courses and periods".
+# ===========================================================================
+def test_presenter_on_enter_disables_real_generate_button_when_files_missing(
+    qapp, mock_controller, mock_router,
+):
+    # Arrange — a real InputScreen with nothing loaded yet. Force the real
+    # Generate button to the wrong (enabled) state first, so the assertion
+    # proves on_enter actively drove the widget rather than reading a stale
+    # construction-time default.
+    mock_controller.get_loaded_courses.return_value = []
+    mock_controller.get_loaded_periods.return_value = []
+    screen = InputScreen(mock_controller, mock_router)
+    screen.action_bar.generate_btn.setEnabled(True)
+
+    # Act
+    screen._presenter.on_enter()
+
+    # Assert — with neither courses nor periods loaded, the live button is off.
+    assert screen.action_bar.generate_btn.isEnabled() is False
+
+# ===========================================================================
+# TC-ISP-022: test refresh_generate_button's invalid-dates branch using a
+# lightweight fake view with a real is_period_range_valid attribute set to
+# False — a bare MagicMock()'s auto-attribute is always truthy and would
+# never exercise this branch.
+# ===========================================================================
+def test_presenter_refresh_generate_button_invalid_dates(mock_controller, mock_router):
+    # Arrange
+    class FakeView:
+        def __init__(self):
+            self.is_period_range_valid_value = False
+            self.generate_button_calls = []
+            self.validation_messages = []
+            self.program_errors = []
+
+        def is_period_range_valid(self):
+            return self.is_period_range_valid_value
+
+        def selected_program_ids(self):
+            return ["83101"]
+
+        def set_generate_button_state(self, enabled, tooltip):
+            self.generate_button_calls.append((enabled, tooltip))
+
+        def set_validation_message(self, message):
+            self.validation_messages.append(message)
+
+        def set_program_error(self, message):
+            self.program_errors.append(message)
+
+    view = FakeView()
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+    presenter._courses_loaded = True
+    presenter._periods_loaded = True
+
+    # Act
+    presenter.refresh_generate_button()
+
+    # Assert
+    assert view.generate_button_calls == [
+        (False, "Fix the exam period dates (end is before start) to continue.")
+    ]
+    assert view.validation_messages == ["Exam period end date is before the start date."]
+
+# ===========================================================================
+# TC-ISP-023: test refresh_generate_button's valid-dates branch using the
+# same lightweight fake view, confirming the button is enabled and no
+# validation message is shown when dates are valid and files are loaded.
+# ===========================================================================
+def test_presenter_refresh_generate_button_valid_dates(mock_controller, mock_router):
+    # Arrange
+    class FakeView:
+        def __init__(self):
+            self.is_period_range_valid_value = True
+            self.generate_button_calls = []
+            self.validation_messages = []
+            self.program_errors = []
+
+        def is_period_range_valid(self):
+            return self.is_period_range_valid_value
+
+        def selected_program_ids(self):
+            return ["83101"]
+
+        def set_generate_button_state(self, enabled, tooltip):
+            self.generate_button_calls.append((enabled, tooltip))
+
+        def set_validation_message(self, message):
+            self.validation_messages.append(message)
+
+        def set_program_error(self, message):
+            self.program_errors.append(message)
+
+    view = FakeView()
+    presenter = InputScreenPresenter(view, mock_controller, mock_router, "output")
+    presenter._courses_loaded = True
+    presenter._periods_loaded = True
+
+    # Act
+    presenter.refresh_generate_button()
+
+    # Assert
+    assert view.generate_button_calls == [(True, "")]
+    assert view.validation_messages == [""]

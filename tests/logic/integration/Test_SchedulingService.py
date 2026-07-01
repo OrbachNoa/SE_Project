@@ -1,3 +1,4 @@
+import queue
 import pytest
 from unittest.mock import MagicMock, patch, ANY
 from src.application.services.SchedulingService import SchedulingService, _run_scheduler_process
@@ -40,7 +41,14 @@ def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cl
     
     mock_process = MagicMock()
     mock_process_cls.return_value = mock_process
-    
+
+    # Real Queue.get_nowait() raises Empty once drained; _pool_start_run's
+    # _drain_queue helper relies on that to exit its `while True` loop. Queue
+    # is mocked here, so every internal queue resolves to the same
+    # mock_queue.return_value, which must be told to raise it too, or
+    # generate_async() never returns.
+    mock_queue.return_value.get_nowait.side_effect = queue.Empty
+
     # Act
     worker = service.generate_async(["83101"], [c], [p], max_results=50, num_processes=1)
     
@@ -163,6 +171,7 @@ def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mo
     service = SchedulingService(mock_repository)
     c = make_course()
     p = make_period()
+    mock_queue.return_value.get_nowait.side_effect = queue.Empty
 
     # Act
     service.generate_async(["83101"], [c], [p], num_processes=1)
@@ -193,6 +202,7 @@ def test_generate_async_reuses_pool_across_calls(mock_worker_cls, mock_event, mo
     service = SchedulingService(mock_repository)
     c = make_course()
     p = make_period()
+    mock_queue.return_value.get_nowait.side_effect = queue.Empty
 
     # Act
     service.generate_async(["83101"], [c], [p], num_processes=2)

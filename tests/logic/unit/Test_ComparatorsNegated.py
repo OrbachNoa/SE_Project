@@ -1,17 +1,32 @@
 """
-Tests for the negated comparators: MaxElectiveConflictsComparator and
-MaxExamsPerDayComparator.
+Tests for the negated scoring criteria: ELECTIVE_CONFLICTS and
+MAX_EXAMS_PER_DAY.
 
-Both wrap a lower-is-better metric (peak_elective_conflict,
-max_exams_per_day respectively) and expose it as a higher-is-better sort
-key by negating it, so a calmer/lighter schedule produces a less negative
-key and is ranked first. These cases confirm that negation, stability for
-ties, isolation from the sibling metric, and boundary values all hold.
+These used to be implemented as standalone comparator classes
+(MaxElectiveConflictsComparator, MaxExamsPerDayComparator) wrapping a
+lower-is-better metric (peak_elective_conflict, max_exams_per_day
+respectively) and exposing it as a higher-is-better sort key by negating it.
+That layer was merged into `ScheduleScorer`, which computes every criterion
+in one pass and returns a `{criterion_id: float}` dict from `score()`,
+already negated for the lower-is-better criteria — so a calmer/lighter
+schedule still produces a less negative key and is ranked first.
+
+Note on ELECTIVE_CONFLICTS specifically: the old `peak_elective_conflict`
+metric (the worst single-day pile-up, minus one) was removed along with the
+comparator classes. ScheduleScorer now computes a different, intentional
+formula instead — total same-day pair-conflicts per program, mirroring
+ElectiveConflictCapChecker (the n-th same-day elective adds n-1 new
+conflicting pairs). The two formulas agree at exactly two same-day electives
+(both give 1) but diverge from three onward (pair-conflicts give 3, the old
+peak-minus-one formula gave 2) — see TC-CMP-016 below.
+
+These cases confirm that negation, stability for ties, isolation from the
+sibling metric, and boundary values all hold under the new ScheduleScorer.
 
 TC-ID family: this file shares the "CMP" prefix with Test_Comparators.py.
-That sibling owns TC-CMP-001..012 (MinMandatoryGapComparator,
-AvgAllCoursesGapComparator, MandatorySpanComparator); this file continues
-the same family with TC-CMP-013..020 for the two negated comparators
+That sibling owns TC-CMP-001..012 (MIN_MANDATORY_GAP,
+AVG_ALL_COURSES_GAP, MANDATORY_SPAN); this file continues
+the same family with TC-CMP-013..020 for the two negated criteria
 above. The shared prefix and continuous numbering are intentional and
 should not be renumbered independently.
 
@@ -22,25 +37,22 @@ make_assignment factory fixtures from tests/conftest.py to build courses
 and schedules; no other shared fixtures from conftest.py are used.
 """
 from datetime import date
-import pytest
 
 from src.models.Enums import Requirement
 from src.models.ExamSchedule import ExamSchedule
-from src.logic.comparators.Metrics import (
-    build_elective_index,
-    build_program_index,
-    peak_elective_conflict,
-    max_exams_per_day,
+from src.logic.comparators.Metrics import max_exams_per_day
+from src.logic.comparators.ScheduleScorer import (
+    ScheduleScorer,
+    ELECTIVE_CONFLICTS,
+    MAX_EXAMS_PER_DAY,
 )
-from src.logic.comparators.MaxElectiveConflictsComparator import MaxElectiveConflictsComparator
-from src.logic.comparators.MaxExamsPerDayComparator import MaxExamsPerDayComparator
 
 
 # ---------------------------------------------------------------------------
 # MaxElectiveConflictsComparator TC-CMP-013..016
 #
-# The underlying metric (peak_elective_conflict) is lower-is-better, so the
-# comparator negates it. "Less negative" therefore means "better" here.
+# The underlying metric is lower-is-better, so ScheduleScorer negates it.
+# "Less negative" therefore means "better" here.
 # ---------------------------------------------------------------------------
 
 # ===========================================================================
@@ -54,7 +66,7 @@ def test_max_elective_conflicts_comparator_orders_calmer_schedule_first(
     # Arrange
     pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
     courses = [make_course(course_id=cid, program_entries=[pe]) for cid in ("A", "B", "C")]
-    comparator = MaxElectiveConflictsComparator(courses)
+    scorer = ScheduleScorer(courses)
 
     crowded = ExamSchedule()
     for course in courses:
@@ -66,7 +78,7 @@ def test_max_elective_conflicts_comparator_orders_calmer_schedule_first(
     calm.addAssignment(make_assignment(course=courses[2], exam_date=date(2026, 6, 3)))
 
     # Act
-    result = sorted([crowded, calm], key=comparator.key, reverse=True)
+    result = sorted([crowded, calm], key=lambda s: scorer.score(s)[ELECTIVE_CONFLICTS], reverse=True)
 
     # Assert
     assert result == [calm, crowded]
@@ -83,7 +95,7 @@ def test_max_elective_conflicts_comparator_is_stable_for_equal_peaks(
     pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
     course_a = make_course(course_id="A", program_entries=[pe])
     course_b = make_course(course_id="B", program_entries=[pe])
-    comparator = MaxElectiveConflictsComparator([course_a, course_b])
+    scorer = ScheduleScorer([course_a, course_b])
 
     first = ExamSchedule()
     first.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
@@ -94,8 +106,8 @@ def test_max_elective_conflicts_comparator_is_stable_for_equal_peaks(
     second.addAssignment(make_assignment(course=course_b, exam_date=date(2026, 6, 1)))
 
     # Act
-    original_order = sorted([first, second], key=comparator.key, reverse=True)
-    swapped_order = sorted([second, first], key=comparator.key, reverse=True)
+    original_order = sorted([first, second], key=lambda s: scorer.score(s)[ELECTIVE_CONFLICTS], reverse=True)
+    swapped_order = sorted([second, first], key=lambda s: scorer.score(s)[ELECTIVE_CONFLICTS], reverse=True)
 
     # Assert
     assert original_order == [first, second]
@@ -118,8 +130,7 @@ def test_max_elective_conflicts_comparator_uses_only_its_own_metric(
     obligatory_a = make_course(course_id="OA", program_entries=[pe_obligatory])
     obligatory_b = make_course(course_id="OB", program_entries=[pe_obligatory])
     courses = [elective_a, elective_b, obligatory_a, obligatory_b]
-    comparator = MaxElectiveConflictsComparator(courses)
-    elective_index = build_elective_index(courses)
+    scorer = ScheduleScorer(courses)
 
     schedule = ExamSchedule()
     schedule.addAssignment(make_assignment(course=elective_a, exam_date=date(2026, 6, 1)))
@@ -128,17 +139,16 @@ def test_max_elective_conflicts_comparator_uses_only_its_own_metric(
     schedule.addAssignment(make_assignment(course=obligatory_b, exam_date=date(2026, 6, 5)))
 
     # Act
-    result = comparator.key(schedule)
+    result = scorer.score(schedule)[ELECTIVE_CONFLICTS]
 
-    # Assert
-    assert comparator.criterion_id == "ELECTIVE_CONFLICTS"
-    assert result == -float(peak_elective_conflict(schedule, elective_index))
+    # Assert — only the two same-day electives count; the two same-day
+    # obligatory courses on June 5 do not add to this criterion.
     assert result == -1.0
 
 
 # ===========================================================================
 # TC-CMP-016: MaxElectiveConflictsComparator — boundary values: a lone
-# elective scores 0.0, while three same-day electives score -2.0.
+# elective scores 0.0, while three same-day electives score -3.0.
 # ===========================================================================
 def test_max_elective_conflicts_comparator_boundary_values(
     make_course, make_program_entry, make_assignment,
@@ -146,7 +156,7 @@ def test_max_elective_conflicts_comparator_boundary_values(
     # Arrange
     pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
     courses = [make_course(course_id=cid, program_entries=[pe]) for cid in ("A", "B", "C")]
-    comparator = MaxElectiveConflictsComparator(courses)
+    scorer = ScheduleScorer(courses)
 
     crowded = ExamSchedule()
     for course in courses:
@@ -156,19 +166,20 @@ def test_max_elective_conflicts_comparator_boundary_values(
     lone.addAssignment(make_assignment(course=courses[0], exam_date=date(2026, 6, 1)))
 
     # Act
-    crowded_score = comparator.key(crowded)
-    lone_score = comparator.key(lone)
+    crowded_score = scorer.score(crowded)[ELECTIVE_CONFLICTS]
+    lone_score = scorer.score(lone)[ELECTIVE_CONFLICTS]
 
-    # Assert
-    assert crowded_score == -2.0
+    # Assert — three same-day electives form 3 conflicting pairs (the n-th
+    # elective on a date adds n-1 new pairs: 0 + 1 + 2 = 3).
+    assert crowded_score == -3.0
     assert lone_score == 0.0
 
 
 # ---------------------------------------------------------------------------
 # MaxExamsPerDayComparator TC-CMP-017..020
 #
-# The underlying metric (max_exams_per_day) is lower-is-better, so the
-# comparator negates it. "Less negative" therefore means "better" here.
+# The underlying metric (max_exams_per_day) is lower-is-better, so
+# ScheduleScorer negates it. "Less negative" therefore means "better" here.
 # ---------------------------------------------------------------------------
 
 # ===========================================================================
@@ -181,8 +192,7 @@ def test_max_exams_per_day_comparator_orders_lighter_day_first(
     # Arrange
     pe = make_program_entry(program_id="83101", year=2)
     courses = [make_course(course_id=cid, program_entries=[pe]) for cid in ("A", "B", "C", "D")]
-    program_index = build_program_index(courses)
-    comparator = MaxExamsPerDayComparator(program_index)
+    scorer = ScheduleScorer(courses)
 
     crowded = ExamSchedule()
     for course in courses[:3]:
@@ -192,7 +202,7 @@ def test_max_exams_per_day_comparator_orders_lighter_day_first(
     light.addAssignment(make_assignment(course=courses[3], exam_date=date(2026, 6, 1)))
 
     # Act
-    result = sorted([crowded, light], key=comparator.key, reverse=True)
+    result = sorted([crowded, light], key=lambda s: scorer.score(s)[MAX_EXAMS_PER_DAY], reverse=True)
 
     # Assert
     assert result == [light, crowded]
@@ -209,8 +219,7 @@ def test_max_exams_per_day_comparator_is_stable_for_equal_counts(
     pe = make_program_entry(program_id="83101", year=2)
     course_a = make_course(course_id="A", program_entries=[pe])
     course_b = make_course(course_id="B", program_entries=[pe])
-    program_index = build_program_index([course_a, course_b])
-    comparator = MaxExamsPerDayComparator(program_index)
+    scorer = ScheduleScorer([course_a, course_b])
 
     first = ExamSchedule()
     first.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
@@ -221,8 +230,8 @@ def test_max_exams_per_day_comparator_is_stable_for_equal_counts(
     second.addAssignment(make_assignment(course=course_b, exam_date=date(2026, 6, 1)))
 
     # Act
-    original_order = sorted([first, second], key=comparator.key, reverse=True)
-    swapped_order = sorted([second, first], key=comparator.key, reverse=True)
+    original_order = sorted([first, second], key=lambda s: scorer.score(s)[MAX_EXAMS_PER_DAY], reverse=True)
+    swapped_order = sorted([second, first], key=lambda s: scorer.score(s)[MAX_EXAMS_PER_DAY], reverse=True)
 
     # Assert
     assert original_order == [first, second]
@@ -243,19 +252,17 @@ def test_max_exams_per_day_comparator_uses_only_its_own_metric(
     obligatory_course = make_course(course_id="A", program_entries=[pe_obligatory])
     elective_course = make_course(course_id="B", program_entries=[pe_elective])
     courses = [obligatory_course, elective_course]
-    program_index = build_program_index(courses)
-    comparator = MaxExamsPerDayComparator(program_index)
+    scorer = ScheduleScorer(courses)
 
     schedule = ExamSchedule()
     schedule.addAssignment(make_assignment(course=obligatory_course, exam_date=date(2026, 6, 1)))
     schedule.addAssignment(make_assignment(course=elective_course, exam_date=date(2026, 6, 1)))
 
     # Act
-    result = comparator.key(schedule)
+    result = scorer.score(schedule)[MAX_EXAMS_PER_DAY]
 
     # Assert
-    assert comparator.criterion_id == "MAX_EXAMS_PER_DAY"
-    assert result == -float(max_exams_per_day(schedule, program_index))
+    assert result == -float(max_exams_per_day(schedule))
     assert result == -2.0
 
 
@@ -269,8 +276,7 @@ def test_max_exams_per_day_comparator_boundary_values(
     # Arrange
     pe = make_program_entry(program_id="83101", year=2)
     courses = [make_course(course_id=cid, program_entries=[pe]) for cid in ("A", "B", "C")]
-    program_index = build_program_index(courses)
-    comparator = MaxExamsPerDayComparator(program_index)
+    scorer = ScheduleScorer(courses)
 
     crowded = ExamSchedule()
     for course in courses:
@@ -279,8 +285,8 @@ def test_max_exams_per_day_comparator_boundary_values(
     empty = ExamSchedule()
 
     # Act
-    crowded_score = comparator.key(crowded)
-    empty_score = comparator.key(empty)
+    crowded_score = scorer.score(crowded)[MAX_EXAMS_PER_DAY]
+    empty_score = scorer.score(empty)[MAX_EXAMS_PER_DAY]
 
     # Assert
     assert crowded_score == -3.0

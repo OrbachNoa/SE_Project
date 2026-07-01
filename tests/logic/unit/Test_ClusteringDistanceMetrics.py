@@ -10,9 +10,9 @@ This file is one of four sibling files that share the "CLU" TC-ID prefix,
 each covering a different layer of the clustering subsystem as one
 continuous numbered family:
   - Test_ClusteringFeatures.py     TC-CLU-001..010 (feature extraction/normalization)
-  - Test_ClusteringDistanceMetrics.py (this file)  TC-CLU-011..016 (distance metrics)
-  - Test_ClusteringAlgorithms.py   TC-CLU-017..027 (clustering algorithms/sampling)
-  - Test_ClusteringService.py      TC-CLU-028..032 (clustering service)
+  - Test_ClusteringDistanceMetrics.py (this file)  TC-CLU-011..016, TC-CLU-041 (distance metrics)
+  - Test_ClusteringAlgorithms.py   TC-CLU-017..027, TC-CLU-034..040 (clustering algorithms/sampling)
+  - Test_ClusteringService.py      TC-CLU-028..033 (clustering service)
 The numbering is intentionally continuous across the four files and must
 not be restarted within any single file.
 
@@ -141,3 +141,26 @@ def test_weighted_euclidean_distance_rejects_all_zero_weights():
     # expected outcome are captured together by the context manager.
     with pytest.raises(ValueError):
         WeightedEuclideanDistanceMetric([0.0, 0.0])
+
+
+# ===========================================================================
+# TC-CLU-041: distance_to_centroids() on the weighted metric returns the
+# full (n, k) matrix of weighted distances, with each entry matching the
+# weighted Euclidean norm computed by hand for that point/centroid pair —
+# not just a shape check.
+# ===========================================================================
+def test_weighted_euclidean_distance_to_centroids_matrix_values():
+    # Arrange — weight 4.0 on the first dimension, 1.0 on the second.
+    metric = WeightedEuclideanDistanceMetric([4.0, 1.0])
+    points = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 0.0]])
+    centroids = np.array([[0.0, 0.0], [1.0, 0.0]])
+
+    # Act
+    result = metric.distance_to_centroids(points, centroids)
+
+    # Assert
+    # scale = sqrt([4, 1]) = [2, 1]; distance = ||(point - centroid) * scale||.
+    assert result.shape == (3, 2)
+    assert result[0].tolist() == pytest.approx([0.0, 2.0])
+    assert result[1].tolist() == pytest.approx([5 ** 0.5, 1.0])
+    assert result[2].tolist() == pytest.approx([4.0, 2.0])

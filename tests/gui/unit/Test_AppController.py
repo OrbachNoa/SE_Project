@@ -57,12 +57,18 @@ def mock_mapper():
 
 @pytest.fixture
 def controller(mock_importer, mock_scheduler, mock_exporter, mock_mapper):
-    return AppController(
+    c = AppController(
         importer=mock_importer,
         scheduler=mock_scheduler,
         exporter=mock_exporter,
         mapper=mock_mapper,
     )
+    yield c
+    # Teardown — TC-AC-005 starts the real 500 ms progress QTimer through
+    # generate_schedules() and asserts it is active, but never stops it.
+    # Stop it here so the timer cannot outlive the test and later fire
+    # progress_updated into a torn-down widget in an unrelated test.
+    c._stop_progress_timer()
 
 
 # ===========================================================================

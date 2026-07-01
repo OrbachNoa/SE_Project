@@ -17,11 +17,8 @@ given semester, and empty_schedule provides a fresh ExamSchedule with no
 assignments to populate per test.
 """
 from datetime import date
-import os
-import pytest
 
-from src.models.Enums import EvalType, Semester, Moed, Requirement
-from src.models.Domain import ExamSchedule
+from src.models.Enums import Semester, Moed
 from src.file_io.writers.TextFileWriter import TextFileWriter
 
 

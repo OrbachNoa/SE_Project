@@ -30,6 +30,7 @@ Conventions:
   `_make_slot()` helpers below are local since no conftest fixture models
   a prepared threshold checker or a bare Slot.
 """
+import pytest
 from datetime import date
 
 from src.models.Enums import Semester, Moed, Requirement
@@ -66,10 +67,14 @@ def _make_min_gap_checker(scope, k, courses):
 
 
 # ===========================================================================
-# TC-CHK-012: a gap strictly smaller than k days between two obligatory exams
-# is a violation. With k=5 and exams 3 days apart, check() must return True.
+# TC-CHK-012..014: Bounds check for MinDaysBetweenExamsChecker
 # ===========================================================================
-def test_min_gap_checker_rejects_gap_below_k(make_course, make_program_entry, make_assignment):
+@pytest.mark.parametrize("candidate_day, expected", [
+    (4, True),   # TC-CHK-012: gap of 3 < k=5 -> conflict
+    (6, False),  # TC-CHK-013: gap of 5 == k=5 -> allowed
+    (11, False), # TC-CHK-014: gap of 10 > k=5 -> allowed
+])
+def test_min_gap_checker_bounds(candidate_day, expected, make_course, make_program_entry, make_assignment):
     # Arrange — two obligatory courses in the same program and year.
     pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.OBLIGATORY)
     course_a = make_course(course_id="A", program_entries=[pe])
@@ -79,63 +84,14 @@ def test_min_gap_checker_rejects_gap_below_k(make_course, make_program_entry, ma
     schedule = ExamSchedule(use_ordinal_index=True)
     schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
 
-    # The candidate sits on June 4: only a 3-day gap, which is below k=5.
-    candidate = make_assignment(course=course_b, exam_date=date(2026, 6, 4))
+    candidate = make_assignment(course=course_b, exam_date=date(2026, 6, candidate_day))
     checker = _make_min_gap_checker(GapScope.OBLIGATORY_ONLY, k=5, courses=[course_a, course_b])
 
     # Act
     result = checker.check(candidate, schedule)
 
-    # Assert — gap of 3 < k=5, so the placement is a conflict.
-    assert result is True
-
-
-# ===========================================================================
-# TC-CHK-013: a gap exactly equal to k days is allowed (boundary case).
-# With k=5 and exams exactly 5 days apart, check() must return False.
-# ===========================================================================
-def test_min_gap_checker_accepts_gap_exactly_k(make_course, make_program_entry, make_assignment):
-    # Arrange
-    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.OBLIGATORY)
-    course_a = make_course(course_id="A", program_entries=[pe])
-    course_b = make_course(course_id="B", program_entries=[pe])
-
-    schedule = ExamSchedule(use_ordinal_index=True)
-    schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
-
-    # June 1 to June 6 is exactly a 5-day gap, right on the threshold.
-    candidate = make_assignment(course=course_b, exam_date=date(2026, 6, 6))
-    checker = _make_min_gap_checker(GapScope.OBLIGATORY_ONLY, k=5, courses=[course_a, course_b])
-
-    # Act
-    result = checker.check(candidate, schedule)
-
-    # Assert — gap of 5 == k=5 is acceptable, so no conflict.
-    assert result is False
-
-
-# ===========================================================================
-# TC-CHK-014: a gap strictly greater than k days is allowed.
-# With k=5 and exams 10 days apart, check() must return False.
-# ===========================================================================
-def test_min_gap_checker_accepts_gap_above_k(make_course, make_program_entry, make_assignment):
-    # Arrange
-    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.OBLIGATORY)
-    course_a = make_course(course_id="A", program_entries=[pe])
-    course_b = make_course(course_id="B", program_entries=[pe])
-
-    schedule = ExamSchedule(use_ordinal_index=True)
-    schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
-
-    # June 1 to June 11 is a 10-day gap, comfortably above k=5.
-    candidate = make_assignment(course=course_b, exam_date=date(2026, 6, 11))
-    checker = _make_min_gap_checker(GapScope.OBLIGATORY_ONLY, k=5, courses=[course_a, course_b])
-
-    # Act
-    result = checker.check(candidate, schedule)
-
-    # Assert — gap of 10 > k=5, no conflict.
-    assert result is False
+    # Assert
+    assert result is expected
 
 
 # ===========================================================================
@@ -238,62 +194,32 @@ def _make_elective_cap_checker(k, courses):
 
 
 # ===========================================================================
-# TC-CHK-018: placing a course that pushes the pair-count above k is rejected.
-# Three electives on one day make 3 pairs; with k=2 the third placement must
-# return True (conflict).
+# TC-CHK-018..019: Bounds check for ElectiveConflictCapChecker
 # ===========================================================================
-def test_elective_cap_checker_rejects_when_conflicts_exceed_k(
-    make_course, make_program_entry, make_assignment
-):
+@pytest.mark.parametrize("k_value, expected", [
+    (2, True),   # TC-CHK-018: 3 pairs > k=2 -> conflict
+    (3, False),  # TC-CHK-019: 3 pairs == k=3 -> allowed
+])
+def test_elective_cap_checker_bounds(k_value, expected, make_course, make_program_entry, make_assignment):
     # Arrange — three elective courses in the same program.
     pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
     course_a = make_course(course_id="A", program_entries=[pe])
     course_b = make_course(course_id="B", program_entries=[pe])
     course_c = make_course(course_id="C", program_entries=[pe])
 
-    # A and B already share June 1: that is 1 pair so far, within k=2.
+    # A and B already share June 1: that is 1 pair so far.
     schedule = ExamSchedule()
     schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
     schedule.addAssignment(make_assignment(course=course_b, exam_date=date(2026, 6, 1)))
 
-    # Adding C to the same day raises the total to 3 pairs, exceeding k=2.
     candidate = make_assignment(course=course_c, exam_date=date(2026, 6, 1))
-    checker = _make_elective_cap_checker(k=2, courses=[course_a, course_b, course_c])
+    checker = _make_elective_cap_checker(k=k_value, courses=[course_a, course_b, course_c])
 
     # Act
     result = checker.check(candidate, schedule)
 
-    # Assert — 3 pairs > k=2, so the placement is a conflict.
-    assert result is True
-
-
-# ===========================================================================
-# TC-CHK-019: a pair-count exactly equal to k is allowed (boundary case).
-# Three electives on one day make 3 pairs; with k=3 the third placement must
-# return False.
-# ===========================================================================
-def test_elective_cap_checker_accepts_when_conflicts_equal_k(
-    make_course, make_program_entry, make_assignment
-):
-    # Arrange — three elective courses in the same program.
-    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.ELECTIVE)
-    course_a = make_course(course_id="A", program_entries=[pe])
-    course_b = make_course(course_id="B", program_entries=[pe])
-    course_c = make_course(course_id="C", program_entries=[pe])
-
-    schedule = ExamSchedule()
-    schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1)))
-    schedule.addAssignment(make_assignment(course=course_b, exam_date=date(2026, 6, 1)))
-
-    # Adding C makes exactly 3 pairs, which equals k=3 and is still allowed.
-    candidate = make_assignment(course=course_c, exam_date=date(2026, 6, 1))
-    checker = _make_elective_cap_checker(k=3, courses=[course_a, course_b, course_c])
-
-    # Act
-    result = checker.check(candidate, schedule)
-
-    # Assert — 3 pairs == k=3, the boundary is inclusive, so no conflict.
-    assert result is False
+    # Assert
+    assert result is expected
 
 
 # ===========================================================================
@@ -445,64 +371,30 @@ def _make_slot(course, moed=Moed.ALEPH, candidate_dates=None):
 
 
 # ===========================================================================
-# TC-CHK-022: once the group is complete, a span below k is a violation.
-# Two obligatory exams on June 1 and June 5 give a 4-day span; with k=10 the
-# completing placement must return True.
+# TC-CHK-022..023: Bounds check for ExamSpanChecker
 # ===========================================================================
-def test_exam_span_checker_rejects_when_span_below_k(
-    make_course, make_program_entry, make_assignment
-):
+@pytest.mark.parametrize("candidate_day, expected", [
+    (5, True),   # TC-CHK-022: span of 4 < k=10 -> conflict
+    (11, False), # TC-CHK-023: span of 10 == k=10 -> allowed
+])
+def test_exam_span_checker_bounds(candidate_day, expected, make_course, make_program_entry, make_assignment):
     # Arrange — two obligatory courses sharing one (program, year, moed) group.
     pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.OBLIGATORY)
     course_a = make_course(course_id="A", program_entries=[pe])
     course_b = make_course(course_id="B", program_entries=[pe])
     slots = [_make_slot(course_a), _make_slot(course_b)]
 
-    # Course A sits on June 1; the group still needs B to be complete.
     schedule = ExamSchedule()
-    schedule.addAssignment(
-        make_assignment(course=course_a, exam_date=date(2026, 6, 1), moed=Moed.ALEPH)
-    )
+    schedule.addAssignment(make_assignment(course=course_a, exam_date=date(2026, 6, 1), moed=Moed.ALEPH))
 
-    # Placing B on June 5 completes the group with a span of only 4 days.
-    candidate = make_assignment(course=course_b, exam_date=date(2026, 6, 5), moed=Moed.ALEPH)
+    candidate = make_assignment(course=course_b, exam_date=date(2026, 6, candidate_day), moed=Moed.ALEPH)
     checker = _make_span_checker(k=10, courses=[course_a, course_b], slots=slots)
 
     # Act
     result = checker.check(candidate, schedule)
 
-    # Assert — span of 4 < k=10, so the completed group violates the rule.
-    assert result is True
-
-
-# ===========================================================================
-# TC-CHK-023: a span exactly equal to k is allowed (boundary case).
-# June 1 to June 11 is a 10-day span; with k=10 the completing placement must
-# return False.
-# ===========================================================================
-def test_exam_span_checker_accepts_when_span_equals_k(
-    make_course, make_program_entry, make_assignment
-):
-    # Arrange
-    pe = make_program_entry(program_id="83101", year=2, requirement=Requirement.OBLIGATORY)
-    course_a = make_course(course_id="A", program_entries=[pe])
-    course_b = make_course(course_id="B", program_entries=[pe])
-    slots = [_make_slot(course_a), _make_slot(course_b)]
-
-    schedule = ExamSchedule()
-    schedule.addAssignment(
-        make_assignment(course=course_a, exam_date=date(2026, 6, 1), moed=Moed.ALEPH)
-    )
-
-    # June 1 to June 11 is exactly a 10-day span, right on the threshold.
-    candidate = make_assignment(course=course_b, exam_date=date(2026, 6, 11), moed=Moed.ALEPH)
-    checker = _make_span_checker(k=10, courses=[course_a, course_b], slots=slots)
-
-    # Act
-    result = checker.check(candidate, schedule)
-
-    # Assert — span of 10 == k=10 is acceptable, so no conflict.
-    assert result is False
+    # Assert
+    assert result is expected
 
 
 # ===========================================================================
@@ -613,60 +505,28 @@ def test_exam_span_checker_keeps_different_semesters_in_separate_groups(
 # ---------------------------------------------------------------------------
 
 # ===========================================================================
-# TC-CHK-026: placing the (k+1)-th exam on a day is a violation.
-# With k=3 and three exams already on June 1, the fourth must return True.
+# TC-CHK-026..027: Bounds check for MaxExamsPerDayChecker
 # ===========================================================================
-def test_max_per_day_checker_rejects_when_count_exceeds_k(
-    make_course, make_program_entry, make_assignment
-):
-    # Arrange — three exams already occupy June 1 (the daily limit is k=3).
+@pytest.mark.parametrize("existing_exams, expected", [
+    (3, True),   # TC-CHK-026: 4 exams > k=3 -> conflict
+    (2, False),  # TC-CHK-027: 3 exams == k=3 -> allowed
+])
+def test_max_per_day_checker_bounds(existing_exams, expected, make_course, make_program_entry, make_assignment):
     pe = make_program_entry(program_id="83101", year=2)
-    course_a = make_course(course_id="A", program_entries=[pe])
-    course_b = make_course(course_id="B", program_entries=[pe])
-    course_c = make_course(course_id="C", program_entries=[pe])
-    course_d = make_course(course_id="D", program_entries=[pe])
+    courses = [make_course(course_id=str(i), program_entries=[pe]) for i in range(4)]
 
     schedule = ExamSchedule()
-    for course in (course_a, course_b, course_c):
+    for course in courses[:existing_exams]:
         schedule.addAssignment(make_assignment(course=course, exam_date=date(2026, 6, 1)))
 
-    # The candidate would be the fourth exam on June 1, exceeding k=3.
-    candidate = make_assignment(course=course_d, exam_date=date(2026, 6, 1))
+    candidate = make_assignment(course=courses[3], exam_date=date(2026, 6, 1))
     checker = MaxExamsPerDayChecker(k=3)
-
+    
     # Act
     result = checker.check(candidate, schedule)
 
-    # Assert — 4 exams > k=3, so the placement is a conflict.
-    assert result is True
-
-
-# ===========================================================================
-# TC-CHK-027: placing exactly the k-th exam on a day is allowed (boundary).
-# With k=3 and two exams already on June 1, the third must return False.
-# ===========================================================================
-def test_max_per_day_checker_accepts_when_count_equals_k(
-    make_course, make_program_entry, make_assignment
-):
-    # Arrange — two exams occupy June 1, leaving room for one more under k=3.
-    pe = make_program_entry(program_id="83101", year=2)
-    course_a = make_course(course_id="A", program_entries=[pe])
-    course_b = make_course(course_id="B", program_entries=[pe])
-    course_c = make_course(course_id="C", program_entries=[pe])
-
-    schedule = ExamSchedule()
-    for course in (course_a, course_b):
-        schedule.addAssignment(make_assignment(course=course, exam_date=date(2026, 6, 1)))
-
-    # The candidate is the third exam on June 1, exactly hitting k=3.
-    candidate = make_assignment(course=course_c, exam_date=date(2026, 6, 1))
-    checker = MaxExamsPerDayChecker(k=3)
-
-    # Act
-    result = checker.check(candidate, schedule)
-
-    # Assert — 3 exams == k=3 is acceptable, so no conflict.
-    assert result is False
+    # Assert
+    assert result is expected
 
 
 # ===========================================================================

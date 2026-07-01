@@ -19,7 +19,7 @@ Conventions:
 """
 import pytest
 from datetime import date
-from src.models.Enums import EvalType, Semester, Moed, Requirement
+from src.models.Enums import EvalType, Semester, Moed
 from src.infrastructure.cache.DataCache import DataCache
 from src.application.state.InputDataState import InputDataState
 from src.application.state.ScheduleResultState import ScheduleResultState
