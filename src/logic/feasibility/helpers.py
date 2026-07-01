@@ -85,6 +85,57 @@ def max_spaced_count(candidates: List[date], k: int) -> int:
     return count
 
 
+def partition_slots_by_window(slots: Iterable[Slot], k: int) -> List[List[Slot]]:
+    """
+    Split slots into independent exam-window groups for a minimum gap of k days.
+
+    Two exams can only break a k-day gap if their candidate-date ranges are less
+    than k days apart. Slots whose ranges are k days or more apart (for example a
+    FALL exam period and a SPRING one, months later) can never constrain each
+    other, so they belong to separate windows and must be checked on their own.
+
+    This matters for the feasibility bound: a spare date in a far-away exam
+    period must not be counted as capacity that hides a real shortage in another
+    period. Grouping is by whole slot ranges (not by individual dates), so a
+    single excluded day inside one period never splits that period, and every
+    slot lands in exactly one window.
+
+    Each returned list is one window's slots, in no particular order.
+    """
+
+    # Pair each slot with its candidate-date range; skip slots with no dates.
+    ranged = [
+        (min(slot.candidateDates), max(slot.candidateDates), slot)
+        for slot in slots
+        if slot.candidateDates
+    ]
+    if not ranged:
+        return []
+
+    # Sort by range start, so a single left-to-right sweep can find the gaps.
+    ranged.sort(key=lambda item: item[0])
+
+    windows: List[List[Slot]] = []
+    current: List[Slot] = [ranged[0][2]]
+    # Latest end date seen in the current window, so the next gap is measured
+    # against the whole window and not just the previous slot.
+    running_max = ranged[0][1]
+
+    for lo, hi, slot in ranged[1:]:
+        # A gap of k days or more from every slot so far starts a new window.
+        if (lo - running_max).days >= k:
+            windows.append(current)
+            current = [slot]
+            running_max = hi
+        else:
+            current.append(slot)
+            if hi > running_max:
+                running_max = hi
+
+    windows.append(current)
+    return windows
+
+
 def min_pair_conflicts(n: int, d: int) -> int:
     """
     Return the minimum total same-day pair-conflicts.
