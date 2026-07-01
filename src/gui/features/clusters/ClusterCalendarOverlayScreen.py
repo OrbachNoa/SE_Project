@@ -31,7 +31,7 @@ from src.application.viewmodels.ScheduleViewModel import ScheduleItemViewModel
 class ClusterCalendarOverlayScreen(Screen):
     """Unified calendar overlay screen for two representative schedules."""
 
-    def __init__(self, controller, router) -> None:
+    def __init__(self, controller, cluster_controller, router) -> None:
         super().__init__()
         self._periods = PeriodNavigator()
         self._period_vms: List[PeriodEditViewModel] = []
@@ -51,7 +51,7 @@ class ClusterCalendarOverlayScreen(Screen):
         # Unified Calendar Area with Period Navigation
         self._build_calendar_area(root)
 
-        self._presenter = ClusterCalendarOverlayPresenter(self, controller, router)
+        self._presenter = ClusterCalendarOverlayPresenter(self, controller, cluster_controller, router)
         self._back_btn.clicked.connect(self._presenter.on_back)
 
     def _build_toolbar(self, root: QVBoxLayout) -> None:

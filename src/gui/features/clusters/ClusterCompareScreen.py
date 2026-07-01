@@ -30,7 +30,7 @@ from gui.features.clusters.ClusterComparePresenter import ClusterComparePresente
 class ClusterCompareScreen(Screen):
     """Redesigned side-by-side statistics comparison of two representatives."""
 
-    def __init__(self, controller, router) -> None:
+    def __init__(self, controller, cluster_controller, router) -> None:
         super().__init__()
 
         root = QVBoxLayout(self)
@@ -51,7 +51,7 @@ class ClusterCompareScreen(Screen):
         # Core Comparison Body (Scrollable Table)
         self._build_scrollable_table_area(root)
 
-        self._presenter = ClusterComparePresenter(self, controller, router)
+        self._presenter = ClusterComparePresenter(self, controller, cluster_controller, router)
         self._back_btn.clicked.connect(self._presenter.on_back)
         self._view_calendar_btn.clicked.connect(self._presenter.on_view_calendar)
 

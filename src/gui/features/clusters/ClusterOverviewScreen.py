@@ -35,7 +35,7 @@ _COLUMNS = 3
 class ClusterOverviewScreen(Screen):
     """Grid of family cards plus the K control and comparison entry point."""
 
-    def __init__(self, controller, router, detail_screen, compare_screen,
+    def __init__(self, controller, cluster_controller, router, detail_screen, compare_screen,
                  detail_name: str, compare_name: str) -> None:
         super().__init__()
         self._detail_name = detail_name
@@ -55,7 +55,7 @@ class ClusterOverviewScreen(Screen):
         self._build_cards_area(root)
 
         self._presenter = ClusterOverviewPresenter(
-            self, controller, router, detail_screen, compare_screen
+            self, controller, cluster_controller, router, detail_screen, compare_screen
         )
         self._connect_events()
 

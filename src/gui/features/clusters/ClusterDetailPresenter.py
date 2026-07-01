@@ -8,9 +8,10 @@ from src.application.errors.ApplicationErrors import ApplicationError
 class ClusterDetailPresenter(ScheduleExportMixin):
     """Pages through a family's schedules and exports the chosen one."""
 
-    def __init__(self, view, controller, router) -> None:
+    def __init__(self, view, controller, cluster_controller, router) -> None:
         self._view = view
         self._controller = controller
+        self._cluster_controller = cluster_controller
         self._router = router
 
         self._cluster_id = 0
@@ -39,7 +40,7 @@ class ClusterDetailPresenter(ScheduleExportMixin):
         self._is_active = True
         self._update_notice_shown = False
         try:
-            self._size = self._controller.get_cluster_size(self._cluster_id)
+            self._size = self._cluster_controller.get_cluster_size(self._cluster_id)
             if self._size == 0:
                 self._view.show_message("The clustering session has expired. \nRedirecting to overview to recompute clusters.")
                 return
@@ -59,10 +60,11 @@ class ClusterDetailPresenter(ScheduleExportMixin):
         """A new generation run finished while this family was open.
 
         The cached clustering session this screen is browsing has just been
-        invalidated (AppController._invalidate_clustering, fired from
-        _handle_search_finished). Tell the user once, but don't force them
-        off the screen or touch _cluster_id/_index -- they may still want to
-        finish looking at the family they have open.
+        invalidated: AppController emits schedule_results_changed from
+        _handle_search_finished, which the ClusterSessionController observes to
+        drop its session. Tell the user once, but don't force them off the
+        screen or touch _cluster_id/_index -- they may still want to finish
+        looking at the family they have open.
         """
         if not self._is_active or self._update_notice_shown:
             return
@@ -89,7 +91,7 @@ class ClusterDetailPresenter(ScheduleExportMixin):
         return self._size != 0
 
     def _export_read_schedule(self):
-        return self._controller.get_cluster_schedule_view(self._cluster_id, self._index)
+        return self._cluster_controller.get_cluster_schedule_view(self._cluster_id, self._index)
 
     def _export_filename(self, ext: str) -> str:
         return f"family_{self._cluster_id + 1}_schedule_{self._index + 1}.{ext}"
@@ -98,10 +100,10 @@ class ClusterDetailPresenter(ScheduleExportMixin):
         self._view.export_schedule_pdf(schedule_view, self._index)
 
     def _export_save_txt(self, path: str) -> None:
-        self._controller.save_cluster_schedule(self._cluster_id, self._index, path)
+        self._cluster_controller.save_cluster_schedule(self._cluster_id, self._index, path)
 
     def _export_save_excel(self, path: str) -> None:
-        self._controller.save_cluster_schedule_excel(self._cluster_id, self._index, path)
+        self._cluster_controller.save_cluster_schedule_excel(self._cluster_id, self._index, path)
 
     def _export_nothing(self, message: str) -> None:
         self._view.show_message(message)
@@ -145,7 +147,7 @@ class ClusterDetailPresenter(ScheduleExportMixin):
             self._router.back()
             return
         try:
-            schedule_vm = self._controller.get_cluster_schedule_view(self._cluster_id, self._index)
+            schedule_vm = self._cluster_controller.get_cluster_schedule_view(self._cluster_id, self._index)
         except ApplicationError:
             # Session expired — user already saw the notice from _on_search_finished.
             # Freeze the view in place; don't kick them back.
@@ -174,7 +176,7 @@ class ClusterDetailPresenter(ScheduleExportMixin):
         if self._size == 0:
             return
         try:
-            scores = self._controller.get_cluster_schedule_scores(self._cluster_id, self._index)
+            scores = self._cluster_controller.get_cluster_schedule_scores(self._cluster_id, self._index)
         except Exception as error:
             self._handle_error(error, {"operation": "read_schedule", "screen": "cluster_detail"}, "Could not load schedule metrics: ")
             return

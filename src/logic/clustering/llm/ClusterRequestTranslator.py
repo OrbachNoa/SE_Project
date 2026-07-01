@@ -1,9 +1,13 @@
 """Translate a free-text clustering request into a validated ClusterConfig.
 
-Order of attempts (each one degrades gracefully to the next):
+Order of attempts:
   1. LLM — if a client is configured, ask it to identify intent topics, then
      map those topics to criteria in Python (the LLM never sees criterion IDs).
-  2. Keyword parser — always available, no dependency, English + Hebrew.
+     If the LLM is configured but fails/times out, this raises
+     ``ClusterTranslationError`` rather than degrading further — the caller
+     (ClusterRequestWorker) maps it to a clean "no results found" message.
+  2. Keyword parser — used only when no LLM is configured at all (no API key /
+     offline). Always available, no dependency, English + Hebrew.
   3. Default — application default grouping over the core criteria.
 
 The result is always a valid ``ClusterConfig`` plus a short, human-readable
@@ -24,6 +28,7 @@ _log = logging.getLogger(__name__)
 
 from src.logic.clustering.ClusterConfig import ClusterConfig, K_MODE_AUTO, K_MODE_FIXED
 from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
+from src.logic.clustering.llm.ClusterTranslationError import ClusterTranslationError
 from src.logic.clustering.llm.HeuristicRequestParser import HeuristicRequestParser
 from src.logic.clustering.llm.ILLMClient import ILLMClient
 from src.logic.clustering.llm.ClusterTopicMetadata import (
@@ -255,10 +260,20 @@ class ClusterRequestTranslator:
             except Exception as exc:
                 warnings.warn(
                     f"LLM clustering request failed: {exc}", RuntimeWarning, stacklevel=2
-                )  # fall through to the keyword parser
+                )
+                # LLM is configured but failed/timed out: this is a real failure,
+                # not "LLM not configured" — do NOT fall back to the keyword
+                # parser (that would silently hide the failure and produce
+                # a result the user never asked for). Raise instead so the
+                # caller (ClusterRequestWorker) maps this to a clean user
+                # message via the ClusterTranslationMapper.
+                raise ClusterTranslationError(
+                    f"LLM clustering request failed: {exc}"
+                ) from exc
 
-        # 2. Keyword parser (always available).
-        # Not cached — a transient LLM failure must not permanently block LLM for this text.
+        # 2. Keyword parser — only reached when no LLM is configured at all
+        # (is_available() is False, e.g. no API key / offline). Not cached —
+        # a transient LLM failure must not permanently block LLM for this text.
         config, interpretation = self._parser.parse(request)
         return TranslationResult(config, interpretation, "heuristic")
 

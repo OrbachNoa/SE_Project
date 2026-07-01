@@ -1,5 +1,7 @@
 """Project-wide tunable constants."""
 
+import sys
+
 # Maximum number of study programs a user may select for one scheduling run.
 MAX_PROGRAMS = 5
 
@@ -7,7 +9,7 @@ MAX_PROGRAMS = 5
 WINDOW_SIZE = 10_000
 
 # Safety cap on total schedules generated in one run.
-DEFAULT_MAX_RESULTS = 1_000_000
+DEFAULT_MAX_RESULTS = sys.maxsize
 
 # Number of schedules written to SQLite per batch during generation.
 DEFAULT_BATCH_SIZE = 1_000

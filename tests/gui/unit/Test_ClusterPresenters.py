@@ -36,15 +36,17 @@ def test_cluster_overview_invalid_k():
     # Arrange
     view = MagicMock()
     controller = MagicMock()
+    cluster_controller = MagicMock()
 
-    presenter = ClusterOverviewPresenter(view, controller, MagicMock(), MagicMock(), MagicMock())
+    presenter = ClusterOverviewPresenter(view, controller, cluster_controller, MagicMock(), MagicMock(), MagicMock())
 
     # Act
     presenter.on_apply_k(0)
 
-    # Assert
+    # Assert — no clustering work is kicked off (get_cluster_coordinator is
+    # what _kick_off would call to start a run).
     view.show_message.assert_called_once_with("K must be a positive integer.")
-    controller.cluster.assert_not_called()
+    cluster_controller.get_cluster_coordinator.assert_not_called()
 
 
 # TC-GUI-CLO-002
@@ -52,7 +54,7 @@ def test_cluster_overview_invalid_k():
 def test_cluster_overview_compare_toggled():
     # Arrange
     view = MagicMock()
-    presenter = ClusterOverviewPresenter(view, MagicMock(), MagicMock(), MagicMock(), MagicMock())
+    presenter = ClusterOverviewPresenter(view, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock())
 
     # Act / Assert
     # Select first
@@ -79,7 +81,7 @@ def test_cluster_overview_compare_clicked():
     view.compare_screen_name.return_value = "cluster_compare"
     router = MagicMock()
     compare_screen = MagicMock()
-    presenter = ClusterOverviewPresenter(view, MagicMock(), router, MagicMock(), compare_screen)
+    presenter = ClusterOverviewPresenter(view, MagicMock(), MagicMock(), router, MagicMock(), compare_screen)
 
     # Act - with less than 2 items (should do nothing)
     presenter._compare_selection = [1]
@@ -107,11 +109,12 @@ def test_cluster_detail_handles_expired_session():
     # Arrange
     view = MagicMock()
     controller = MagicMock()
+    cluster_controller = MagicMock()
     router = MagicMock()
 
     # Simulate empty cluster size (expired)
-    controller.get_cluster_size.return_value = 0
-    presenter = ClusterDetailPresenter(view, controller, router)
+    cluster_controller.get_cluster_size.return_value = 0
+    presenter = ClusterDetailPresenter(view, controller, cluster_controller, router)
     presenter.set_cluster(1)
 
     # Act
@@ -130,7 +133,7 @@ def test_cluster_detail_handles_search_finished():
     controller = MagicMock()
     router = MagicMock()
 
-    presenter = ClusterDetailPresenter(view, controller, router)
+    presenter = ClusterDetailPresenter(view, controller, MagicMock(), router)
     presenter._is_active = True
 
     # Act
@@ -155,7 +158,7 @@ def test_cluster_detail_prev_at_lower_bound_does_not_move():
     controller = MagicMock()
     router = MagicMock()
 
-    presenter = ClusterDetailPresenter(view, controller, router)
+    presenter = ClusterDetailPresenter(view, controller, MagicMock(), router)
     presenter._show_current = MagicMock()
     presenter.set_cluster(1)
     presenter._size = 2   # valid indices are 0 and 1
@@ -177,7 +180,7 @@ def test_cluster_detail_next_advances_within_bounds():
     controller = MagicMock()
     router = MagicMock()
 
-    presenter = ClusterDetailPresenter(view, controller, router)
+    presenter = ClusterDetailPresenter(view, controller, MagicMock(), router)
     presenter._show_current = MagicMock()
     presenter.set_cluster(1)
     presenter._size = 2   # valid indices are 0 and 1
@@ -199,7 +202,7 @@ def test_cluster_detail_next_at_upper_bound_does_not_move():
     controller = MagicMock()
     router = MagicMock()
 
-    presenter = ClusterDetailPresenter(view, controller, router)
+    presenter = ClusterDetailPresenter(view, controller, MagicMock(), router)
     presenter._show_current = MagicMock()
     presenter.set_cluster(1)
     presenter._size = 2   # valid indices are 0 and 1
@@ -224,18 +227,19 @@ def test_cluster_compare_renders_on_enter():
     # Arrange
     view = MagicMock()
     controller = MagicMock()
+    cluster_controller = MagicMock()
     router = MagicMock()
 
-    presenter = ClusterComparePresenter(view, controller, router)
+    presenter = ClusterComparePresenter(view, controller, cluster_controller, router)
     presenter.set_pair(3, 4)
 
-    controller.get_cluster_comparison.return_value = "fake_comparison"
+    cluster_controller.get_cluster_comparison.return_value = "fake_comparison"
 
     # Act
     presenter.on_enter()
 
     # Assert
-    controller.get_cluster_comparison.assert_called_once_with(3, 4)
+    cluster_controller.get_cluster_comparison.assert_called_once_with(3, 4)
     view.render_comparison.assert_called_once_with("fake_comparison")
 
 
@@ -250,7 +254,7 @@ def test_cluster_compare_navigates_to_overlay():
 
     router.get_screen.return_value = overlay_screen
 
-    presenter = ClusterComparePresenter(view, controller, router)
+    presenter = ClusterComparePresenter(view, controller, MagicMock(), router)
     presenter.set_pair(3, 4)
 
     # Act
@@ -273,9 +277,10 @@ def test_cluster_calendar_overlay_renders_on_enter():
     # Arrange
     view = MagicMock()
     controller = MagicMock()
+    cluster_controller = MagicMock()
     router = MagicMock()
 
-    presenter = ClusterCalendarOverlayPresenter(view, controller, router)
+    presenter = ClusterCalendarOverlayPresenter(view, controller, cluster_controller, router)
     presenter.set_pair(3, 4)
 
     comparison = MagicMock()
@@ -284,7 +289,7 @@ def test_cluster_calendar_overlay_renders_on_enter():
     comparison.left_schedule.items = []
     comparison.right_schedule.items = []
 
-    controller.get_cluster_comparison.return_value = comparison
+    cluster_controller.get_cluster_comparison.return_value = comparison
     controller.get_loaded_periods.return_value = []
     controller.get_mapper.return_value = MagicMock()
 

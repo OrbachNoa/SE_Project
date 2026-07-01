@@ -39,6 +39,7 @@ class ErrorCategory(Enum):
     VALIDATION = "VALIDATION"          # User input rejected by a validator.
     INPUT_FILE = "INPUT_FILE"          # A course/period/programs file is bad.
     SCHEDULING = "SCHEDULING"          # The scheduling search itself failed.
+    TRANSLATION = "TRANSLATION"        # Free-text → config translation (e.g. LLM) failed.
     RESOURCE = "RESOURCE"              # Out of memory / out of CPU budget.
     PERSISTENCE = "PERSISTENCE"        # SQLite / disk cache problems.
     EXPORT = "EXPORT"                  # Writing TXT / Excel / PDF output.

@@ -5,9 +5,10 @@ from __future__ import annotations
 class ClusterComparePresenter:
     """Loads two representatives and renders them side by side with diffs flagged."""
 
-    def __init__(self, view, controller, router) -> None:
+    def __init__(self, view, controller, cluster_controller, router) -> None:
         self._view = view
         self._controller = controller
+        self._cluster_controller = cluster_controller
         self._router = router
         self._cluster_a = 0
         self._cluster_b = 1
@@ -18,7 +19,7 @@ class ClusterComparePresenter:
 
     def on_enter(self) -> None:
         try:
-            comparison = self._controller.get_cluster_comparison(
+            comparison = self._cluster_controller.get_cluster_comparison(
                 self._cluster_a, self._cluster_b
             )
         except Exception as error:
