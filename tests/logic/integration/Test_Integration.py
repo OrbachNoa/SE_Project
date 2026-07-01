@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 # Import the main pipeline function.
-from main import run_pipeline
+from src.main import run_pipeline
 
 # Set the path to the folder where the test files (fixtures) are located.
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
@@ -31,8 +31,18 @@ FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 # ===========================================================================
 # TC-INT-001 — Test that valid input files create a correct output file.
 # ===========================================================================
-def test_full_pipeline_valid_input_produces_output_file(tmp_path):
+def test_full_pipeline_valid_input_produces_output_file(tmp_path, monkeypatch):
     # Arrange — Use three valid files (courses, periods, and programs).
+    # Limit max results to avoid combinatorial explosion during testing.
+    from src.logic.Scheduler import Scheduler
+    orig_generate = Scheduler.generateSchedules
+    
+    def mocked_generate(self, slots, observer, *args, **kwargs):
+        kwargs["max_results"] = 10
+        return orig_generate(self, slots, observer, *args, **kwargs)
+        
+    monkeypatch.setattr(Scheduler, "generateSchedules", mocked_generate)
+    
     courses_path = FIXTURES / "courses_valid.txt"
     periods_path = FIXTURES / "periods_valid.txt"
     programs_path = FIXTURES / "programs_valid.txt"

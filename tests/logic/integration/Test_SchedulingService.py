@@ -186,7 +186,8 @@ def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mo
     run_payloads = [c.args[0] for c in put_calls if isinstance(c.args[0], tuple) and len(c.args[0]) == 6]
     assert run_payloads, "expected a run payload to be queued for the worker"
     _, _, _, _, max_results, batch_size = run_payloads[0]
-    assert max_results == 1000000
+    from src.config import DEFAULT_MAX_RESULTS
+    assert max_results == DEFAULT_MAX_RESULTS
     assert batch_size == 1000
 
 
