@@ -155,6 +155,11 @@ class OutputScreenPresenter(ScheduleExportMixin):
 
     # Navigate to the cluster overview screen (registered as "clusters").
     def open_clusters(self) -> None:
+        # Entering clustering from the results screen is the one doorway in, so
+        # discard any cached session here: the overview then re-clusters fresh on
+        # the results loaded so far, instead of showing a stale computation from
+        # before more schedules streamed in.
+        self._controller.invalidate_clustering()
         self._router.show("clusters")
 
     # ── export hooks for ScheduleExportMixin ─────────────────────────────────

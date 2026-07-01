@@ -70,8 +70,10 @@ class ClusterConfig:
     k_max: int = 6
 
     # Upper bound on how many schedules are actually clustered. Above this the
-    # pipeline draws a representative sample so the run stays responsive.
-    max_sample: int = 500
+    # pipeline draws a representative sample so the run stays responsive. A larger
+    # sample captures far more of the variety (rare shapes a tiny 500-sample would
+    # miss) while K-means on a few thousand 5-D points stays well under a second.
+    max_sample: int = 10_000
 
     # Fixed seed keeps sampling and K-means deterministic, so the same input and
     # config always yield the same families (stable UI).

@@ -51,6 +51,12 @@ except ImportError:
     )
 
 
+# How many schedules the user can page through inside one family. A family may
+# hold thousands of sampled schedules; browsing is capped to a small,
+# representative handful of them (the family's true size is shown separately).
+FAMILY_BROWSE_CAP = 30
+
+
 class ClusteringService:
     """Single entry point for turning a set of schedules into K families."""
 
@@ -161,12 +167,16 @@ class ClusteringService:
                 continue
 
             representative_index = self._pick_representative(member_indices, centroids[c])
+            # Profile, size estimate and ranges use ALL of the family's members;
+            # only the browse list is capped to a small representative sample so
+            # the user pages through a handful, not thousands.
+            browse_members = self._sample_members(member_indices, representative_index, centroids[c])
             clusters.append(
                 Cluster(
                     cluster_id=c,
-                    member_indices=member_indices,
+                    member_indices=browse_members,
                     representative_index=representative_index,
-                    size=len(member_indices),
+                    size=len(browse_members),
                     estimated_population_size=int(round(len(member_indices) * scale)),
                     summary=self._summarize(member_indices, names),
                     representative_features=self._features_at(representative_index, names),
@@ -260,6 +270,38 @@ class ClusteringService:
             member_points, centroid[np.newaxis, :]
         ).ravel()
         return member_indices[int(distances.argmin())]
+
+    def _sample_members(
+        self, member_indices: List[int], representative_index: int, centroid: np.ndarray
+    ) -> List[int]:
+        """A bounded, representative browse sample: archetype first, then a spread.
+
+        Small families are returned whole (archetype first). Large ones are sorted
+        by distance to the centroid and sampled with an even stride, so the user
+        sees typical-through-atypical members rather than the first N encountered.
+        """
+        cap = FAMILY_BROWSE_CAP
+        if len(member_indices) <= cap:
+            candidates = member_indices
+        else:
+            points = self._matrix[member_indices]
+            distances = self._metric.distance_to_centroids(
+                points, centroid[np.newaxis, :]
+            ).ravel()
+            order = np.argsort(distances)
+            stride = len(member_indices) / cap
+            positions = sorted({int(i * stride) for i in range(cap)})
+            candidates = [member_indices[int(order[p])] for p in positions]
+
+        picked = [representative_index]
+        seen = {representative_index}
+        for member in candidates:
+            if member not in seen:
+                picked.append(member)
+                seen.add(member)
+                if len(picked) >= cap:
+                    break
+        return picked
 
     def _summarize(self, member_indices: List[int], names: List[str]) -> dict:
         """Average *raw* (un-normalized) feature values — the family profile."""
