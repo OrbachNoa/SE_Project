@@ -95,7 +95,7 @@ def test_translate_configured_llm_failure_raises_and_does_not_fall_back():
     translator = ClusterRequestTranslator(llm)
 
     # Act / Assert
-    with pytest.raises(ClusterTranslationError):
+    with pytest.raises(ClusterTranslationError), pytest.warns(RuntimeWarning, match="LLM clustering request failed"):
         translator.translate("group by rest days")
     llm.complete.assert_called_once()
 

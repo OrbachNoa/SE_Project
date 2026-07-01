@@ -143,7 +143,7 @@ def test_typical_load_under_30_seconds(make_course, make_program_entry,
 
     # Act — Run the scheduler and measure how much time it takes.
     start_time = time.perf_counter()
-    scheduler.generateSchedules(slots, observer)
+    scheduler.generateSchedules(slots, observer, max_results=1_000_000)
     schedules = observer.schedules
     elapsed = time.perf_counter() - start_time
 
@@ -183,7 +183,7 @@ def test_maximum_load_under_30_seconds(make_course, make_program_entry,
 
     # Act — Run the scheduler and measure how much time it takes.
     start_time = time.perf_counter()
-    scheduler.generateSchedules(slots, observer)
+    scheduler.generateSchedules(slots, observer, max_results=1_000_000)
     schedules = observer.schedules
     elapsed = time.perf_counter() - start_time
 
