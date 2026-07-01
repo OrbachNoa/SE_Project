@@ -27,7 +27,7 @@ from src.application.errors.ExceptionMapper import (
     default_registry,
 )
 from src.application.errors.ErrorLogger import ErrorLogger
-from src.config import PROGRESS_POLL_INTERVAL_MS, WINDOW_SIZE
+from src.config import PROGRESS_POLL_INTERVAL_MS, WINDOW_SIZE, WORKER_SHUTDOWN_TIMEOUT_MS
 
 # Import the formatting utility (cheap, stdlib-only -- safe at module level).
 from src.file_io.formatters.ScheduleCsvFormatter import format_schedule_csv
@@ -147,7 +147,7 @@ class AppController(QObject):
         # new run (a bounded wait; cancellation typically settles in well under a second).
         if self._worker is not None:
             self._worker.cancel()
-            self._worker.wait(2000)
+            self._worker.wait(WORKER_SHUTDOWN_TIMEOUT_MS)
         self._worker = None
         self._early_nav_fired = False
 

@@ -59,3 +59,6 @@ SCHEDULE_DTO_CACHE_SIZE = 32
 
 # How often AppController polls the repository count during an active generation run.
 PROGRESS_POLL_INTERVAL_MS = 500
+
+# Timeout in milliseconds to wait for a worker thread to terminate after cancellation.
+WORKER_SHUTDOWN_TIMEOUT_MS = 2000
