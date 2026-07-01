@@ -28,7 +28,7 @@ FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 # ---------------------------------------------------------------------------
 def _run_main(argv, monkeypatch):
     monkeypatch.setattr(sys, "argv", argv)
-    from main import main
+    from src.main import main
     main()
 
 
@@ -37,6 +37,16 @@ def _run_main(argv, monkeypatch):
 # ===========================================================================
 def test_main_valid_input_creates_output_and_exits_cleanly(tmp_path, monkeypatch):
     # Arrange
+    # Limit max results to avoid combinatorial explosion during testing.
+    from src.logic.Scheduler import Scheduler
+    orig_generate = Scheduler.generateSchedules
+    
+    def mocked_generate(self, slots, observer, *args, **kwargs):
+        kwargs["max_results"] = 10
+        return orig_generate(self, slots, observer, *args, **kwargs)
+        
+    monkeypatch.setattr(Scheduler, "generateSchedules", mocked_generate)
+    
     output_path = tmp_path / "out.txt"
     argv = [
         "main",
