@@ -45,7 +45,6 @@ class InputScreen(Screen):
         # Add the action bar (load buttons, generate button) at the top
         self.action_bar = ActionBarWidget(self)
         self._view_results_btn = self.action_bar.view_results_btn
-        self.action_bar.settings_btn.setVisible(False)
         root.addWidget(self.action_bar)
 
         # File upload area: displays feedback once courses or periods files are loaded

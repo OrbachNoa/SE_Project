@@ -70,6 +70,16 @@ The user may also go back to update the exsiting data (by updating the calendar 
 
 Our added feature to system is the ability to cluster generated exam schedules based on course similarity. The clustering is done using the K-Means algorithm, which is a popular clustering algorithm that is used to partition a dataset into k clusters.
 
+List of llm optional requests in English and Hebrew:
+```
+- Give me all schedules with least back to back exams and most spacious gaps between exams for instructors.
+- I want no more than one exam per day, no more than 2 exams per week and at leat 5 days between them
+- give me 6 groups such that the lecturer will have enough time to check the exams between moeds
+- give me the most comfortable schedule for busy student
+- אני רוצה חלוקה ל5 קבוצות, בלי מבחנים עוקבים ועם לפחות 7 ימים בין מבחנים
+- תחלק ל3 קבוצות, כשיש לי לא יותר מ3 ימים בין בחינות
+```
+
 ## Installation & Requirements
 
 * **Python:** 3.12 or higher.

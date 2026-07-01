@@ -31,7 +31,7 @@ class App(QMainWindow):
         self._cluster_controller = cluster_controller
         
         # Set the window's title, default starting size, and the minimum size it can be shrunk to
-        self.setWindowTitle("Exam Scheduler v3.1")
+        self.setWindowTitle("Exam Scheduler v3.4")
         self.resize(1100, 720)
         self.setMinimumSize(800, 560)
         
