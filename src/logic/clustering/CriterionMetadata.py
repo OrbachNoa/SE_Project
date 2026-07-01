@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.logic.clustering.ExtendedFeatureComputer import (
+    ALL_EXTENDED_FEATURES,
     AVG_MOED_GAP,
     AVG_PREP_DAYS,
     B2B_EXAM_INCIDENCE,
@@ -14,12 +15,20 @@ from src.logic.clustering.ExtendedFeatureComputer import (
     MIN_MOED_GAP,
 )
 from src.logic.comparators.ScheduleScorer import (
+    ALL_CRITERIA,
     AVG_ALL_COURSES_GAP,
     ELECTIVE_CONFLICTS,
     MANDATORY_SPAN,
     MAX_EXAMS_PER_DAY,
     MIN_MANDATORY_GAP,
 )
+
+
+# Every criterion the clustering engine can group by, in a stable display order
+# (core score criteria first, then the extended features). This is the single
+# source the manual "choose criteria" dialog offers the user, so adding a new
+# feature to the engine automatically makes it selectable in the UI.
+SELECTABLE_CRITERIA = tuple(ALL_CRITERIA) + tuple(ALL_EXTENDED_FEATURES)
 
 
 CRITERION_LABELS = {

@@ -277,6 +277,30 @@ class ClusterSessionController:
         self._cluster_interpretation = translation.interpretation
         return self._mapper.to_cluster_cards(run.result)
 
+    def build_config_run(self, criteria, k=None):
+        """Thread-safe: build a fresh clustering run from an explicit criteria list.
+
+        The manual "choose criteria" UI calls this instead of the free-text path.
+        All clustering logic lives in ClusteringCoordinator; this is a thin
+        delegate. Does NOT mutate self state — the returned bundle is committed on
+        the GUI thread via commit_request_run().
+        """
+        from src.application.services.ClusteringCoordinator import ClusteringCoordinator
+
+        repo = self._get_schedule_repository()
+        if repo is None:
+            raise RuntimeError("clustering requires the SQLite-backed result store")
+        return ClusteringCoordinator.build_config_run(repo, criteria, k)
+
+    def get_active_criteria(self) -> list:
+        """The criteria the current clustering groups by (defaults if none yet)."""
+        from src.logic.clustering.ClusterConfig import ClusterConfig
+
+        cfg = self._cluster_coordinator.config if self._cluster_coordinator else None
+        if cfg is None:
+            cfg = ClusterConfig.default()
+        return list(cfg.criteria)
+
     def get_cluster_interpretation(self) -> str:
         """How the last free-text clustering request was understood."""
         return self._cluster_interpretation

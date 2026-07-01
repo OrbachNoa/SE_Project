@@ -94,6 +94,11 @@ class ClusterOverviewScreen(Screen):
         self._apply_btn.setObjectName("btn-secondary")
         layout.addWidget(self._apply_btn)
 
+        self._criteria_btn = QPushButton("Choose criteria")
+        self._criteria_btn.setObjectName("btn-secondary")
+        self._criteria_btn.setToolTip("Pick which criteria the grouping is based on")
+        layout.addWidget(self._criteria_btn)
+
         self._compare_btn = QPushButton("Compare selected")
         self._compare_btn.setToolTip("In order to compare select two families")
         self._compare_btn.setObjectName("btn-secondary")
@@ -166,6 +171,7 @@ class ClusterOverviewScreen(Screen):
     def _connect_events(self) -> None:
         self._back_btn.clicked.connect(self._presenter.on_back)
         self._apply_btn.clicked.connect(lambda: self._presenter.on_apply_k(self._k_spin.value()))
+        self._criteria_btn.clicked.connect(self._presenter.on_edit_criteria)
         self._compare_btn.clicked.connect(self._presenter.on_compare)
         self._request_btn.clicked.connect(self._on_apply_request)
         self._request_input.returnPressed.connect(self._on_apply_request)
@@ -239,6 +245,17 @@ class ClusterOverviewScreen(Screen):
 
     def show_message(self, message: str) -> None:
         QMessageBox.information(self, "Clusters", message)
+
+    def open_criteria_dialog(self, current: List[str]) -> List[str] | None:
+        """Show the criteria picker; return the chosen ids, or None if cancelled."""
+        from gui.features.clusters.widgets.CriteriaSelectionDialog import (
+            CriteriaSelectionDialog,
+        )
+
+        dialog = CriteriaSelectionDialog(current, parent=self)
+        if dialog.exec():
+            return dialog.selected_criteria()
+        return None
 
     def detail_screen_name(self) -> str:
         return self._detail_name

@@ -116,6 +116,41 @@ class ClusterOverviewPresenter:
         worker.failed.connect(lambda message, w=worker: self._on_worker_failed(message, w))
         worker.start()
 
+    # User pressed "Choose criteria" — pick a criteria set and re-cluster on it.
+    def on_edit_criteria(self) -> None:
+        # Prevent opening while a run is already in flight.
+        if self._worker is not None and self._worker.isRunning():
+            return
+        current = self._cluster_controller.get_active_criteria()
+        selected = self._view.open_criteria_dialog(current)
+        if not selected:  # cancelled or empty
+            return
+        self._apply_criteria(selected)
+
+    def _apply_criteria(self, criteria: List[str]) -> None:
+        """Start a ClusterConfigWorker to group on an explicit criteria set."""
+        self._compare_selection = []
+        k = self._view.get_k_value()
+        self._view.set_busy(True)
+        from src.infrastructure.concurrency.ClusterConfigWorker import ClusterConfigWorker
+        self._worker = ClusterConfigWorker(self._cluster_controller, criteria, k)
+        worker = self._worker
+        worker.finished.connect(lambda bundle, w=worker: self._on_config_worker_finished(bundle, w))
+        worker.failed.connect(lambda message, w=worker: self._on_worker_failed(message, w))
+        worker.start()
+
+    def _on_config_worker_finished(self, bundle, worker=None) -> None:
+        """Handler for ClusterConfigWorker.finished — commit + render."""
+        if self._is_stale(worker):
+            return
+        cards = self._cluster_controller.commit_request_run(bundle)
+        self._finish_render(bundle.run, cards)
+        self._last_k = bundle.run.result.k
+        # Grouping now comes from explicit criteria, not a free-text request, so
+        # drop any stale request text rather than leaving it to mislead the user.
+        self._last_request_text = ""
+        self._view.clear_request_text()
+
     def on_open_cluster(self, cluster_id: int) -> None:
         self._detail.enter_cluster(cluster_id)
         self._router.show(self._view.detail_screen_name())

@@ -18,8 +18,9 @@ from typing import List, Optional, Sequence
 
 from src.application.dto.ScheduleDTO import ScheduleDTO
 from src.logic.clustering.Cluster import ClusterResult
-from src.logic.clustering.ClusterConfig import ClusterConfig
+from src.logic.clustering.ClusterConfig import ClusterConfig, K_MODE_FIXED
 from src.logic.clustering.ClusteringService import ClusteringService
+from src.logic.clustering.CriterionDisplay import label as _criterion_label
 from src.logic.clustering.ExtendedFeatureComputer import (
     ALL_EXTENDED_FEATURES,
     ExtendedFeatureComputer,
@@ -38,6 +39,27 @@ class ClusteringRun:
     def gidx_for(self, working_indices: Sequence[int]) -> List[int]:
         """Translate cluster member positions into global schedule ids."""
         return [self.gidx_by_working_index[w] for w in working_indices]
+
+
+@dataclass(slots=True)
+class ConfigRunBundle:
+    """A finished manual-config clustering run, committed on the GUI thread.
+
+    Mirrors the free-text request bundle so the existing commit path accepts it,
+    but carries no LLM interpretation — just a plain description of the chosen
+    criteria plus any that turned out flat (identical across every schedule).
+    """
+
+    coordinator: "ClusteringCoordinator"
+    run: ClusteringRun
+    interpretation: str
+    flat_criteria: List[str]
+
+
+def _describe_criteria(criteria: Sequence[str]) -> str:
+    """Human sentence naming the criteria a manual grouping is built on."""
+    names = ", ".join(_criterion_label(c) for c in criteria)
+    return f"Grouping by: {names}."
 
 
 class ClusteringCoordinator:
@@ -135,6 +157,38 @@ class ClusteringCoordinator:
     def gidx_at(self, working_index: int) -> int:
         """Global schedule id for one working-set position."""
         return self._gidx_by_working_index[working_index]
+
+    # ── manual criteria path (the "choose criteria" UI) ──────────────────────
+
+    @staticmethod
+    def build_config_run(repository, criteria: Sequence[str], k: Optional[int] = None) -> ConfigRunBundle:
+        """Prepare a fresh run for an explicit criteria selection and cluster it.
+
+        This is the manual counterpart to the free-text request path: the criteria
+        are already known, so there is no LLM translation. Selecting new criteria
+        changes the feature matrix, so a fresh ``prepare()`` always runs (cheap
+        enough for interactive use). ``k`` fixes the family count; ``None`` lets the
+        engine choose K automatically.
+
+        Static and self-contained so it can run on a worker thread without touching
+        any shared coordinator instance — the returned bundle is committed on the
+        GUI thread, exactly like the free-text bundle.
+        """
+        if k is not None:
+            config = ClusterConfig(criteria=tuple(criteria), k_mode=K_MODE_FIXED, k=k)
+        else:
+            config = ClusterConfig(criteria=tuple(criteria))
+
+        coordinator = ClusteringCoordinator(repository)
+        coordinator.prepare(config)
+        run = coordinator.cluster(k)
+
+        return ConfigRunBundle(
+            coordinator=coordinator,
+            run=run,
+            interpretation=_describe_criteria(config.criteria),
+            flat_criteria=list(coordinator.flat_criteria),
+        )
 
     # ── one-shot path (kept for tests / simple callers) ──────────────────────
 
