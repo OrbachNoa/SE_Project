@@ -12,7 +12,7 @@ grew past the project's per-file line limit; the core, context-free mapping
 rules for individual exception types stayed in Test_ErrorMapping.py.
 
 Conventions:
-- Each test carries a unique TC-ERR-NNN identifier in the comment block above
+- Each test carries a unique TC-EMC-NNN identifier in the comment block above
   its definition, numbered sequentially within this file (independent of the
   numbering in Test_ErrorMapping.py).
 - Each test body is split into Arrange / Act / Assert sections.
@@ -34,7 +34,7 @@ def registry() -> ExceptionMapperRegistry:
 
 
 # ===========================================================================
-# TC-ERR-001: context can steer a ValueError's category (input-file imports).
+# TC-EMC-001: context can steer a ValueError's category (input-file imports).
 # ===========================================================================
 def test_error_mapping_value_error_category_can_be_overridden_by_context(registry):
     # Arrange
@@ -49,7 +49,7 @@ def test_error_mapping_value_error_category_can_be_overridden_by_context(registr
 
 
 # ===========================================================================
-# TC-ERR-002: a caller can steer the unknown-exception fallback's category
+# TC-EMC-002: a caller can steer the unknown-exception fallback's category
 # (e.g. "anything unmapped here is a SCHEDULING problem") without writing a
 # mapper — message stays generic and safe either way.
 # ===========================================================================
@@ -69,7 +69,7 @@ def test_error_mapping_unknown_exception_category_can_be_overridden_by_context(r
 
 
 # ===========================================================================
-# TC-ERR-003: MemoryError still wins its own RESOURCE mapping even when the
+# TC-EMC-003: MemoryError still wins its own RESOURCE mapping even when the
 # caller's context tries to steer unknown errors elsewhere — the dedicated
 # mapper always runs before the context-driven fallback.
 # ===========================================================================
@@ -87,7 +87,7 @@ def test_error_mapping_memory_error_beats_category_override(registry):
 
 
 # ===========================================================================
-# TC-ERR-004: control keys (category/severity/...) never leak into the
+# TC-EMC-004: control keys (category/severity/...) never leak into the
 # AppErrorInfo's own context dict — only real data does.
 # ===========================================================================
 def test_error_mapping_control_context_keys_are_stripped_from_unknown_fallback(registry):
@@ -105,7 +105,7 @@ def test_error_mapping_control_context_keys_are_stripped_from_unknown_fallback(r
 
 
 # ===========================================================================
-# TC-ERR-005: build_process_error_payload — MemoryError during a worker-
+# TC-EMC-005: build_process_error_payload — MemoryError during a worker-
 # process stage stays RESOURCE_MEMORY_EXHAUSTED, not a generic process error.
 # ===========================================================================
 def test_error_mapping_build_process_error_payload_memory_error():
@@ -122,7 +122,7 @@ def test_error_mapping_build_process_error_payload_memory_error():
 
 
 # ===========================================================================
-# TC-ERR-006: build_process_error_payload — any other failure during a
+# TC-EMC-006: build_process_error_payload — any other failure during a
 # worker-process stage is a clean INFRASTRUCTURE payload, never str(e).
 # ===========================================================================
 def test_error_mapping_build_process_error_payload_generic_failure():
@@ -141,7 +141,7 @@ def test_error_mapping_build_process_error_payload_generic_failure():
 
 
 # ===========================================================================
-# TC-ERR-007: PermissionError with context category EXPORT returns the
+# TC-EMC-007: PermissionError with context category EXPORT returns the
 # export category/code and "written" wording (the default, unchanged).
 # ===========================================================================
 def test_error_mapping_permission_error_with_export_context(registry):
@@ -160,7 +160,7 @@ def test_error_mapping_permission_error_with_export_context(registry):
 
 
 # ===========================================================================
-# TC-ERR-008: PermissionError with context category INPUT_FILE returns the
+# TC-EMC-008: PermissionError with context category INPUT_FILE returns the
 # input-file category/code and "read" wording — it's a load, not an export.
 # ===========================================================================
 def test_error_mapping_permission_error_with_input_file_context(registry):
@@ -179,7 +179,7 @@ def test_error_mapping_permission_error_with_input_file_context(registry):
 
 
 # ===========================================================================
-# TC-ERR-009: OSError with context category EXPORT stays EXPORT — it must
+# TC-EMC-009: OSError with context category EXPORT stays EXPORT — it must
 # not silently fall back to the mapper's own PERSISTENCE default.
 # ===========================================================================
 def test_error_mapping_os_error_with_export_context_does_not_default_to_persistence(registry):
@@ -196,7 +196,7 @@ def test_error_mapping_os_error_with_export_context_does_not_default_to_persiste
 
 
 # ===========================================================================
-# TC-ERR-010: OSError with no context override keeps its original default —
+# TC-EMC-010: OSError with no context override keeps its original default —
 # PERSISTENCE, code IO_FAILED — so existing cache/repository callers are
 # unaffected by making the mapper context-aware.
 # ===========================================================================
@@ -213,7 +213,7 @@ def test_error_mapping_os_error_without_context_defaults_to_persistence(registry
 
 
 # ===========================================================================
-# TC-ERR-011: an OSError's user_message is worded for the operation it
+# TC-EMC-011: an OSError's user_message is worded for the operation it
 # happened during (import/export/persistence), not one generic sentence —
 # a disk fault while importing should read like a read problem, and one
 # while exporting should read like a write problem.
@@ -237,7 +237,7 @@ def test_error_mapping_os_error_message_differs_by_context_category(registry):
 
 
 # ===========================================================================
-# TC-ERR-012: a non-recoverable unknown failure tells the user to restart
+# TC-EMC-012: a non-recoverable unknown failure tells the user to restart
 # instead of just "try again", which is misleading when retrying the same
 # action can't possibly help.
 # ===========================================================================
@@ -256,7 +256,7 @@ def test_error_mapping_unknown_non_recoverable_failure_suggests_restart(registry
 
 
 # ===========================================================================
-# TC-ERR-013: a recoverable unknown failure keeps the plain "try again"
+# TC-EMC-013: a recoverable unknown failure keeps the plain "try again"
 # wording — no restart suggestion when retrying is actually reasonable.
 # ===========================================================================
 def test_error_mapping_unknown_recoverable_failure_keeps_try_again_wording(registry):

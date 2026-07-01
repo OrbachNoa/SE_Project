@@ -16,7 +16,7 @@ from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 def test_period_navigator_empty_state():
     # Arrange
     nav = PeriodNavigator()
-    
+
     # Act / Assert
     assert nav.current_period is None
     assert nav.total == 0
@@ -34,11 +34,11 @@ def test_period_navigator_label_formatting():
     p1 = PeriodEditViewModel("1", "A", "01-01-2023", "05-01-2023")
     p2 = PeriodEditViewModel("2", "B", "10-01-2023", "15-01-2023")
     nav = PeriodNavigator([p1, p2])
-    
+
     # Act / Assert
     # At index 0 (first period)
     assert nav.label() == "Semester 1 - Moed A (1/2)"
-    
+
     # Move to next
     nav.move_next()
     # At index 1 (second period)
@@ -53,21 +53,21 @@ def test_period_navigator_boundaries():
     p1 = PeriodEditViewModel("1", "A", "01-01-2023", "05-01-2023")
     p2 = PeriodEditViewModel("1", "B", "10-01-2023", "15-01-2023")
     nav = PeriodNavigator([p1, p2])
-    
+
     # Act / Assert
     # Boundary: Start
     assert nav.can_move_previous() is False
     assert nav.can_move_next() is True
-    
+
     # Attempt to move out of bounds (backward)
     assert nav.move_previous() is False
-    
+
     # Move forward
     assert nav.move_next() is True
-    
+
     # Boundary: End
     assert nav.can_move_previous() is True
     assert nav.can_move_next() is False
-    
+
     # Attempt to move out of bounds (forward)
     assert nav.move_next() is False

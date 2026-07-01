@@ -332,7 +332,7 @@ def test_exam_periods_parser_rejections(tmp_path, line1, line2):
     # Arrange — single period with an invalid property.
     fixture = tmp_path / "periods_bad.txt"
     fixture.write_text(f"{line1}\n{line2}\n", encoding="utf-8")
-    
+
     # Act + Assert
     with pytest.raises(ValueError):
         ExamPeriodsFileParser().parse(str(fixture))

@@ -14,10 +14,10 @@ def test_build_slots(make_course, make_period, make_program_entry, mock_reposito
     pe = make_program_entry(program_id=program_id)
     c = make_course(course_id="10101", program_entries=[pe])
     p = make_period()
-    
+
     # Act
     slots = service.build_slots([program_id], [c], [p])
-    
+
     # Assert
     assert len(slots) > 0
     assert slots[0].course.courseId == "10101"
@@ -35,29 +35,29 @@ def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cl
     service = SchedulingService(mock_repository)
     c = make_course()
     p = make_period()
-    
+
     mock_worker = MagicMock()
     mock_worker_cls.return_value = mock_worker
-    
+
     mock_process = MagicMock()
     mock_process_cls.return_value = mock_process
 
-    # Real Queue.get_nowait() raises Empty once drained; _pool_start_run's
-    # _drain_queue helper relies on that to exit its `while True` loop. Queue
-    # is mocked here, so every internal queue resolves to the same
+    # Real mock_queue.get_nowait() raises Empty once drained; _pool_start_run's
+    # _drain_queue helper relies on that to exit its `while True` loop. mock_queue
+    # is mocked here, so every internal mock_queue resolves to the same
     # mock_queue.return_value, which must be told to raise it too, or
     # generate_async() never returns.
     mock_queue.return_value.get_nowait.side_effect = queue.Empty
 
     # Act
     worker = service.generate_async(["83101"], [c], [p], max_results=50, num_processes=1)
-    
+
     # Assert
     # assert the process is created and is a daemon
     assert mock_process_cls.call_count == 1
     kwargs = mock_process_cls.call_args[1]
     assert kwargs.get("daemon") is True
-    
+
     # assert the worker is created and started
     assert mock_worker_cls.call_count == 1
     kwargs = mock_worker_cls.call_args[1]
@@ -72,10 +72,10 @@ def test_generate_async(mock_worker_cls, mock_event, mock_queue, mock_process_cl
 def test_cancel_no_active_worker(mock_repository):
     # Arrange
     service = SchedulingService(mock_repository)
-    
+
     # Act
     service.cancel()
-    
+
     # Assert
     assert service._worker is None
 
@@ -88,10 +88,10 @@ def test_cancel_with_active_worker(mock_repository):
     service = SchedulingService(mock_repository)
     mock_worker = MagicMock()
     service._worker = mock_worker
-    
+
     # Act
     service.cancel()
-    
+
     # Assert
     assert mock_worker.cancel.call_count == 1
 
@@ -104,17 +104,17 @@ def test_run_scheduler_process_helper(mock_runner_cls):
     # Arrange
     mock_runner = MagicMock()
     mock_runner_cls.return_value = mock_runner
-    
+
     slots = []
     courses = []
     selected_programs = []
-    queue = MagicMock()
+    mock_queue = MagicMock()
     cancel_event = MagicMock()
     work_source = MagicMock()
 
     # Act
     _run_scheduler_process(
-        slots, courses, selected_programs, queue, cancel_event, max_results=10, batch_size=1000, work_source=work_source
+        slots, courses, selected_programs, mock_queue, cancel_event, max_results=10, batch_size=1000, work_source=work_source
     )
 
     # Assert
@@ -122,7 +122,7 @@ def test_run_scheduler_process_helper(mock_runner_cls):
     args, kwargs = mock_runner_cls.call_args
     assert args[0] == slots
     assert args[1] == ANY
-    assert args[2] == queue
+    assert args[2] == mock_queue
     assert args[3] == cancel_event
     assert args[4] == 10
     assert args[6] == work_source
@@ -138,7 +138,7 @@ def test_generate_async_raises_value_error_for_orphan_course(make_course, make_p
     pe = make_program_entry(program_id="83101", semester=Semester.SPRI)
     orphan_course = make_course(course_id="10101", program_entries=[pe])
     fall_period = make_period(semester=Semester.FALL)
-    
+
     # Act & Assert
     with pytest.raises(ValueError):
         service.generate_async(["83101"], [orphan_course], [fall_period])
@@ -153,7 +153,7 @@ def test_build_slots_raises_value_error_for_orphan_course(make_course, make_peri
     pe = make_program_entry(program_id="83101", semester=Semester.SPRI)
     orphan_course = make_course(course_id="10101", program_entries=[pe])
     fall_period = make_period(semester=Semester.FALL)
-    
+
     # Act & Assert
     with pytest.raises(ValueError):
         service.build_slots(["83101"], [orphan_course], [fall_period])
@@ -171,6 +171,7 @@ def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mo
     service = SchedulingService(mock_repository)
     c = make_course()
     p = make_period()
+
     mock_queue.return_value.get_nowait.side_effect = queue.Empty
 
     # Act
@@ -178,7 +179,7 @@ def test_generate_async_uses_default_max_results(mock_worker_cls, mock_event, mo
 
     # Assert
     # One persistent worker process is created (not one per run); max_results
-    # and batch_size now flow to it via the control-queue run payload instead
+    # and batch_size now flow to it via the control-mock_queue run payload instead
     # of via Process(args=...).
     assert mock_process_cls.call_count == 1
     put_calls = mock_queue.return_value.put.call_args_list
@@ -202,6 +203,7 @@ def test_generate_async_reuses_pool_across_calls(mock_worker_cls, mock_event, mo
     service = SchedulingService(mock_repository)
     c = make_course()
     p = make_period()
+
     mock_queue.return_value.get_nowait.side_effect = queue.Empty
 
     # Act

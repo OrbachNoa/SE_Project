@@ -108,7 +108,7 @@ def test_schedule_generation_flow(qtbot, viewmodel_mapper):
     Conceptual prototype showing how to wire the E2E simulation using qtbot.
     Run this with QT_QPA_PLATFORM=offscreen for headless execution.
     """
-    # Arrange 
+    # Arrange
     # container that holds all screens; only one is visible at a time
     stack = QStackedWidget()
     router = ScreenRouter(stack)
@@ -214,7 +214,7 @@ def test_export_pdf_flow(qtbot, viewmodel_mapper):
     router = ScreenRouter(stack)
     controller = MockIntegrationController()
     controller.get_mapper.return_value = viewmodel_mapper
-    
+
     p = ExamPeriod(
         semester=Semester.FALL,
         moed=Moed.ALEPH,
@@ -223,7 +223,7 @@ def test_export_pdf_flow(qtbot, viewmodel_mapper):
         excluded_dates=[]
     )
     controller.get_loaded_periods.return_value = [p]
-    
+
     controller.get_page_info.return_value = {
         "current_page": 0,
         "total_pages": 1,
@@ -231,7 +231,7 @@ def test_export_pdf_flow(qtbot, viewmodel_mapper):
         "window_size": 1,
         "sqlite_count": 1,
     }
-    
+
     item = ScheduleItemViewModel(
         date="2026-06-05",
         title="Software Engineering",
@@ -240,22 +240,22 @@ def test_export_pdf_flow(qtbot, viewmodel_mapper):
     )
     view = ScheduleViewModel(items=[item], current_index=0, total=1)
     controller.get_schedule_view.return_value = view
-    
+
     input_screen = InputScreen(controller, router)
     output_screen = OutputScreen(controller, router)
-    
+
     router.register("input", input_screen)
     router.register("output", output_screen)
     router.show("input")
-    
+
     qtbot.addWidget(stack)
-    
+
     courses_path = "tests/fixtures/sample_courses.csv"
     periods_path = "tests/fixtures/sample_periods.csv"
-    
+
     input_screen.prompt_for_file = MagicMock(side_effect=[courses_path, periods_path])
     output_screen.export_schedule_pdf = MagicMock()
-    
+
     with patch("src.gui.features.input.InputScreen.QMessageBox.information"):
         controller.load_file.side_effect = [
             ImportResult(success=True, loaded_count=10, errors=[]),
@@ -312,23 +312,23 @@ def test_update_import_and_generate(qtbot, viewmodel_mapper):
     router = ScreenRouter(stack)
     controller = MockIntegrationController()
     controller.get_mapper.return_value = viewmodel_mapper
-    
+
     input_screen = InputScreen(controller, router)
     output_screen = OutputScreen(controller, router)
-    
+
     router.register("input", input_screen)
     router.register("output", output_screen)
     router.show("input")
-    
+
     qtbot.addWidget(stack)
     stack.show()
     qtbot.waitExposed(stack)
-    
+
     courses_path = "tests/fixtures/sample_courses.csv"
     periods_path = "tests/fixtures/sample_periods.csv"
-    
+
     input_screen.prompt_for_file = MagicMock(side_effect=[courses_path, periods_path])
-    
+
     with patch("src.gui.features.input.InputScreen.QMessageBox.information"):
         controller.load_file.side_effect = [
             ImportResult(success=True, loaded_count=5, errors=[]),
@@ -342,12 +342,12 @@ def test_update_import_and_generate(qtbot, viewmodel_mapper):
         # Toggle mode to UPDATE
         qtbot.mouseClick(input_screen.action_bar.mode_update, Qt.MouseButton.LeftButton)
         assert input_screen.action_bar.mode_update.isChecked() is True
-        
+
         # Load courses (in update mode)
         qtbot.mouseClick(input_screen.action_bar.courses_load_btn, Qt.MouseButton.LeftButton)
         # Load periods (in update mode)
         qtbot.mouseClick(input_screen.action_bar.periods_load_btn, Qt.MouseButton.LeftButton)
-        
+
         # Select programs — the card opens a real ProgramSelectorDialog
         # internally, so the dialog class itself is patched (same pattern as
         # Test_ProgramSelectorCardWidget.py) instead of stubbing a selection helper.
@@ -365,7 +365,7 @@ def test_update_import_and_generate(qtbot, viewmodel_mapper):
         assert controller.load_file.call_count == 2
         assert controller.load_file.call_args_list[0][0] == (courses_path, "courses", ImportMode.UPDATE)
         assert controller.load_file.call_args_list[1][0] == (periods_path, "periods", ImportMode.UPDATE)
-        
+
         assert controller.generate_schedules.call_count == 1
         assert controller.generate_schedules.call_args[0] == (["83100"],)
 
@@ -379,7 +379,7 @@ def test_export_pdf_actual_file(qtbot, viewmodel_mapper, tmp_path):
     router = ScreenRouter(stack)
     controller = MockIntegrationController()
     controller.get_mapper.return_value = viewmodel_mapper
-    
+
     p = ExamPeriod(
         semester=Semester.FALL,
         moed=Moed.ALEPH,
@@ -388,7 +388,7 @@ def test_export_pdf_actual_file(qtbot, viewmodel_mapper, tmp_path):
         excluded_dates=[]
     )
     controller.get_loaded_periods.return_value = [p]
-    
+
     controller.get_page_info.return_value = {
         "current_page": 0,
         "total_pages": 1,
@@ -396,7 +396,7 @@ def test_export_pdf_actual_file(qtbot, viewmodel_mapper, tmp_path):
         "window_size": 1,
         "sqlite_count": 1,
     }
-    
+
     item = ScheduleItemViewModel(
         date="2026-06-05",
         title="Software Engineering",
@@ -405,26 +405,26 @@ def test_export_pdf_actual_file(qtbot, viewmodel_mapper, tmp_path):
     )
     view = ScheduleViewModel(items=[item], current_index=0, total=1)
     controller.get_schedule_view.return_value = view
-    
+
     input_screen = InputScreen(controller, router)
     output_screen = OutputScreen(controller, router)
-    
+
     router.register("input", input_screen)
     router.register("output", output_screen)
     router.show("input")
-    
+
     qtbot.addWidget(stack)
-    
+
     courses_path = "tests/fixtures/sample_courses.csv"
     periods_path = "tests/fixtures/sample_periods.csv"
     pdf_path = str(tmp_path / "actual_test_export.pdf")
-    
+
     input_screen.prompt_for_file = MagicMock(side_effect=[courses_path, periods_path])
-    
+
     # Patch QFileDialog and QMessageBox to avoid thread blocking
     with patch("gui.features.output.widgets.SchedulePdfExporter.QFileDialog") as mock_file_dialog, \
          patch("gui.features.output.widgets.SchedulePdfExporter.QMessageBox") as mock_message_box:
-        
+
         mock_file_dialog.getSaveFileName.return_value = (pdf_path, "PDF Files (*.pdf)")
 
         controller.load_file.side_effect = [
@@ -472,12 +472,12 @@ def test_export_pdf_actual_file(qtbot, viewmodel_mapper, tmp_path):
         assert mock_file_dialog.getSaveFileName.call_count == 1
         assert mock_message_box.information.call_count == 1
         assert mock_message_box.critical.call_count == 0
-        
+
         # Verify that the file actually exists and has content
         import os
         assert os.path.exists(pdf_path) is True
         assert os.path.getsize(pdf_path) > 0
-        
+
         # Clean up the file
         try:
             os.remove(pdf_path)
@@ -537,45 +537,45 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path):
         input_state=input_state,
         schedule_state=hybrid_state,
     )
-    
+
     stack = QStackedWidget()
     router = ScreenRouter(stack)
-    
+
     input_screen = InputScreen(controller, router)
     output_screen = OutputScreen(controller, router)
-    
+
     router.register("input", input_screen)
     router.register("output", output_screen)
     router.show("input")
-    
+
     qtbot.addWidget(stack)
-    
+
     courses_path = "tests/fixtures/courses_valid.txt"
     periods_path = "tests/fixtures/periods_valid.txt"
-    
+
     input_screen.prompt_for_file = MagicMock(side_effect=[courses_path, periods_path])
-    
+
     # We mock input QMessageBox to prevent UI popup blocking
     with patch("src.gui.features.input.InputScreen.QMessageBox"), \
          patch("src.application.services.SchedulingService.SchedulingService.generate_async") as mock_generate_async:
-        
+
         stub_worker = StubWorker()
         mock_generate_async.return_value = stub_worker
-        
+
         # Act 1: Toggle mode to UPDATE
         qtbot.mouseClick(input_screen.action_bar.mode_update, Qt.MouseButton.LeftButton)
-        
+
         # Act 2: Load courses and periods
         qtbot.mouseClick(input_screen.action_bar.courses_load_btn, Qt.MouseButton.LeftButton)
         qtbot.mouseClick(input_screen.action_bar.periods_load_btn, Qt.MouseButton.LeftButton)
-        
+
         # Assert files were loaded into state and widgets populated
         loaded_courses = controller.get_loaded_courses()
         loaded_periods = controller.get_loaded_periods()
         assert len(loaded_courses) > 0
         assert len(loaded_periods) == 2
         assert len(input_screen._course_list_widget._blocks) > 0
-        
+
         # Act 3: Choose program ID "83101" via card click — the card opens a
         # real ProgramSelectorDialog internally, so the dialog class itself is
         # patched (same pattern as Test_ProgramSelectorCardWidget.py) instead
@@ -588,10 +588,10 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path):
             qtbot.mouseClick(input_screen.program_selector_card, Qt.MouseButton.LeftButton)
 
         assert input_screen.selected_program_ids() == ["83101"]
-        
+
         # Act 4: Click generate
         qtbot.mouseClick(input_screen.action_bar.generate_btn, Qt.MouseButton.LeftButton)
-        
+
         # Assert generate_async called with correct parameters
         assert mock_generate_async.call_count == 1
         call_args = mock_generate_async.call_args[0]
@@ -599,7 +599,7 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path):
         # courses and periods match what was actually loaded from fixtures
         assert len(call_args[1]) == len(loaded_courses)
         assert len(call_args[2]) == len(loaded_periods)
-        
+
         # Insert a packed batch to simulate SQLite output database state.
         # insert_batch no longer exists; the repository's current public API
         # stores packed rows, so configure_slots([]) plus one zero-slot row
@@ -608,7 +608,7 @@ def test_update_import_and_real_pipeline(qtbot, tmp_path):
         schedule_repository.configure_slots([])
         packed = pack_rows([b""], slot_count=0, row_count=1)
         schedule_repository.insert_compressed_batch(zlib.compress(packed), 1)
-        
+
         # Act 5: Simulate generation batch found to trigger router navigation
         stub_worker.schedules_batch_found.emit(1)
 

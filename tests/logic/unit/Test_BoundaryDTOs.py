@@ -59,10 +59,10 @@ def test_schedule_dto_fields():
     # Arrange
     a1 = AssignmentDTO("10101", "Calc 1", "Dr. Cohen", "2026-06-01", "FALL", "ALEPH")
     a2 = AssignmentDTO("10102", "Algebra", "Dr. Levy", "2026-06-03", "FALL", "ALEPH")
-    
+
     # Act
     dto = ScheduleDTO(assignments=[a1, a2], total_assignments=2)
-    
+
     # Assert
     assert len(dto.assignments) == 2
     assert dto.assignments[0] == a1
@@ -77,11 +77,11 @@ def test_dto_pickle_serialization():
     # Arrange
     a = AssignmentDTO("10101", "Calc 1", "Dr. Cohen", "2026-06-01", "FALL", "ALEPH")
     schedule = ScheduleDTO(assignments=[a], total_assignments=1)
-    
+
     # Act
     serialized = pickle.dumps(schedule)
     deserialized = pickle.loads(serialized)
-    
+
     # Assert
     assert deserialized.total_assignments == 1
     assert len(deserialized.assignments) == 1
@@ -142,10 +142,10 @@ def test_schedule_dto_adapter_success():
     # Arrange
     a = AssignmentDTO("10101", "Calc 1", "Dr. Cohen", "2026-06-01", "FALL", "ALEPH")
     schedule = ScheduleDTO(assignments=[a], total_assignments=1)
-    
+
     # Act
     adapter = ScheduleDTOAdapter(schedule)
-    
+
     # Assert
     assert len(adapter.assignments) == 1
     adapted = adapter.assignments[0]
@@ -258,10 +258,10 @@ def test_adapted_course_view_rejects_extra_attributes():
 def test_schedule_dto_adapter_empty_assignments():
     # Arrange
     schedule = ScheduleDTO(assignments=[], total_assignments=0)
-    
+
     # Act
     adapter = ScheduleDTOAdapter(schedule)
-    
+
     # Assert
     assert adapter.assignments == []
 

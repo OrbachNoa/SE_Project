@@ -90,7 +90,7 @@ def test_update_extended_scores_updates_database(empty_repo):
     blob = make_packed_blob(1)
     # Insert with empty scores
     empty_repo.insert_compressed_batch(data=blob, batch_count=1, batch_scores=[{}])
-    
+
     # Act
     empty_repo.update_extended_scores(gidxs=[0], score_rows=[{"ext_1": 42.5}])
 

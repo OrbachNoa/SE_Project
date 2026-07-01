@@ -9,10 +9,10 @@ one of them holding a single import-behaviour test. Each worker keeps its
 own section and its original TC-ID family.
 
 Scope   : ClusterWorker prepare/cluster lifecycle and error mapping, plus
-          ClusterRequestWorker's lazy-import guard.
+          ClusterRequestWorker's lazy-import guard and run() success/failure paths.
 Pattern : AAA (Arrange / Act / Assert)
 Naming  : test_<component>_<scenario>
-TC-IDs  : TC-CW-001..005 (ClusterWorker), TC-CRW-001 (ClusterRequestWorker)
+TC-IDs  : TC-CW-001..005 (ClusterWorker), TC-CRW-001..003 (ClusterRequestWorker)
 Fixtures: qapp (tests/conftest.py)
 
 ClusterWorker.run() does `from sklearn.exceptions import ConvergenceWarning`
@@ -189,3 +189,55 @@ def test_cluster_request_worker_import_does_not_load_sklearn_exceptions():
 
     # Assert
     assert "sklearn.exceptions" not in sys.modules
+
+
+# ===========================================================================
+# TC-CRW-002: ClusterRequestWorker.run() successfully calls the controller
+# and emits finished with the resulting bundle.
+# ===========================================================================
+def test_cluster_request_worker_emits_finished_on_success(qapp, stub_sklearn_exceptions):
+    # Arrange
+    from src.infrastructure.concurrency.ClusterRequestWorker import ClusterRequestWorker
+
+    mock_controller = MagicMock()
+    expected_bundle = object()
+    mock_controller.build_request_run.return_value = expected_bundle
+
+    worker = ClusterRequestWorker(mock_controller, "test query", 3)
+    emitted_bundles = []
+    worker.finished.connect(emitted_bundles.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    mock_controller.build_request_run.assert_called_once_with("test query", 3)
+    assert len(emitted_bundles) == 1
+    assert emitted_bundles[0] is expected_bundle
+
+
+# ===========================================================================
+# TC-CRW-003: ClusterRequestWorker.run() gracefully handles exceptions
+# and maps them to a user error string emitted via failed.
+# ===========================================================================
+def test_cluster_request_worker_emits_failed_on_exception(qapp, stub_sklearn_exceptions):
+    # Arrange
+    from src.infrastructure.concurrency.ClusterRequestWorker import ClusterRequestWorker
+
+    mock_controller = MagicMock()
+    mock_controller.build_request_run.side_effect = ValueError("Invalid input")
+
+    worker = ClusterRequestWorker(mock_controller, "test query")
+    emitted_errors = []
+    worker.failed.connect(emitted_errors.append)
+
+    # Act
+    worker.run()
+
+    # Assert — the exception is mapped (by ExceptionMapper) to a clean user
+    # message and emitted via failed; the structured record's user_message is
+    # exactly what was emitted.
+    assert len(emitted_errors) == 1
+    assert isinstance(emitted_errors[0], str)
+    assert worker.last_error is not None
+    assert worker.last_error.user_message == emitted_errors[0]

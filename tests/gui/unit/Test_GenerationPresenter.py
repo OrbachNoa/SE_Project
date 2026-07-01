@@ -16,10 +16,10 @@ def test_generation_presenter_blocks_invalid_start():
     view = MagicMock()
     controller = MagicMock()
     router = MagicMock()
-    
+
     presenter = GenerationPresenter(view, controller, router, "output")
     show_error = MagicMock()
-    
+
     # Act
     presenter.on_generate_clicked(["prog1"], lambda: False, show_error)
 
@@ -39,7 +39,7 @@ def test_generation_presenter_starts_generation():
     view = MagicMock()
     controller = MagicMock()
     router = MagicMock()
-    
+
     presenter = GenerationPresenter(view, controller, router, "output")
     show_error = MagicMock()
 
@@ -61,12 +61,12 @@ def test_generation_presenter_cancels_generation():
     view = MagicMock()
     controller = MagicMock()
     router = MagicMock()
-    
+
     presenter = GenerationPresenter(view, controller, router, "output")
-    
+
     # Act
     presenter.on_cancel_clicked()
-    
+
     # Assert
     controller.cancel_scheduling.assert_called_once()
     view.set_running_mode.assert_called_with(False, "")
@@ -81,9 +81,9 @@ def test_generation_presenter_navigates_to_output():
     view = MagicMock()
     controller = MagicMock()
     router = MagicMock()
-    
+
     presenter = GenerationPresenter(view, controller, router, "output")
-    
+
     # Act
     presenter.on_early_results_ready()
 
@@ -105,7 +105,7 @@ def test_generation_presenter_handles_no_results():
     view = MagicMock()
     controller = MagicMock()
     router = MagicMock()
-    
+
     presenter = GenerationPresenter(view, controller, router, "output")
     presenter._result_count = MagicMock(return_value=0)
 

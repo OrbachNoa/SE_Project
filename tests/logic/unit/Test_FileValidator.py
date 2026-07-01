@@ -94,7 +94,7 @@ def test_validate_file_not_empty_accepts_nonempty_file(mock_getsize):
 def test_validate_all_files_runs_checks_in_order_for_each_path(mock_isfile):
     # Arrange — one well-formed file and one missing file.
     # We patch the exists check to fail on the second file.
-    
+
     # Act + Assert
     with pytest.raises(FileNotFoundError):
         validate_all_files(["good.txt", "missing.txt"])
