@@ -51,8 +51,8 @@ def _default_checkers(periods, courses):
 # Helper: Creates a unique 'fingerprint' for a schedule.
 def _schedule_signature(schedule):
     """
-    Helper: Creates a unique 'fingerprint' for a schedule. 
-    If two schedules have the exact same exams on the exact same dates, 
+    Helper: Creates a unique 'fingerprint' for a schedule.
+    If two schedules have the exact same exams on the exact same dates,
     they will get the same fingerprint. This helps us find duplicates.
     """
     return frozenset(
@@ -67,7 +67,7 @@ def _schedule_signature(schedule):
 def test_no_duplicate_schedules_in_result(
     make_course, make_program_entry, make_period,
 ):
-    # Arrange — 2 mandatory courses and 3 available days. 
+    # Arrange — 2 mandatory courses and 3 available days.
     # The system should find 6 unique schedules.
     pe = make_program_entry(
         program_id="83101", year=2, requirement=Requirement.OBLIGATORY,
@@ -124,7 +124,7 @@ def test_every_schedule_passes_all_conflict_checks(
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
 
-    # Assert — Go through every exam in every schedule and ask the 
+    # Assert — Go through every exam in every schedule and ask the
     # checkers if there is a conflict. None of them should fail.
     # Local import
     from src.models.Domain import ExamSchedule
@@ -168,7 +168,7 @@ def test_elective_courses_across_programs_may_share_date(
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
 
-    # Assert — Make sure there is at least one schedule where both 
+    # Assert — Make sure there is at least one schedule where both
     # electives are on the exact same day.
     same_date_schedules = []
     for s in schedules:
@@ -236,13 +236,13 @@ def test_cross_moed_independence(
 
 # ===========================================================================
 # TC-BEH-006 — Test that the system tries other days (Backtracking).
-# The system must not give up if the first try fails. It must go back 
+# The system must not give up if the first try fails. It must go back
 # and try other dates until it finds a solution.
 # ===========================================================================
 def test_engine_backtracks_to_next_candidate(
     make_course, make_program_entry, make_period,
 ):
-    # Arrange — 2 mandatory courses and 2 days. The system might try to 
+    # Arrange — 2 mandatory courses and 2 days. The system might try to
     # put both on day 1 and fail. It must try day 2 instead of giving up.
     pe = make_program_entry(
         program_id="83101", year=2, requirement=Requirement.OBLIGATORY)

@@ -12,7 +12,7 @@ family shared across four sibling files that each exercise a different layer
 of the clustering subsystem: this file (TC-CLU-001..010, feature extraction
 and normalization), Test_ClusteringDistanceMetrics.py (TC-CLU-011..016,
 distance metrics), Test_ClusteringAlgorithms.py (TC-CLU-017..027, clustering
-algorithms), and Test_ClusteringService.py (TC-CLU-028..032, the clustering
+algorithms), and Test_ClusteringService.py (TC-CLU-028..033, the clustering
 service facade). The shared prefix and continuous numbering let the family be
 read as one coherent suite despite living in separate files.
 

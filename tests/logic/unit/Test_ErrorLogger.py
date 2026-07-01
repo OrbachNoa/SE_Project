@@ -27,11 +27,11 @@ def test_error_logger_log_emits_correctly_formatted_message(caplog):
         context={"file": "test.txt"},
         recoverable=True
     )
-    
+
     # Act
     with caplog.at_level(logging.WARNING):
         result = logger.log(info)
-    
+
     # Assert
     assert result is info
     assert len(caplog.records) == 1
@@ -52,13 +52,13 @@ def test_configure_default_logging_no_op_when_handlers_exist():
     original_handlers = root.handlers[:]
     test_handler = logging.NullHandler()
     root.addHandler(test_handler)
-    
+
     try:
         handler_count_before = len(root.handlers)
-        
+
         # Act
         configure_default_logging()
-        
+
         # Assert
         assert len(root.handlers) == handler_count_before
         assert test_handler in root.handlers

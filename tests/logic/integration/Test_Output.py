@@ -67,10 +67,11 @@ def test_format_schedule_contains_semester_and_moed_section_headers(
     output = TextFileWriter().formatSchedule(schedule)
     # Assert — Check that the names of Semesters and Moeds are present.
     out_upper = output.upper()
-    assert "FALL" in out_upper
-    assert "SPRI" in out_upper
-    assert "ALEPH" in out_upper
-    assert "BET" in out_upper
+    import re
+    assert re.search(r"\bFALL\b", out_upper)
+    assert re.search(r"\bSPRI\b", out_upper)
+    assert re.search(r"\bALEPH\b", out_upper)
+    assert re.search(r"\bBET\b", out_upper)
 
 
 # ===========================================================================

@@ -1,6 +1,6 @@
 """Unit tests for the ExtendedFeatureComputer.
 
-Covers extended feature computations like MAX_REST_DAYS, verifying the negation 
+Covers extended feature computations like MAX_REST_DAYS, verifying the negation
 logic and display formatting used for scheduling metrics.
 """
 from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO

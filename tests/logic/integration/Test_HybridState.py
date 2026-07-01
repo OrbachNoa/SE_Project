@@ -87,7 +87,7 @@ def test_hybrid_state_total_pages(total_count, window_size, expected_pages, mock
     # Arrange
     mock_repository.count.return_value = total_count
     state = HybridScheduleResultState(mock_repository, window_size=window_size)
-    
+
     # Act
     pages = state.total_pages()
 
@@ -102,11 +102,11 @@ def test_hybrid_state_load_page(mock_repository, make_schedule_dto):
     mock_repository.count.return_value = 25
     mock_repository.get_raw_by_ids.return_value = ({}, {}, [])
     state = HybridScheduleResultState(mock_repository, window_size=10)
-    state._current_index = 3 
-    
+    state._current_index = 3
+
     # Act
     state.load_page(1)
-    
+
     # Assert
     assert state.current_page == 1
     assert state.current_index == 0
@@ -121,7 +121,7 @@ def test_hybrid_state_load_page_index_error(bad_page, mock_repository):
     # Arrange
     mock_repository.count.return_value = 25  # 3 pages: 0, 1, 2
     state = HybridScheduleResultState(mock_repository, window_size=10)
-    
+
     # Act & Assert
     with pytest.raises(IndexError):
         state.load_page(bad_page)
@@ -133,10 +133,10 @@ def test_hybrid_state_set_schedules(mock_repository):
     # Arrange
     state = HybridScheduleResultState(mock_repository, window_size=10)
     state._current_page_idx = 2
-    
+
     # Act
     state.set_schedules([])
-    
+
     # Assert
     assert state.current_page == 0
     mock_repository.clear.assert_called_once()
@@ -148,7 +148,7 @@ def test_hybrid_state_add_schedules_batch_does_not_fetch_window(mock_repository,
     # Arrange
     mock_repository.count.return_value = 18
     state = HybridScheduleResultState(mock_repository, window_size=10)
-    state._schedules = [make_schedule_dto() for _ in range(5)] 
+    state._schedules = [make_schedule_dto() for _ in range(5)]
     state._current_page_idx = 1
 
     # Act
@@ -164,8 +164,8 @@ def test_hybrid_state_add_schedules_batch_does_not_fetch_window(mock_repository,
 def test_hybrid_state_add_schedules_batch_at_capacity(mock_repository, make_schedule_dto):
     # Arrange
     state = HybridScheduleResultState(mock_repository, window_size=10)
-    state._schedules = [make_schedule_dto() for _ in range(10)] 
-    
+    state._schedules = [make_schedule_dto() for _ in range(10)]
+
     # Act
     state.add_schedules_batch(5)
 

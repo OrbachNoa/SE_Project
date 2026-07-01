@@ -521,7 +521,7 @@ def test_max_per_day_checker_bounds(existing_exams, expected, make_course, make_
 
     candidate = make_assignment(course=courses[3], exam_date=date(2026, 6, 1))
     checker = MaxExamsPerDayChecker(k=3)
-    
+
     # Act
     result = checker.check(candidate, schedule)
 

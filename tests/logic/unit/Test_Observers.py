@@ -41,12 +41,12 @@ def test_collecting_schedule_observer_collects_snapshots(make_assignment):
     schedule = ExamSchedule()
     assignment = make_assignment(exam_date=date(2026, 6, 1))
     schedule.addAssignment(assignment)
-    
+
     # Act
     observer.on_schedule_found(schedule)
     collected = observer.schedules[0]
     schedule.pop_last_assignment()
-    
+
     # Assert
     assert observer.should_cancel() is False
     assert len(observer.schedules) == 1
@@ -151,10 +151,10 @@ def test_queue_schedule_observer_with_null_cancel_event():
     # Arrange
     mock_queue = MagicMock()
     observer = QueueScheduleObserver(mock_queue, cancel_event=None, batch_size=5, slots=[])
-    
+
     # Act
     cancelled = observer.should_cancel()
-    
+
     # Assert
     assert cancelled is False
 
@@ -168,13 +168,13 @@ def test_streaming_schedule_observer_lifecycle(tmp_path, make_assignment):
     observer = StreamingScheduleObserver(str(output_file))
     schedule = ExamSchedule()
     schedule.addAssignment(make_assignment(exam_date=date(2026, 6, 1)))
-    
+
     empty_output = tmp_path / "empty_output.txt"
     empty_observer = StreamingScheduleObserver(str(empty_output))
-    
+
     error_output = tmp_path / "error_output.txt"
     error_observer = StreamingScheduleObserver(str(error_output))
-    
+
     # Act
     # 1. Test normal streaming write
     observer.on_schedule_found(schedule)
@@ -182,16 +182,16 @@ def test_streaming_schedule_observer_lifecycle(tmp_path, make_assignment):
     observer.on_finished()
     normal_output_exists = output_file.exists()
     normal_content = output_file.read_text(encoding="utf-8") if normal_output_exists else ""
-    
+
     # 2. Test empty results case
     empty_observer.on_finished()
     empty_output_exists = empty_output.exists()
     empty_content = empty_output.read_text(encoding="utf-8") if empty_output_exists else ""
-    
+
     # 3. Test error handling case
     error_observer.on_error("Disk Full")
     recorded_error = error_observer.error
-    
+
     # Assert
     assert observer.should_cancel() is False
     assert count_after_found == 1
@@ -199,10 +199,10 @@ def test_streaming_schedule_observer_lifecycle(tmp_path, make_assignment):
     assert normal_output_exists is True
     assert "=== Exam System Option 1 ===" in normal_content
     assert "Calculus 1" in normal_content
-    
+
     assert empty_output_exists is True
     assert empty_content == "No valid exam schedules were generated.\n"
-    
+
     assert recorded_error == "Disk Full"
 
 
@@ -213,15 +213,15 @@ def test_streaming_schedule_observer_unwritable_path(tmp_path, make_assignment):
     # Arrange - Set output_path to a directory, making writing fail
     invalid_path = tmp_path / "invalid_dir"
     invalid_path.mkdir()
-    
+
     observer = StreamingScheduleObserver(str(invalid_path))
     schedule = ExamSchedule()
     schedule.addAssignment(make_assignment(exam_date=date(2026, 6, 1)))
-    
+
     # Act & Assert (writing a schedule fails)
     with pytest.raises(OSError):
         observer.on_schedule_found(schedule)
-        
+
     # Act & Assert (writing default empty footer fails)
     empty_observer = StreamingScheduleObserver(str(invalid_path))
     with pytest.raises(OSError):
