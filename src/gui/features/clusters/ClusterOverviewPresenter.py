@@ -225,20 +225,6 @@ class ClusterOverviewPresenter:
                 f"Note: only {active_k} families could be formed — "
                 "the data may not vary enough on these criteria."
             )
-        coordinator = self._controller.get_cluster_coordinator()
-        if coordinator and coordinator.flat_criteria:
-            _flat = coordinator.flat_criteria
-            _names = [criterion_label(c) for c in _flat]
-            _he = any('א' <= _c <= 'ת' for _c in (parts[0] if parts else ""))
-            if len(_names) > 3:
-                _suffix = f" ועוד {len(_names) - 3}" if _he else f" +{len(_names) - 3} more"
-            else:
-                _suffix = ""
-            _shown = ", ".join(_names[:3])
-            if _he:
-                parts.append(f"ללא השפעה (אין שונות): {_shown}{_suffix}")
-            else:
-                parts.append(f"Unused (no variation): {_shown}{_suffix}")
         self._view.set_interpretation("\n\n".join(parts))
 
         self._view.render_cards(cards)

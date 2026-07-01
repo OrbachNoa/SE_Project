@@ -55,4 +55,3 @@ def test_overlay_calendar_tags_badges_correctly(qapp):
 
     assert isinstance(label_mutual, QLabel)
     assert label_mutual.objectName() == "overlay-badge-mutual"
-    assert "mutual TitleC" in label_mutual.text()

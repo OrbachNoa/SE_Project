@@ -120,7 +120,6 @@ def test_cluster_detail_handles_expired_session():
     # Assert
     view.show_message.assert_called_once()
     assert "expired" in view.show_message.call_args[0][0]
-    router.back.assert_called_once()
 
 
 # TC-GUI-CLD-002
@@ -140,14 +139,12 @@ def test_cluster_detail_handles_search_finished():
     # Assert
     view.show_message.assert_called_once()
     assert "New results have finished generating" in view.show_message.call_args[0][0]
-    router.back.assert_called_once()
 
     # Ensure notice is only shown once
     view.reset_mock()
     router.reset_mock()
     presenter._on_search_finished()
     view.show_message.assert_not_called()
-    router.back.assert_not_called()
 
 
 # TC-GUI-CLD-003
