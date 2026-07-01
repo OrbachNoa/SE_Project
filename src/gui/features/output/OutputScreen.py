@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget, QMenu
 
 from gui.common.components.HeaderWidget import HeaderWidget
 from gui.common.components.OutputCalendarWidget import OutputCalendarWidget
-from gui.common.helpers import create_divider
+from gui.common.helpers import create_divider, prompt_save_file
 from gui.core.screen import Screen
 from gui.features.output.OutputScreenPresenter import OutputScreenPresenter
 from gui.features.output.widgets.SchedulePdfExporter import export_schedule_pdf
@@ -93,7 +93,19 @@ class OutputScreen(Screen):
     # Connect UI signals to the presenter logic
     def _connect_events(self) -> None:
         self.solution_bar.back_btn.clicked.connect(self._presenter.on_back)
-        self.solution_bar.export_btn.clicked.connect(self._presenter.on_export_pdf)
+
+        export_menu = QMenu(self)
+        pdf_action = export_menu.addAction("Export as PDF")
+        txt_action = export_menu.addAction("Export as TXT")
+        excel_action = export_menu.addAction("Export as Excel")
+        self.solution_bar.export_btn.setMenu(export_menu)
+
+        pdf_action.triggered.connect(self._presenter.on_export_pdf)
+        txt_action.triggered.connect(self._presenter.on_export_txt)
+        excel_action.triggered.connect(self._presenter.on_export_excel)
+
+        self.solution_bar.sort_btn.clicked.connect(self._on_open_sort_panel)
+        self.solution_bar.clusters_btn.clicked.connect(self._on_open_clusters)
         self.solution_bar.prev_btn.clicked.connect(self._presenter.on_prev_solution)
         self.solution_bar.next_btn.clicked.connect(self._presenter.on_next_solution)
         self.solution_bar.solution_input.returnPressed.connect(self._presenter.on_jump_to_solution)
@@ -109,11 +121,14 @@ class OutputScreen(Screen):
         if "Solution" in text and "/" in text:
             parts = text.split("/")
             solution_num = parts[0].replace("Solution", "").strip()
+            total = parts[1].strip()
             if not self.solution_bar.solution_input.hasFocus():
                 self.solution_bar.solution_input.setText(solution_num)
+            self.solution_bar.total_solutions_label.setText(f"/ {total}")
         else:
             if not self.solution_bar.solution_input.hasFocus():
                 self.solution_bar.solution_input.clear()
+            self.solution_bar.total_solutions_label.setText("/ 0")
 
     # Update enabled/disabled state of solution navigation buttons
     def set_solution_controls(self, can_prev: bool, can_next: bool, can_export: bool) -> None:
@@ -173,9 +188,20 @@ class OutputScreen(Screen):
     def show_export_error(self, message: str) -> None:
         QMessageBox.critical(self, "Export error", message)
 
+    def ask_save_path(self, default_name: str) -> str:
+        return prompt_save_file(self, "Save schedule", default_name, "Text files (*.txt)")
+    
+    def ask_save_path_excel(self, default_name: str) -> str:
+        return prompt_save_file(self, "Save schedule as Excel", default_name, "Excel files (*.xlsx)")
+
+    def show_message(self, message: str) -> None:
+        QMessageBox.information(self, "Export", message)
+
     # Export functionality
     def export_schedule_pdf(self, schedule_view, current_index: int) -> None:
-        export_schedule_pdf(schedule_view, current_index, parent=self)
+        export_schedule_pdf(
+            schedule_view, current_index, parent=self, on_error=self._presenter.map_export_error
+        )
 
     # Helpers for UI focus and input
     def focus_back_button(self) -> None:
@@ -218,6 +244,29 @@ class OutputScreen(Screen):
     def _on_export_pdf(self) -> None:
         self._presenter.on_export_pdf()
 
+    def _on_open_sort_panel(self) -> None:
+        from gui.features.output.widgets.SortConfigPanel import SortConfigPanel
+        current_priority = self._presenter.get_current_sort_priority()
+        dialog = SortConfigPanel(current_priority, self)
+        dialog.config_changed.connect(self._presenter.on_sort_config_changed)
+        dialog.exec()
+
+    def _on_open_clusters(self) -> None:
+        """Navigate to the cluster overview screen (registered as "clusters")."""
+        from PyQt6.QtCore import QCoreApplication
+
+        from gui.common.BusyCursorGuard import BusyCursorGuard
+
+        with BusyCursorGuard():
+            self.solution_bar.clusters_btn.setText("Loading Clusters...")
+            self.solution_bar.clusters_btn.setEnabled(False)
+            QCoreApplication.processEvents()
+            try:
+                self._presenter.open_clusters()
+            finally:
+                self.solution_bar.clusters_btn.setText("View Clusters")
+                self.solution_bar.clusters_btn.setEnabled(True)
+
     def _on_prev_month(self) -> None:
         self._presenter.on_prev_period()
 
@@ -234,7 +283,7 @@ class OutputScreen(Screen):
         self._presenter.on_enter()
 
     def on_leave(self) -> None:
-        pass
+        self._presenter.on_leave()
 
     @property
     def _prev_btn(self):

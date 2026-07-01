@@ -1,14 +1,28 @@
+"""Unit tests for the core domain model: Course, ExamPeriod, ExamSchedule,
+ProgramEntry, and the Semester/Moed/EvalType enums.
+
+Covers Course.hasExam() (only EXAM courses need scheduling), ExamPeriod's
+availableDates property and its construction-time guard against a
+non-strictly-increasing date range, ExamSchedule's addAssignment/getByDate,
+ProgramEntry's year and program-code validation, and that each enum
+contains exactly its expected members (no silent additions or removals).
+
+Conventions:
+- Each test carries a unique TC-DOM-NNN identifier in the comment block
+  above its definition, numbered sequentially, grouped under a section
+  divider per class/concept.
+- Each test body is split into Arrange / Act / Assert sections — merged
+  into a single Act & Assert only where the assertion is itself a
+  `pytest.raises` context manager (parametrized inputs already serve as
+  the arrangement, so there is nothing left to set up separately).
+- `make_course`, `make_period`, `make_program_entry`, `make_assignment`,
+  and `empty_schedule` come from the shared fixtures in tests/conftest.py.
+"""
 from datetime import date
 import pytest
 
-from src.models.Enums import EvalType, Semester, Moed, Requirement
-from src.models.Domain import (
-    Course,
-    ProgramEntry,
-    ExamPeriod,
-    ExamAssignment,
-    ExamSchedule,
-)
+from src.models.Enums import EvalType, Semester, Moed
+from src.models.Domain import ExamPeriod, ExamSchedule
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +134,7 @@ def test_get_available_dates_returns_both_days_for_two_day_period(make_period):
     (date(2026, 6, 30), date(2026, 6, 1)),   # start  > end (invalid)
 ])
 def test_exam_period_rejects_non_strict_start_before_end(start, end):
-    # Arrange + Act + Assert — constructor must raise.
+    # Act & Assert — constructor must raise.
     with pytest.raises(ValueError):
         ExamPeriod(
             semester=Semester.FALL,
@@ -191,7 +205,7 @@ def test_get_by_date_on_empty_schedule_returns_empty_list(empty_schedule):
 # ===========================================================================
 @pytest.mark.parametrize("good_year", [1, 2, 3, 4])
 def test_program_entry_accepts_year_in_range(good_year, make_program_entry):
-    # Arrange + Act — should not raise.
+    # Act — should not raise.
     entry = make_program_entry(year=good_year)
 
     # Assert
@@ -202,7 +216,7 @@ def test_program_entry_accepts_year_in_range(good_year, make_program_entry):
 # ===========================================================================
 @pytest.mark.parametrize("bad_year", [0, 5, -1, 10])
 def test_program_entry_rejects_year_out_of_range(bad_year, make_program_entry):
-    # Arrange + Act + Assert
+    # Act & Assert
     with pytest.raises(ValueError):
         make_program_entry(year=bad_year)
 
@@ -218,7 +232,7 @@ def test_program_entry_rejects_year_out_of_range(bad_year, make_program_entry):
     "",          # empty
 ])
 def test_program_entry_rejects_invalid_program_id(bad_code, make_program_entry):
-    # Arrange + Act + Assert
+    # Act & Assert
     with pytest.raises(ValueError):
         make_program_entry(program_id=bad_code)
 
@@ -231,7 +245,7 @@ def test_program_entry_rejects_invalid_program_id(bad_code, make_program_entry):
 # TC-DOM-014: Only FALL, SPRI, SUMM exist; nothing else.
 # ===========================================================================
 def test_semester_enum_has_exactly_three_members():
-    # Arrange + Act
+    # Act
     names = {m.name for m in Semester}
 
     # Assert
@@ -242,7 +256,7 @@ def test_semester_enum_has_exactly_three_members():
 # TC-DOM-015: Only ALEPH, BET, GIMEL exist.
 # ===========================================================================
 def test_moed_enum_has_exactly_three_members():
-    # Arrange + Act
+    # Act
     names = {m.name for m in Moed}
 
     # Assert
@@ -254,8 +268,207 @@ def test_moed_enum_has_exactly_three_members():
 # PROJECT, ATTENDANCE — and no others.
 # ===========================================================================
 def test_eval_type_enum_has_exactly_three_members():
-    # Arrange + Act
+    # Act
     names = {m.name for m in EvalType}
 
     # Assert
     assert names == {"EXAM", "PROJECT", "ATTENDANCE"}
+
+
+# ---------------------------------------------------------------------------
+# ExamSchedule.pop_last_assignment() and version counter — TC-DOM-017..020
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# TC-DOM-017: pop_last_assignment() must remove the most recently added
+# assignment, leaving earlier assignments untouched.
+# ===========================================================================
+def test_pop_last_assignment_removes_most_recent_assignment(
+    empty_schedule, make_course, make_assignment,
+):
+    # Arrange
+    schedule = empty_schedule
+    first = make_assignment(course=make_course(course_id="A"), exam_date=date(2026, 6, 1))
+    second = make_assignment(course=make_course(course_id="B"), exam_date=date(2026, 6, 5))
+    schedule.addAssignment(first)
+    schedule.addAssignment(second)
+
+    # Act
+    schedule.pop_last_assignment()
+
+    # Assert
+    assert len(schedule.assignments) == 1
+    assert schedule.assignments[0] is first
+
+
+# ===========================================================================
+# TC-DOM-018: pop_last_assignment() on an empty schedule must be a no-op --
+# no exception, no change to the (already empty) assignments list.
+# ===========================================================================
+def test_pop_last_assignment_on_empty_schedule_is_noop(empty_schedule):
+    # Arrange
+    schedule = empty_schedule
+
+    # Act
+    schedule.pop_last_assignment()
+
+    # Assert
+    assert schedule.assignments == []
+
+
+# ===========================================================================
+# TC-DOM-019: the version counter must increment by exactly one on every
+# addAssignment() and every pop_last_assignment() call, including the no-op
+# pop on an empty schedule's surrounding sequence.
+# ===========================================================================
+def test_version_counter_increments_on_add_and_pop(
+    empty_schedule, make_course, make_assignment,
+):
+    # Arrange
+    schedule = empty_schedule
+    assignment = make_assignment(course=make_course(course_id="A"), exam_date=date(2026, 6, 1))
+
+    # Act
+    version_before = schedule.version
+    schedule.addAssignment(assignment)
+    version_after_add = schedule.version
+    schedule.pop_last_assignment()
+    version_after_pop = schedule.version
+
+    # Assert
+    assert version_before == 0
+    assert version_after_add == 1
+    assert version_after_pop == 2
+
+
+# ===========================================================================
+# TC-DOM-020: pop_last_assignment() on an empty schedule must NOT bump the
+# version counter, since no mutation actually happened.
+# ===========================================================================
+def test_pop_last_assignment_on_empty_schedule_does_not_bump_version(empty_schedule):
+    # Arrange
+    schedule = empty_schedule
+
+    # Act
+    schedule.pop_last_assignment()
+
+    # Assert
+    assert schedule.version == 0
+
+
+# ---------------------------------------------------------------------------
+# Index accessors — TC-DOM-021..024
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# TC-DOM-021: date_course_ids_index() must return the date-to-course-id
+# index, where a date maps to the set of course ids assigned on that date.
+# ===========================================================================
+def test_date_course_ids_index_maps_date_to_course_ids(
+    empty_schedule, make_course, make_assignment,
+):
+    # Arrange
+    schedule = empty_schedule
+    target_date = date(2026, 6, 5)
+    schedule.addAssignment(make_assignment(course=make_course(course_id="A"), exam_date=target_date))
+    schedule.addAssignment(make_assignment(course=make_course(course_id="B"), exam_date=target_date))
+
+    # Act
+    index = schedule.date_course_ids_index()
+
+    # Assert
+    assert index[target_date] == {"A", "B"}
+
+
+# ===========================================================================
+# TC-DOM-022: course_assignments_index() must map each course id to the list
+# of its own assignments, in the order they were added.
+# ===========================================================================
+def test_course_assignments_index_maps_course_id_to_its_assignments(
+    empty_schedule, make_course, make_assignment,
+):
+    # Arrange
+    schedule = empty_schedule
+    course = make_course(course_id="A")
+    first = make_assignment(course=course, exam_date=date(2026, 6, 1), moed=Moed.ALEPH)
+    second = make_assignment(course=course, exam_date=date(2026, 6, 11), moed=Moed.BET)
+    schedule.addAssignment(first)
+    schedule.addAssignment(second)
+
+    # Act
+    index = schedule.course_assignments_index()
+
+    # Assert
+    assert index["A"] == [first, second]
+
+
+# ===========================================================================
+# TC-DOM-023: ordinal_course_ids_index() must return the ordinal-keyed dict
+# when use_ordinal_index=True was requested at construction time.
+# ===========================================================================
+def test_ordinal_course_ids_index_returns_dict_when_enabled(make_course, make_assignment):
+    # Arrange
+    schedule = ExamSchedule(use_ordinal_index=True)
+    target_date = date(2026, 6, 5)
+    schedule.addAssignment(make_assignment(course=make_course(course_id="A"), exam_date=target_date))
+
+    # Act
+    index = schedule.ordinal_course_ids_index()
+
+    # Assert
+    assert index[target_date.toordinal()] == {"A"}
+
+
+# ===========================================================================
+# TC-DOM-024: ordinal_course_ids_index() must return None when the schedule
+# was built without ordinal indexing (use_ordinal_index=False, the default).
+# ===========================================================================
+def test_ordinal_course_ids_index_returns_none_when_disabled(empty_schedule):
+    # Arrange
+    schedule = empty_schedule
+
+    # Act
+    result = schedule.ordinal_course_ids_index()
+
+    # Assert
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# course_ids_on_ordinal() fallback branch — TC-DOM-025..026
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# TC-DOM-025: with use_ordinal_index=False, course_ids_on_ordinal() must
+# fall back to a date-based lookup against _date_to_course_ids, instead of
+# using the (disabled) ordinal dict.
+# ===========================================================================
+def test_course_ids_on_ordinal_falls_back_to_date_lookup_when_disabled(
+    make_course, make_assignment,
+):
+    # Arrange
+    schedule = ExamSchedule(use_ordinal_index=False)
+    target_date = date(2026, 6, 5)
+    schedule.addAssignment(make_assignment(course=make_course(course_id="A"), exam_date=target_date))
+
+    # Act
+    result = schedule.course_ids_on_ordinal(target_date.toordinal())
+
+    # Assert
+    assert result == {"A"}
+
+
+# ===========================================================================
+# TC-DOM-026: with use_ordinal_index=False, an ordinal with no matching date
+# must return an empty set via the date-based fallback, not raise.
+# ===========================================================================
+def test_course_ids_on_ordinal_fallback_returns_empty_for_unknown_ordinal(empty_schedule):
+    # Arrange
+    schedule = empty_schedule
+    unused_ordinal = date(2026, 1, 1).toordinal()
+
+    # Act
+    result = schedule.course_ids_on_ordinal(unused_ordinal)
+
+    # Assert
+    assert result == frozenset()

@@ -1,8 +1,27 @@
-from datetime import date
-from unittest.mock import MagicMock
-import pytest
+"""Unit tests for Scheduler — the core backtracking engine.
 
-from src.models.Enums import EvalType, Semester, Moed, Requirement
+Covers the expected-count case (every pair of distinct candidate dates for
+two non-conflicting obligatory courses is a valid schedule), that multiple
+solutions and an impossible-conflict empty result are both handled without
+crashing, that every returned schedule is complete (one assignment per
+required course), that an injected custom checker is genuinely consulted,
+that a course shared across two programs is scheduled exactly once (not
+duplicated), that only EXAM-evaluated courses are ever scheduled, and the
+"no exams to schedule" base case for a program with zero EXAM-eligible
+courses.
+
+Conventions:
+- Each test carries a unique TC-ENG-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- `make_course`, `make_program_entry`, and `make_period` come from the
+  shared fixtures in tests/conftest.py; `_default_checkers()` below is a
+  local helper with no conftest equivalent.
+"""
+from datetime import date
+
+from src.models.Enums import EvalType, Requirement
+from src.models.ExamSchedule import ExamAssignment
 from src.logic.checkers.ProgramYearConflictChecker import ProgramYearConflictChecker
 from src.logic.checkers.MoedOrderChecker import MoedOrderChecker
 from src.logic.Scheduler import Scheduler
@@ -126,7 +145,7 @@ def test_every_returned_schedule_is_complete(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
+    # Assert
     # - expect more than 0 valid schedules
     # - expect every schedule to have exactly 4 assignments
     assert len(schedules) > 0
@@ -163,7 +182,7 @@ def test_scheduler_uses_injected_custom_checker(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
+    # Assert
     # - expect an empty list instead of crashing
     # - expect the custom checker to be called
     assert schedules == []
@@ -195,7 +214,7 @@ def test_courses_shared_across_programs_are_scheduled_once(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
+    # Assert
     # - expect more than 0 valid schedules
     # - expect every schedule to have exactly one assignment whose course is the shared course
     assert len(schedules) > 0
@@ -208,7 +227,7 @@ def test_courses_shared_across_programs_are_scheduled_once(
 
 # ===========================================================================
 # TC-ENG-007: Only EXAM courses are scheduled.
-# Check that courses like projects or attendance-only are ignored 
+# Check that courses like projects or attendance-only are ignored
 # by the scheduler.
 # ===========================================================================
 def test_only_exam_courses_are_scheduled(
@@ -232,7 +251,7 @@ def test_only_exam_courses_are_scheduled(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
+    # Assert
     # - expect more than 0 valid schedules
     # - expect only the EXAM course to appear in any schedule
     assert len(schedules) > 0
@@ -243,7 +262,7 @@ def test_only_exam_courses_are_scheduled(
 
 # ===========================================================================
 # TC-ENG-008: Program with no EXAM courses returns empty schedule.
-# If a study program only has 'Project' or 'Attendance' courses, 
+# If a study program only has 'Project' or 'Attendance' courses,
 # the system should just return an empty schedule.
 # ===========================================================================
 def test_program_with_only_non_exam_courses_returns_empty_schedule(
@@ -266,12 +285,49 @@ def test_program_with_only_non_exam_courses_returns_empty_schedule(
     # Act - pass the observer to the scheduler instead of UI logic
     scheduler.generateSchedules(slots, observer)
     schedules = observer.schedules
-    # Assert 
-    # - expect more than 0 valid schedules
-    # - expect only the EXAM course to appear in any schedule
-    if len(schedules) > 0:
-        for s in schedules:
-            assert len(s.assignments) == 0, (
-                "A program with no 'Exam' courses should not create "
-                "any exam schedules."
-            )
+    # Assert — with zero EXAM-eligible courses, SlotBuilder produces zero
+    # slots, and the scheduler's "no exams to schedule" base case
+    # (`if not slots: return`) returns immediately with no results at all —
+    # not a single schedule containing zero assignments.
+    assert schedules == []
+
+
+# ===========================================================================
+# TC-ENG-009: Seed assignments are matched to their real slots by identity, not
+# by their position in the slots list. This protects worker resumes from
+# duplicating the seeded course when the seed is not a strict prefix.
+# ===========================================================================
+def test_seed_assignments_do_not_have_to_be_slot_prefix(
+    make_course, make_program_entry, make_period,
+):
+    # Arrange
+    pe = make_program_entry(program_id="83101", year=2,
+                            requirement=Requirement.ELECTIVE)
+    courses = [
+        make_course(course_id=f"1010{i}", name=f"C{i}", program_entries=[pe])
+        for i in range(3)
+    ]
+    period = make_period(
+        start=date(2026, 6, 1), end=date(2026, 6, 2), excluded=[]
+    )
+    slots = SlotBuilder([period]).build(courses)
+    seeded_slot = slots[1]
+    seed = [
+        ExamAssignment(
+            course=seeded_slot.course,
+            date=seeded_slot.candidateDates[0],
+            moed=seeded_slot.moed,
+            semester=seeded_slot.semester,
+        )
+    ]
+    scheduler = Scheduler([])
+    observer = CollectingScheduleObserver()
+
+    # Act
+    scheduler.generateSchedules(slots, observer, seed_assignments=seed, max_results=1)
+
+    # Assert
+    assert len(observer.schedules) == 1
+    course_ids = [a.course.courseId for a in observer.schedules[0].assignments]
+    assert course_ids.count(seeded_slot.course.courseId) == 1
+    assert set(course_ids) == {slot.course.courseId for slot in slots}

@@ -1,3 +1,26 @@
+"""Unit tests for the file_io.parsers package: the abstract FileParser base
+class's separator validation, and the three concrete parsers
+(CoursesFileParser, ExamPeriodsFileParser, ProgramsFileParser) plus the
+ParserFactory that creates them.
+
+Each parser reads a UTF-8 text file, splits on the configured separator
+(default '$$$$'), and returns typed domain objects. Tests cover separator
+validation (default and custom separators, partial/missing separators),
+each parser's happy path against a well-formed fixture, field-level
+rejection of invalid values (bad requirement/evaluation/semester/moed,
+malformed or impossible dates, non-5-digit program codes), duplicate
+detection (duplicate (semester, moed) period pairs), the empty-file edge
+case for both CoursesFileParser and ProgramsFileParser, and
+ParserFactory's registry lookup/registration/multi-file parsing.
+
+Conventions:
+- Each test carries a unique TC-PRS-NNN identifier in the comment block
+  above its definition, numbered sequentially, grouped under a section
+  divider per parser class.
+- Each test body is split into Arrange / Act / Assert sections.
+- No conftest fixture models raw file content, so every test builds its
+  fixture file directly via `tmp_path`.
+"""
 from datetime import date
 import pytest
 
@@ -37,8 +60,8 @@ def test_validate_separator_accepts_valid_quad_dollar():
     content = f"record_one\n{SEP}\nrecord_two"
     # Act
     result = FileParser.validateSeparator(content)
-    # Assert
-    assert result is True or result is None  # spec allows either
+    # Assert — validateSeparator returns True on its only success path.
+    assert result is True
 
 # ===========================================================================
 # TC-PRS-002: validateSeparator rejects content that contains no '$$$$'
@@ -60,7 +83,7 @@ def test_validate_separator_tolerates_surrounding_whitespace():
     # Act
     result = FileParser.validateSeparator(content)
     # Assert
-    assert result is True or result is None
+    assert result is True
 
 
 # ===========================================================================
@@ -77,7 +100,7 @@ def test_validate_separator_rejects_partial_separator(partial):
 
 
 # ===========================================================================
-# TC-PRS-005: FileParser.validateSeparator accepts custom separators (e.g. ',') 
+# TC-PRS-005: FileParser.validateSeparator accepts custom separators (e.g. ',')
 # and rejects the default one ('$$$$') when configured so.
 # ===========================================================================
 def test_validate_separator_with_comma():
@@ -86,7 +109,7 @@ def test_validate_separator_with_comma():
     # Act
     result = FileParser.validateSeparator(content, separator=",")
     # Assert
-    assert result is True or result is None
+    assert result is True
 
 
 # ===========================================================================
@@ -170,8 +193,8 @@ def test_courses_parser_handles_multiple_programs_per_course(tmp_path):
 
 
 # ===========================================================================
-# TC-PRS-009: Requirement and Evaluation field values appear in sentence case in the file 
-# ("Obligatory","Elective", "Exam", "Project", "Attendance"). 
+# TC-PRS-009: Requirement and Evaluation field values appear in sentence case in the file
+# ("Obligatory","Elective", "Exam", "Project", "Attendance").
 # The parser must accept them in that form.
 # Test runs for each possible valid Requirement value.
 # ===========================================================================
@@ -199,19 +222,17 @@ def test_courses_parser_accepts_sentence_case_requirement(
 
 
 # ===========================================================================
-# TC-PRS-010: Test that invalid Requirement values are rejected.
-# A course requirement must be either 'Obligatory' or 'Elective'.
-# Anything else should cause an error.
+# TC-PRS-010..011: Test that invalid course fields (requirement, evaluation) are rejected.
 # ===========================================================================
-def test_courses_parser_rejects_invalid_requirement(tmp_path):
-    # Arrange — Create a course with a bad requirement ('Recommended').
-    fixture = tmp_path / "course_bad_requirement.txt"
+@pytest.mark.parametrize("req_line, eval_line", [
+    ("83101,1,FALL,Recommended", "Exam"),  # TC-PRS-010: bad requirement ('Recommended')
+    ("83101,1,FALL,Obligatory", "Quiz"),   # TC-PRS-011: bad evaluation ('Quiz')
+])
+def test_courses_parser_rejections(tmp_path, req_line, eval_line):
+    # Arrange
+    fixture = tmp_path / "course_bad.txt"
     fixture.write_text(
-        "Calculus 1\n"
-        "10101\n"
-        "Dr. Cohen\n"
-        "83101,1,FALL,Recommended\n"   
-        "Exam\n",
+        f"Calculus 1\n10101\nDr. Cohen\n{req_line}\n{eval_line}\n",
         encoding="utf-8",
     )
 
@@ -222,47 +243,20 @@ def test_courses_parser_rejects_invalid_requirement(tmp_path):
 
 
 # ===========================================================================
-# TC-PRS-011: Test that invalid Evaluation values are rejected.
-# A course evaluation must be 'Exam', 'Project', or 'Attendance'.
-# ===========================================================================
-def test_courses_parser_rejects_invalid_evaluation(tmp_path):
-    # Arrange — Create a course with a bad evaluation ('Quiz').
-    fixture = tmp_path / "course_bad_evaluation.txt"
-    fixture.write_text(
-        "Calculus 1\n"
-        "10101\n"
-        "Dr. Cohen\n"
-        "83101,1,FALL,Obligatory\n"
-        "Quiz\n",                        
-        encoding="utf-8",
-    )
-
-    # Act + Assert — The system must raise a ValueError.
-    with pytest.raises(ValueError):
-        CoursesFileParser().parse(str(fixture))
-
-
-
-# ===========================================================================
-# TC-PRS-012: Test that an empty courses file is handled properly.
-# If the courses file has absolutely no text in it, the system should 
-# either reject it safely or return an empty list. It must not crash.
+# TC-PRS-012: An empty courses file must not crash the parser.
 # ===========================================================================
 def test_courses_parser_handles_empty_file(tmp_path):
     # Arrange — Create a file with zero bytes.
     fixture = tmp_path / "courses_empty.txt"
     fixture.write_text("", encoding="utf-8")
 
-    # Act — Try to read the empty file.
-    try:
-        courses = CoursesFileParser().parse(str(fixture))
-    except ValueError:
-        return  # This is okay: the parser safely rejected the empty file.
-    except Exception as e:
-        pytest.fail(f"Empty courses file caused a crash: {e}")
+    # Act — empty content fails the '$$$$' separator check, but the
+    # fallback line-count guard (0 lines) tolerates it, so parsing falls
+    # through to zero records rather than raising.
+    courses = CoursesFileParser().parse(str(fixture))
 
-    # Assert — If it didn't raise an error, it must return an empty list.
-    assert courses == [] or len(courses) == 0
+    # Assert
+    assert courses == []
 
 
 
@@ -276,7 +270,7 @@ def test_courses_parser_handles_empty_file(tmp_path):
 # ExamPeriod objects with correct semester/moed/date boundaries.
 # ===========================================================================
 def test_exam_periods_parser_returns_correct_period_list(tmp_path):
-    # Arrange — two periods per SRS Appendix A line order.
+    # Arrange — two periods in the expected line order.
     fixture = tmp_path / "periods_valid.txt"
     fixture.write_text(
         "FALL, Aleph\n"
@@ -320,79 +314,26 @@ def test_exam_periods_parser_expands_excluded_date_range(tmp_path):
 
 
 # ===========================================================================
-# TC-PRS-015: An exam period whose start date is NOT strictly less than 
-# its end date must cause a parse error.
+# TC-PRS-015..018: Test that invalid periods (bad dates, ranges, semester, moed) are rejected.
 # ===========================================================================
-@pytest.mark.parametrize("start,end", [
-    ("11-03-2026", "11-03-2026"),   # start == end  → invalid per SRS
-    ("11-03-2026", "01-03-2026"),   # start  > end  → invalid per SRS
+@pytest.mark.parametrize("line1, line2", [
+    ("FALL, Aleph", "11-03-2026, 11-03-2026"),  # TC-PRS-015: start == end
+    ("FALL, Aleph", "11-03-2026, 01-03-2026"),  # TC-PRS-015: start > end
+    ("FALL, Aleph", "2026-03-11, 30-06-2026"),  # TC-PRS-016: bad format
+    ("FALL, Aleph", "11/03/2026, 30-06-2026"),  # TC-PRS-016: wrong sep
+    ("FALL, Aleph", "11-Mar-2026, 30-06-2026"), # TC-PRS-016: letters
+    ("FALL, Aleph", "11032026, 30-06-2026"),    # TC-PRS-016: no dashes
+    ("FALL, Aleph", "32-03-2026, 30-06-2026"),  # TC-PRS-016: impossible day
+    ("FALL, Aleph", "11-13-2026, 30-06-2026"),  # TC-PRS-016: impossible month
+    ("WINTER, Aleph", "01-02-2026, 28-02-2026"),# TC-PRS-017: bad semester
+    ("FALL, Delta", "01-02-2026, 28-02-2026"),  # TC-PRS-018: bad moed
 ])
-def test_exam_periods_parser_rejects_non_strict_date_range(tmp_path, start, end):
-    # Arrange — single period with an invalid date range.
-    fixture = tmp_path / "periods_bad_range.txt"
-    fixture.write_text(
-        f"FALL, Aleph\n{start}, {end}\n",
-        encoding="utf-8",
-    )
+def test_exam_periods_parser_rejections(tmp_path, line1, line2):
+    # Arrange — single period with an invalid property.
+    fixture = tmp_path / "periods_bad.txt"
+    fixture.write_text(f"{line1}\n{line2}\n", encoding="utf-8")
+
     # Act + Assert
-    with pytest.raises(ValueError):
-        ExamPeriodsFileParser().parse(str(fixture))
-
-
-# ===========================================================================
-# TC-PRS-016: Invalid date formats — wrong order, letters, missing dashes — 
-# must cause a parse error.
-# ===========================================================================
-@pytest.mark.parametrize("bad_date", [
-    "2026-03-11",   # not DD-MM-YYYY
-    "11/03/2026",   # wrong separator
-    "11-Mar-2026",  # month as letters
-    "11032026",     # missing dashes
-    "32-03-2026",   # impossible day
-    "11-13-2026",   # impossible month
-])
-def test_exam_periods_parser_rejects_invalid_date_formats(tmp_path, bad_date):
-    # Arrange — single period whose start date is invalid.
-    fixture = tmp_path / "periods_bad_date.txt"
-    fixture.write_text(
-        f"FALL, Aleph\n{bad_date}, 30-06-2026\n",
-        encoding="utf-8",
-    )
-    # Act + Assert
-    with pytest.raises(ValueError):
-        ExamPeriodsFileParser().parse(str(fixture))
-
-
-# ===========================================================================
-# TC-PRS-017: Test that invalid Semester values are rejected.
-# A semester must be 'FALL', 'SPRI', or 'SUMM'.
-# ===========================================================================
-def test_exam_periods_parser_rejects_invalid_semester(tmp_path):
-    # Arrange — Create a period with a bad semester ('WINTER').
-    fixture = tmp_path / "periods_bad_semester.txt"
-    fixture.write_text(
-        "WINTER, Aleph\n01-02-2026, 28-02-2026\n",
-        encoding="utf-8",
-    )
-
-    # Act + Assert — The system must raise a ValueError.
-    with pytest.raises(ValueError):
-        ExamPeriodsFileParser().parse(str(fixture))
-
-
-# ===========================================================================
-# TC-PRS-018: Test that invalid Moed values are rejected.
-# A moed must be 'Aleph', 'Bet', or 'Gimel'.
-# ===========================================================================
-def test_exam_periods_parser_rejects_invalid_moed(tmp_path):
-    # Arrange — Create a period with a bad moed ('Delta').
-    fixture = tmp_path / "periods_bad_moed.txt"
-    fixture.write_text(
-        "FALL, Delta\n01-02-2026, 28-02-2026\n",
-        encoding="utf-8",
-    )
-
-    # Act + Assert — The system must raise a ValueError.
     with pytest.raises(ValueError):
         ExamPeriodsFileParser().parse(str(fixture))
 
@@ -405,12 +346,12 @@ def test_exam_periods_parser_rejects_invalid_moed(tmp_path):
 # codes produces three ProgramEntry objects.
 # ===========================================================================
 def test_programs_parser_returns_valid_program_entries(tmp_path):
-    # Arrange — comma-separated codes per SRS §1.1 example format.
+    # Arrange — comma-separated codes in the expected example format.
     fixture = tmp_path / "programs_valid.txt"
     fixture.write_text("83101, 83102, 83108\n", encoding="utf-8")
     # Act
     entries = ProgramsFileParser().parse(str(fixture))
-    # Assert — three entries, all codes belong to the SRS valid set.
+    # Assert — three entries, all codes belong to the valid program-code set.
     assert len(entries) == 3
     codes = entries
     assert codes == ["83101", "83102", "83108"]
@@ -420,7 +361,7 @@ def test_programs_parser_returns_valid_program_entries(tmp_path):
 
 # ===========================================================================
 # TC-PRS-020: Check that the parser accepts 83182 as a valid program code.
-# This code is valid in the SRS, even though it is not in the 83101-83115 range.
+# This code is valid even though it is not in the 83101-83115 range.
 # ===========================================================================
 def test_programs_parser_accepts_non_contiguous_valid_code(tmp_path):
     # Arrange — code 83182 (Quantum Engineering).
@@ -434,26 +375,19 @@ def test_programs_parser_accepts_non_contiguous_valid_code(tmp_path):
 
 
 # ===========================================================================
-# TC-PRS-021: Test that an empty programs file is handled properly.
-# If the programs file is completely empty, the system must not crash.
-# It should safely reject it or return an empty list.
+# TC-PRS-021: An empty programs file must not crash the parser.
 # ===========================================================================
-def test_programs_parser_rejects_empty_file(tmp_path):
+def test_programs_parser_returns_empty_list_for_empty_file(tmp_path):
     # Arrange — Create a file with zero bytes.
     fixture = tmp_path / "programs_empty.txt"
     fixture.write_text("", encoding="utf-8")
 
-    # Act + Assert — Try to read the file.
-    try:
-        entries = ProgramsFileParser().parse(str(fixture))
-    except ValueError:
-        return  # This is okay: the parser rejected the empty file.
-    except Exception as e:
-        pytest.fail(f"Empty programs file caused a crash: {e}")
+    # Act — an empty programs file returns immediately with no entries.
+    entries = ProgramsFileParser().parse(str(fixture))
 
-    # If it didn't raise an error, it must return an empty list.
-    assert entries == [] or len(entries) == 0
-    
+    # Assert
+    assert entries == []
+
 
 # ===========================================================================
 # TC-PRS-022: ProgramsFileParser uses a comma separator. If a different separator than ','
@@ -527,7 +461,7 @@ def test_periods_parser_accepts_different_moed_same_semester(tmp_path):
 def test_parser_factory_supported_types():
     # Act - Get the supported file types from the ParserFactory
     supported = ParserFactory.supported_types()
-    
+
     # Assert - check that the supported file types are correct
     assert "courses" in supported
     assert "periods" in supported
@@ -539,7 +473,7 @@ def test_parser_factory_supported_types():
 def test_parser_factory_create_valid():
     # Act - Get the supported file types from the ParserFactory
     parser = ParserFactory.create("courses")
-    
+
     # Assert - check that the parser is of the correct type
     assert isinstance(parser, CoursesFileParser)
 
@@ -575,19 +509,19 @@ def test_parser_factory_parse_files(tmp_path):
         "Exam\n",
         encoding="utf-8"
     )
-    
+
     programs_file = tmp_path / "programs.txt"
     programs_file.write_text("83101, 83102\n", encoding="utf-8")
-    
+
     mappings = {
         "courses": str(courses_file),
         "programs": str(programs_file),
         "periods": None
     }
-    
+
     # Act - Parse the files
     results = ParserFactory.parse_files(mappings)
-    
+
     # Assert - Check that the files were parsed correctly
     assert "courses" in results
     assert "programs" in results

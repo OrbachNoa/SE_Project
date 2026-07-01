@@ -1,5 +1,6 @@
 # region Imports
 from .InputValidator import IInputValidator
+from src.config import MAX_PROGRAMS
 # endregion
 
 class MaxProgramsValidator(IInputValidator):
@@ -8,7 +9,7 @@ class MaxProgramsValidator(IInputValidator):
     """
 
     # Maximum number of programs that can be selected.
-    MAX_PROGRAMS = 5
+    MAX_PROGRAMS = MAX_PROGRAMS
 
     def validate(self, selected_programs, master=None) -> bool:
         """
@@ -20,7 +21,7 @@ class MaxProgramsValidator(IInputValidator):
             return False
         return True
 
-    def error_message(self, selected_programs) -> str:
+    def error_message(self, selected_programs, master=None) -> str:
         """
         Returns an error message if the validation fails.
         """

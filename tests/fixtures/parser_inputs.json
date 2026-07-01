@@ -1,0 +1,17 @@
+{
+    "test_heuristic_request_parser_matches_english_keyword_to_criterion": "I want more rest between exams",
+    "test_heuristic_request_parser_matches_a_second_english_keyword_to_criterion": "please group by elective conflicts",
+    "test_heuristic_request_parser_matches_hebrew_keyword_to_criterion": "מנוחה בין בחינות",
+    "test_heuristic_request_parser_matches_a_second_hebrew_keyword_to_criterion": "עומס ביום אחד",
+    "test_heuristic_request_parser_english_emphasis_boosts_weight_to_three": "group mostly by spacing",
+    "test_heuristic_request_parser_hebrew_emphasis_boosts_weight_to_three": "בעיקר לפי עומס",
+    "test_heuristic_request_parser_without_emphasis_word_applies_no_weight_boost": "please group by elective conflicts",
+    "test_heuristic_request_parser_extracts_k_from_divided_into_n_groups": "divided into 3 groups",
+    "test_heuristic_request_parser_extracts_k_from_n_groups_suffix": "6 clusters please",
+    "test_heuristic_request_parser_extracts_k_from_hebrew_digit_pattern": "תן לי 3 קבוצות",
+    "test_heuristic_request_parser_extracts_k_from_spelled_out_english_number": "six groups please",
+    "test_heuristic_request_parser_extracts_k_from_spelled_out_hebrew_number": "תן לי שלוש קבוצות",
+    "test_heuristic_request_parser_ignores_a_digit_with_no_group_word": "at least 4 days between exams",
+    "test_heuristic_request_parser_falls_back_to_default_on_value_error": "I want more rest between exams",
+    "test_heuristic_request_parser_interpretation_hebrew_branch_for_hebrew_text": "מנוחה בין בחינות"
+}

@@ -27,9 +27,18 @@ class StreamingScheduleObserver(IScheduleObserver):
                 self._output_path, "w", encoding="utf-8", buffering=512 * 1024
             )
 
-        self._count += 1
-        body = self._writer.formatSchedule(schedule, self._date_cache, self._enum_cache)
-        self._file.write(f"=== Exam System Option {self._count} ===\n{body}\n\n")
+        next_count = self._count + 1
+        try:
+            body = self._writer.formatSchedule(schedule, self._date_cache, self._enum_cache)
+            self._file.write(f"=== Exam System Option {next_count} ===\n{body}\n\n")
+        except Exception as exc:
+            self._error = str(exc)
+            try:
+                self._close_file()
+            except Exception:
+                pass
+            raise
+        self._count = next_count
 
     def on_progress(self, value: int) -> None:
         """No-op for the CLI execution path."""
@@ -43,8 +52,7 @@ class StreamingScheduleObserver(IScheduleObserver):
         """Closes the file, or writes a 'no results' marker if no schedules were found."""
         
         if self._file is not None:
-            self._file.close()
-            self._file = None
+            self._close_file()
             return
 
         with open(self._output_path, "w", encoding="utf-8") as f:
@@ -54,7 +62,13 @@ class StreamingScheduleObserver(IScheduleObserver):
         """Stores the error message and closes the file handle if open."""
         self._error = message
         if self._file is not None:
+            self._close_file()
+
+    def _close_file(self) -> None:
+        """Close the streaming file handle and clear the stored reference."""
+        try:
             self._file.close()
+        finally:
             self._file = None
 
     @property

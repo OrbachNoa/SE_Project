@@ -1,8 +1,28 @@
+"""Integration tests for the full parse -> validate -> schedule -> write
+pipeline (`main.run_pipeline`), using real fixture files end-to-end — no
+mocks for parsers, validators, scheduler, or writer.
+
+Covers a fully valid run producing a correctly-formatted output file, an
+invalid program code being rejected with a message naming the bad code, a
+too-many-programs selection being rejected with a message naming the
+count and the limit, a course list with zero EXAM-eligible courses still
+completing and writing the empty-schedule placeholder, and a genuine
+same-program/same-year conflict resolving to zero schedules rather than a
+schedule that silently violates the conflict rule.
+
+Conventions:
+- Each test carries a unique TC-INT-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections.
+- No conftest fixture models the pipeline's file-path arguments, so each
+  test builds its own paths from the shared FIXTURES directory and uses
+  pytest's built-in `tmp_path` for the output file.
+"""
 from pathlib import Path
 import pytest
 
 # Import the main pipeline function.
-from src.entrypoints.main import run_pipeline
+from main import run_pipeline
 
 # Set the path to the folder where the test files (fixtures) are located.
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
@@ -45,25 +65,18 @@ def test_invalid_program_code_produces_error_no_output(tmp_path):
     programs_path = FIXTURES / "programs_bad_code.txt"
     output_path = tmp_path / "should_not_exist.txt"
 
-    # Act + Assert — The system should show an error and NOT create an output file.
-    raised = False
-    try:
+    # Act & Assert — The system must raise, and must NOT create an output file.
+    with pytest.raises(ValueError, match="99999"):
         run_pipeline(
             courses_file=str(courses_path),
             periods_file=str(periods_path),
             programs_file=str(programs_path),
             output_file=str(output_path),
         )
-    except ValueError as exc:
-        raised = True
-        assert "99999" in str(exc), \
-            "Error message does not reference the bad program code '99999'"
 
     # The file must NOT exist regardless of how the system failed.
-    assert not output_path.exists(), (
-        "Output file should not be created when validation fails; "
-        f"raised exception: {raised}"
-    )
+    assert not output_path.exists(), \
+        "Output file should not be created when validation fails"
 
 
 # ===========================================================================
@@ -76,7 +89,8 @@ def test_too_many_programs_produces_validation_error(tmp_path):
     programs_path = FIXTURES / "programs_too_many.txt"
     output_path = tmp_path / "should_not_exist.txt"
 
-    # Act + Assert — The system should stop and not create a file.
+    # Act + Assert — The system must raise, naming the count and the limit.
+    raised = False
     try:
         run_pipeline(
             courses_file=str(courses_path),
@@ -84,9 +98,13 @@ def test_too_many_programs_produces_validation_error(tmp_path):
             programs_file=str(programs_path),
             output_file=str(output_path),
         )
-    except ValueError:
-        pass  # acceptable failure mode
+    except ValueError as exc:
+        raised = True
+        assert "Too many programs selected" in str(exc), \
+            "Error message does not explain the too-many-programs failure"
 
+    assert raised is True, \
+        "Expected a ValueError for too many selected programs, but none was raised"
     # No output file should be created.
     assert not output_path.exists(), \
         "Output file should not be created when > 5 programs are selected"
@@ -110,10 +128,12 @@ def test_no_exam_courses_completes_with_empty_schedule(tmp_path):
         output_file=str(output_path),
     )
 
-    # Assert — The system should finish without crashing.
-    if output_path.exists():
-        content = output_path.read_text(encoding="utf-8")
-        assert isinstance(content, str)
+    # Assert — the writer always creates the file, even for an empty
+    # schedule list (it writes a placeholder line instead of skipping).
+    assert output_path.exists(), \
+        "Pipeline did not create an output file for the empty-schedule case"
+    content = output_path.read_text(encoding="utf-8")
+    assert "No valid exam schedules were generated." in content
 
 
 # ===========================================================================
@@ -132,13 +152,15 @@ def test_multi_program_conflict_detection_end_to_end(tmp_path):
         programs_file=str(programs_path),
         output_file=str(output_path),
     )
-    # Assert — The output must NOT show both courses together (since they conflict).
-    if output_path.exists():
-        content = output_path.read_text(encoding="utf-8")
-        # It's impossible to have both, so this should fail if both are there.
-        has_cal = "83001" in content or "Calculus 1" in content
-        has_lin = "83002" in content or "Linear Algebra" in content
-        assert not (has_cal and has_lin), (
-            "Pipeline produced a schedule with both conflicting courses; "
-            "ProgramYearConflictChecker did not block the conflict"
-        )
+    # Assert — the file must always be written, and the output must NOT
+    # show both courses together (since they conflict).
+    assert output_path.exists(), \
+        "Pipeline did not create an output file for the conflict case"
+    content = output_path.read_text(encoding="utf-8")
+    # It's impossible to have both, so this should fail if both are there.
+    has_cal = "83001" in content or "Calculus 1" in content
+    has_lin = "83002" in content or "Linear Algebra" in content
+    assert not (has_cal and has_lin), (
+        "Pipeline produced a schedule with both conflicting courses; "
+        "ProgramYearConflictChecker did not block the conflict"
+    )

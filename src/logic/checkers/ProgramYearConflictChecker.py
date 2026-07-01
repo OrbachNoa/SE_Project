@@ -1,4 +1,5 @@
 from .IConflictChecker import IConflictChecker
+from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.models.Enums import Requirement
 
 
@@ -11,13 +12,21 @@ class ProgramYearConflictChecker(IConflictChecker):
         # Keep selected programs here, so unrelated programs can be ignored.
         self._selected_programs = None
 
-    def precompute_conflicts(self, courses: list, selected_programs: list = None) -> None:
+
+    def prepare(self, courses: list, selected_programs: list = None, slots: list = None, selected_index=None) -> None:
+        """Uniform setup entry point used by the factory; delegates to the
+        existing precompute step. Slots are not needed by this checker."""
+        self.precompute_conflicts(courses, selected_programs, selected_index)
+
+
+    def precompute_conflicts(self, courses: list, selected_programs: list = None, selected_index=None) -> None:
         """Builds the conflict graph before scheduling starts."""
+        selected_index = selected_index or SelectedProgramIndex(courses, selected_programs)
         # Store selected programs as a set, so program lookups are O(1).
-        self._selected_programs = set(selected_programs) if selected_programs else None
+        self._selected_programs = selected_index.selected_set
 
         # Build each course entry map once, so pair checks do less work.
-        all_entries = self._build_all_entries(courses)
+        all_entries = self._build_all_entries(courses, selected_index)
 
         # Initialize an empty conflict set for each course.
         self._conflict_graph = {c.courseId: set() for c in courses}
@@ -40,13 +49,12 @@ class ProgramYearConflictChecker(IConflictChecker):
                         self._conflict_graph[c2.courseId].add(c1.courseId)
                         break
 
-    def _build_all_entries(self, courses: list) -> dict:
+    def _build_all_entries(self, courses: list, selected_index: SelectedProgramIndex) -> dict:
         """Builds course entry maps, so conflict checks can reuse them."""
         all_entries = {}
         for c in courses:
             all_entries[c.courseId] = {
-                (e.programId, e.year): e for e in c.programEntries
-                if not self._selected_programs or e.programId in self._selected_programs
+                (e.programId, e.year): e for e in selected_index.entries_for_course(c.courseId)
             }
         return all_entries
 
@@ -67,7 +75,7 @@ class ProgramYearConflictChecker(IConflictChecker):
             return False
 
         # Courses already scheduled on the same date.
-        courses_on_date = schedule.course_ids_on_date(assignment.date)
+        courses_on_date = schedule.date_course_ids_index().get(assignment.date)
         if not courses_on_date:
             return False
 

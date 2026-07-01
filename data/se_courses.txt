@@ -1,0 +1,83 @@
+Mathematical Logic
+30001
+Dr. Avi Katz
+83108,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Algorithms 1
+30002
+Prof. Ran Ben-David
+83108,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Advanced Systems Programming
+30003
+Dr. Noa Cohen
+83108,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Digital Logic Design
+30004
+Prof. Eyal Raz
+83108,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Introduction to Probability
+30005
+Dr. Yael Friedman
+83108,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Software Engineering Fundamentals
+30006
+Prof. Ilan Shapiro
+83108,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Computational Models
+30007
+Dr. Tal Levy
+83108,2,FALL,OBLIGATORY
+EXAM
+$$$$
+Software Engineering Project
+30008
+Prof. Dina Stern
+83108,3,SPRI,OBLIGATORY
+PROJECT
+$$$$
+Computability and Complexity
+30009
+Dr. Guy Mor
+83108,3,SPRI,OBLIGATORY
+EXAM
+$$$$
+Introduction to Statistics
+30010
+Prof. Hila Golan
+83108,3,SPRI,OBLIGATORY
+EXAM
+$$$$
+Digital Computer Architecture
+30011
+Dr. Oren Levi
+83108,3,SPRI,OBLIGATORY
+EXAM
+$$$$
+Microprocessors and Assembly Language
+30012
+Prof. Maya Rosen
+83108,3,SPRI,OBLIGATORY
+EXAM
+$$$$
+Algebraic Structures
+30013
+Dr. Benny Katz
+83108,3,SPRI,OBLIGATORY
+EXAM
+$$$$
+Operating Systems
+30014
+Prof. Iris Ben-Ami
+83108,3,SPRI,OBLIGATORY
+EXAM

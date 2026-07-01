@@ -2,7 +2,7 @@
 
 from gui.core.styles.Palette import (
     COLOR_BG, COLOR_TEXT, COLOR_PRIMARY, COLOR_PRIMARY_HOVER,
-    COLOR_BORDER, COLOR_MUTED, COLOR_DANGER, COLOR_WARNING, COLOR_SUCCESS
+    COLOR_BORDER, COLOR_MUTED, COLOR_DANGER, COLOR_SUCCESS
 )
 
 GLOBAL_STYLESHEET = f"""
@@ -51,6 +51,25 @@ QPushButton#btn-secondary:hover {{
 QPushButton#btn-secondary:disabled {{
     color: #D5CFC9;
     border-color: {COLOR_BORDER};
+}}
+QPushButton#btn-settings {{
+    background-color: #FFFFFF;
+    color: {COLOR_TEXT};
+    border: 1px solid #D5CFC9;
+    border-radius: 8px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 600;
+}}
+QPushButton#btn-settings:hover {{
+    background-color: #F8FAFC;
+    border-color: {COLOR_PRIMARY};
+    color: {COLOR_PRIMARY_HOVER};
+}}
+QPushButton#btn-settings:disabled {{
+    color: #D5CFC9;
+    border-color: {COLOR_BORDER};
+    background-color: #F8F5F1;
 }}
 QPushButton#btn-danger {{
     background-color: #FFFFFF;
@@ -159,5 +178,26 @@ QGroupBox::title {{
     subcontrol-origin: margin;
     left: 12px;
     padding: 0 4px;
+}}
+
+/* ── Menu (Dropdowns) ────────────────────────────────────────────── */
+QMenu {{
+    background-color: #FFFFFF;
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 8px;
+    padding: 4px 0px;
+}}
+QMenu::item {{
+    background-color: transparent;
+    padding: 6px 20px;
+    color: {COLOR_TEXT};
+    font-size: 13px;
+}}
+QMenu::item:selected {{
+    background-color: #E6F4F8;
+    color: {COLOR_PRIMARY};
+}}
+QMenu::item:disabled {{
+    color: {COLOR_MUTED};
 }}
 """

@@ -47,3 +47,7 @@ class ScheduleDTO:
 
     # Cached count of assignments
     total_assignments: int = 0
+
+    # Precomputed sort scores (criterion_id -> float, higher is better).
+    # Runtime re-rank sorts on these values, so it never recomputes from the schedule contents.
+    scores: dict = field(default_factory=dict)

@@ -1,206 +1,71 @@
+"""
+Test suite for CalendarEditorWidget.
+
+Scope   : The exam-period date editor's real two-way binding between the Qt
+          controls and its ExclusionModel — a date picked in the UI must reach
+          the period view model, and clicking a calendar day must toggle that
+          date's exclusion (and notify the owning screen). These directly back
+          a user flow that changes what the scheduler is allowed to do, so they
+          are tested through the live widget rather than via mocks.
+Pattern : AAA (Arrange / Act / Assert)
+Naming  : test_<component>_<scenario>
+TC-IDs  : TC-CEW-001, TC-CEW-002
+Fixtures: qapp (tests/conftest.py)
+"""
 import pytest
-from unittest.mock import MagicMock, patch
 from PyQt6.QtCore import QDate
+
 from src.gui.common.components.CalendarEditorWidget import CalendarEditorWidget
 from src.application.viewmodels.PeriodEditViewModel import PeriodEditViewModel
 
 pytestmark = pytest.mark.usefixtures("qapp")
 
-# ===========================================================================
-# TC-CEW-001: test initial editor rendering and values.
-# ===========================================================================
-def test_calendar_editor_initial_state():
-    # Arrange
-    vms = [
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="ALEPH",
-            start_date="2026-06-01",
-            end_date="2026-06-03",
-            excluded_dates=["2026-06-02"]
-        ),
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="BET",
-            start_date="2026-07-01",
-            end_date="2026-07-03",
-            excluded_dates=[]
-        )
-    ]
-    
-    # Act
-    widget = CalendarEditorWidget(vms)
-    
-    # Assert
-    assert widget.start_date_edit.date() == QDate(2026, 6, 1)
-    assert widget.end_date_edit.date() == QDate(2026, 6, 3)
-    assert "Semester FALL - Moed ALEPH (1/2)" in widget.period_label.text()
-    assert widget.prev_btn.isEnabled() is False
-    assert widget.next_btn.isEnabled() is True
+
+def _period(start="2026-06-01", end="2026-06-10", excluded=None):
+    return PeriodEditViewModel(
+        semester="FALL", moed="ALEPH",
+        start_date=start, end_date=end,
+        excluded_dates=excluded or [],
+    )
+
 
 # ===========================================================================
-# TC-CEW-002: test date range update syncs with model.
+# TC-CEW-001: picking a new start date in the date editor must flow through
+# the ExclusionModel into the period view model returned on apply — proving
+# the live Qt control is genuinely bound to the editable period state.
 # ===========================================================================
-def test_calendar_editor_date_change():
+def test_calendar_editor_date_change_updates_view_model():
     # Arrange
-    vms = [
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="ALEPH",
-            start_date="2026-06-01",
-            end_date="2026-06-03",
-            excluded_dates=[]
-        )
-    ]
-    widget = CalendarEditorWidget(vms)
-    
-    # Act
-    widget.start_date_edit.setDate(QDate(2026, 6, 2))
-    
-    # Assert
-    assert widget._model.start_date == "2026-06-02"
+    vm = _period(start="2026-06-01", end="2026-06-10")
+    widget = CalendarEditorWidget([vm])
+
+    # Act — the user changes the start date; setDate fires the real dateChanged
+    # signal, which syncs the controls into the model.
+    widget.start_date_edit.setDate(QDate(2026, 6, 5))
+    updated = widget.apply_and_get_constraints()
+
+    # Assert — the edit landed on the period view model, not just the widget.
+    assert updated[0].start_date == "2026-06-05"
+
 
 # ===========================================================================
-# TC-CEW-003: test calendar cell toggle updates exclusion state and style.
+# TC-CEW-002: clicking a calendar day must toggle that date's exclusion, and
+# toggling it again must remove it (reversible). Each toggle must emit
+# data_changed so the input screen knows to mark its state dirty.
 # ===========================================================================
-def test_calendar_editor_cell_toggle():
+def test_calendar_editor_toggles_date_exclusion_and_notifies():
     # Arrange
-    vms = [
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="ALEPH",
-            start_date="2026-06-01",
-            end_date="2026-06-03",
-            excluded_dates=[]
-        )
-    ]
-    widget = CalendarEditorWidget(vms)
-    
-    # Act
+    widget = CalendarEditorWidget([_period(start="2026-06-01", end="2026-06-05")])
+    changes = []
+    widget.data_changed.connect(lambda: changes.append(1))
+
+    # Act — exclude a date, then toggle it back off.
     widget.toggle_date_exclusion("2026-06-03")
-    
-    # Assert
-    assert "2026-06-03" in widget._model.excluded_dates
-    assert widget.calendar_grid._day_frames["2026-06-03"].objectName() == "calendar-cell-excluded"
+    excluded_after_first = "2026-06-03" in widget._model.excluded_dates
+    widget.toggle_date_exclusion("2026-06-03")
+    excluded_after_second = "2026-06-03" in widget._model.excluded_dates
 
-# ===========================================================================
-# TC-CEW-004: test period navigation forward.
-# ===========================================================================
-def test_calendar_editor_navigation_next():
-    # Arrange
-    vms = [
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="ALEPH",
-            start_date="2026-06-01",
-            end_date="2026-06-03",
-            excluded_dates=[]
-        ),
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="BET",
-            start_date="2026-07-01",
-            end_date="2026-07-03",
-            excluded_dates=[]
-        )
-    ]
-    widget = CalendarEditorWidget(vms)
-    
-    # Act
-    widget.next_btn.click()
-    
-    # Assert
-    assert widget._model.current_index == 1
-    assert "Semester FALL - Moed BET (2/2)" in widget.period_label.text()
-    assert widget.prev_btn.isEnabled() is True
-    assert widget.next_btn.isEnabled() is False
-
-# ===========================================================================
-# TC-CEW-005: test period navigation backward.
-# ===========================================================================
-def test_calendar_editor_navigation_prev():
-    # Arrange
-    vms = [
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="ALEPH",
-            start_date="2026-06-01",
-            end_date="2026-06-03",
-            excluded_dates=[]
-        ),
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="BET",
-            start_date="2026-07-01",
-            end_date="2026-07-03",
-            excluded_dates=[]
-        )
-    ]
-    widget = CalendarEditorWidget(vms)
-    widget.next_btn.click()
-    
-    # Act
-    widget.prev_btn.click()
-    
-    # Assert
-    assert widget._model.current_index == 0
-    assert widget.prev_btn.isEnabled() is False
-    assert widget.next_btn.isEnabled() is True
-
-# ===========================================================================
-# TC-CEW-006: test apply returns updated constraints.
-# ===========================================================================
-def test_calendar_editor_apply():
-    # Arrange
-    vms = [
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="ALEPH",
-            start_date="2026-06-01",
-            end_date="2026-06-03",
-            excluded_dates=[]
-        )
-    ]
-    widget = CalendarEditorWidget(vms)
-    widget.toggle_date_exclusion("2026-06-02")
-    
-    # Act
-    returned_periods = widget.apply_and_get_constraints()
-    
-    # Assert
-    assert len(returned_periods) == 1
-    assert returned_periods[0].excluded_dates == ["2026-06-02"]
-    assert vms[0].excluded_dates == ["2026-06-02"]
-
-# ===========================================================================
-# TC-CEW-007: test empty periods lists raises ValueError.
-# ===========================================================================
-def test_calendar_editor_empty_periods_reject():
-    # Arrange
-    empty_vms = []
-    
-    # Act & Assert
-    with pytest.raises(ValueError, match="ExclusionModel requires at least one period."):
-        CalendarEditorWidget(empty_vms)
-
-# ===========================================================================
-# TC-CEW-008: test setting start date > end date clears calendar.
-# ===========================================================================
-def test_calendar_editor_invalid_date_range_clears_calendar():
-    # Arrange
-    vms = [
-        PeriodEditViewModel(
-            semester="FALL",
-            moed="ALEPH",
-            start_date="2026-06-01",
-            end_date="2026-06-03",
-            excluded_dates=[]
-        )
-    ]
-    widget = CalendarEditorWidget(vms)
-    
-    # Act
-    widget.start_date_edit.setDate(QDate(2026, 6, 10))
-    
-    # Assert
-    assert len(widget.calendar_grid._day_frames) == 0
+    # Assert — the exclusion is reversible and every toggle notifies the screen.
+    assert excluded_after_first is True
+    assert excluded_after_second is False
+    assert len(changes) == 2

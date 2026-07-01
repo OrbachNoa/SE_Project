@@ -30,7 +30,6 @@ from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteSched
 from src.application.dto.ScheduleDTO import AssignmentDTO, ScheduleDTO
 from src.infrastructure.cache.DataCache import DataCache
 from src.application.services.ViewModelMapper import ViewModelMapper
-from src.application.state.AppState import AppState
 # endregion
 
 
@@ -116,13 +115,6 @@ def make_assignment(make_course):
 def empty_schedule():
     """Returns a new schedule with zero exams, used to start tests."""
     return ExamSchedule()
-
-
-@pytest.fixture
-def collector_observer():
-    """Provides a fresh observer to collect schedules in test cases."""
-    # to be implemented under src by someone else
-    pass
 
 
 @pytest.fixture(scope="session")
@@ -247,9 +239,3 @@ def mock_router():
 def viewmodel_mapper():
     """Provides a fresh ViewModelMapper instance."""
     return ViewModelMapper()
-
-
-@pytest.fixture
-def app_state():
-    """Provides a fresh AppState instance."""
-    return AppState()

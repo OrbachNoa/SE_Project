@@ -1,7 +1,8 @@
 """
-Entry point for running the scheduler inside a background process. 
-The backtracking search can be very heavy, so it runs in a separate process 
-instead of blocking the main GUI process.
+Runs the heavy scheduler search inside a background process.
+
+The GUI starts several processes, and each process uses this runner to search
+one part of the scheduling space and send results back through the queue.
 """
 from __future__ import annotations
 from multiprocessing import Queue
@@ -12,58 +13,115 @@ from .QueueScheduleObserver import QueueScheduleObserver
 from src.logic.Scheduler import Scheduler
 from src.logic.checkers.IConflictChecker import IConflictChecker
 from src.logic.SlotBuilder import Slot
+from src.models.ExamSchedule import ExamAssignment
+from src.application.errors.ExceptionMapper import build_process_error_payload
 
 
 class SchedulerProcessRunner:
-    """Creates the scheduler process dependencies and runs the search."""
+    """Runs one scheduler worker process and sends its results back."""
 
     def __init__(
-        self, 
-        slots: List[Slot], 
-        checkers: List[IConflictChecker], 
-        queue: Queue, 
-        cancel_event: Event, 
+        self,
+        slots: List[Slot],
+        checkers: List[IConflictChecker],
+        queue: Queue,
+        cancel_event: Event,
         max_results: int,
-        batch_size: int
+        batch_size: int,
+        work_source,
+        scorer=None,
+        result_counter=None,
+        run_id=None,
     ) -> None:
-        # Slots are the exams that the scheduler needs to assign to dates.
+        if work_source is None:
+            raise ValueError("SchedulerProcessRunner requires a work_source")
+        # Exams that still need dates.
         self._slots = slots
-        # Checkers are the rules used to reject invalid assignments.
+        # Rules used to reject invalid schedules.
         self._checkers = checkers
-        # Queue used to send schedules, progress, errors, and finish messages to the main process.
+        # Queue used to send results back to the main process.
         self._queue = queue
-        # Shared flag used to stop the search when the user clicks cancel.
+        # Shared cancel flag for stopping the search.
         self._cancel_event = cancel_event
-        # Maximum number of valid schedules the process should generate.
+        # Global result limit for the search.
         self._max_results = max_results
-        # Number of schedules to send together in one queue message.
+        # Number of schedules sent in one batch.
         self._batch_size = batch_size
+        # Optional scorer used for sorting/ranking schedules.
+        self._scorer = scorer
+        # Shared source of work units (cubes) that this process pulls from.
+        self._work_source = work_source
+        # Shared counter so all processes respect the same max_results limit.
+        self._result_counter = result_counter
+        # Identifies which generation run this process is working on; forwarded
+        # to the observer so its messages can be told apart from a stale,
+        # just-cancelled run on the shared result queue.
+        self._run_id = run_id
+
 
     def run(self) -> None:
-        """Runs the scheduler and reports success or failure to the main process."""
+        """Run this process by pulling work units from the shared work source."""
+        self._run_work_loop()
+
+
+    def _run_work_loop(self) -> None:
+        """Pull work units from the shared source and search each one."""
+
+        # Reuse one observer so batches can continue across work units.
         observer = self._create_observer()
+
         try:
+            # One scheduler is reused for all units handled by this process.
             scheduler = self._create_scheduler()
-            
-            # Starts the actual backtracking algorithm.
-            scheduler.generateSchedules(self._slots, observer, self._max_results)
-            
-            # Notifies the main process that we finished successfully.
+            # Keep taking work until the queue sends None, which means there is no more work.
+            while True:
+                unit = self._work_source.get_next()
+                # None is the real stop signal.
+                if unit is None:
+                    break
+
+                # The work unit stores only dates, so we rebuild real assignments from local slots.
+                seeds = [
+                    ExamAssignment(
+                        course=self._slots[i].course,
+                        date=unit.seed_dates[i],
+                        moed=self._slots[i].moed,
+                        semester=self._slots[i].semester,
+                    )
+                    for i in range(len(unit.seed_dates))
+                ]
+                # Search only the subtree that starts from this seed.
+                scheduler.generateSchedules(
+                    self._slots, observer, self._max_results, seed_assignments=seeds, scorer=self._scorer
+                )
+
+            # Send one FINISHED message for the whole process, not per work unit.
             observer.on_finished()
-            
+
         except Exception as e:
-            # If this process crashes, the main process still needs to know what happened. 
-            # Without this message, the GUI may keep waiting for results forever.
-            observer.on_error(str(e))
+            # Report crashes so the main process can stop waiting. Sent as a
+            # structured AppErrorInfo payload (not str(e)) so MemoryError keeps
+            # its RESOURCE category and anything else is a clean INFRASTRUCTURE
+            # message — never a raw exception string reaching the GUI.
+            observer.on_error(build_process_error_payload(e, "scheduling"))
 
 
-    # These helper methods keep object creation separate from the run flow.
-    # This makes the run method easier to read and easier to change later.
 
     def _create_observer(self) -> QueueScheduleObserver:
-        """Creates the observer that sends scheduler updates through the queue."""
-        return QueueScheduleObserver(self._queue, self._cancel_event, self._batch_size)
+        """Create the object that sends scheduler updates through the queue."""
+
+        # The observer batches schedules and pushes them to the result queue.
+        return QueueScheduleObserver(
+            self._queue,
+            self._cancel_event,
+            self._batch_size,
+            self._scorer,
+            result_counter=self._result_counter,
+            result_limit=self._max_results,
+            slots=self._slots,
+            run_id=self._run_id,
+        )
 
     def _create_scheduler(self) -> Scheduler:
-        """Creates the scheduler with the conflict rules it should use."""
+        """Create the backtracking scheduler with this process rules."""
         return Scheduler(self._checkers)

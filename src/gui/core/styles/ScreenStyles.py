@@ -169,6 +169,7 @@ QPushButton#btn-export {{
     padding: 0 18px;
     font-weight: 600;
     font-size: 13px;
+    text-align: center;
 }}
 QPushButton#btn-export:hover {{
     background-color: {COLOR_PRIMARY_HOVER};
@@ -176,6 +177,25 @@ QPushButton#btn-export:hover {{
 QPushButton#btn-export:disabled {{
     background-color: #CBD5E1;
     color: #F1F5F9;
+}}
+QPushButton#btn-sort {{
+    background-color: #FFFFFF;
+    color: {COLOR_TEXT};
+    border: 1px solid #D5CFC9;
+    border-radius: 8px;
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 600;
+}}
+QPushButton#btn-sort:hover {{
+    background-color: #F8FAFC;
+    border-color: {COLOR_PRIMARY};
+    color: {COLOR_PRIMARY_HOVER};
+}}
+QPushButton#btn-sort:disabled {{
+    color: #D5CFC9;
+    border-color: {COLOR_BORDER};
+    background-color: #F8F5F1;
 }}
 QLabel#solution-counter-label {{
     min-width: 150px;
@@ -247,5 +267,19 @@ QLabel#calendar-placeholder-subtitle {{
     font-size: 11px;
     background: transparent;
     border: none;
+}}
+/* ── Dropdown Menus ──────────────────────────────────────────────── */
+QMenu {{
+    background-color: #FFFFFF;
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 6px;
+}}
+QMenu::item {{
+    padding: 6px 25px 6px 10px;
+    color: {COLOR_TEXT};
+}}
+QMenu::item:selected {{
+    background-color: {COLOR_BG};
+    color: {COLOR_PRIMARY_HOVER};
 }}
 """

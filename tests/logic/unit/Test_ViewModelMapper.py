@@ -1,9 +1,25 @@
+"""Unit tests for ViewModelMapper, the application/presentation boundary that
+converts schedule DTOs and domain objects (Course, ExamPeriod) into the flat
+view models consumed by the GUI: schedule, calendar, program, and period-edit
+view models.
+
+Tests are identified with sequential TC-VM-NNN identifiers, and each test body
+follows the Arrange/Act/Assert structure with those exact section comments.
+
+Fixture policy: tests use the shared `make_assignment_dto`, `make_course`, and
+`make_program_entry` factory fixtures from tests/conftest.py to build
+AssignmentDTOs, Courses, and ProgramEntries with sensible defaults, and
+`make_period` to build ExamPeriod instances for the period-edit tests.
+ScheduleDTO and AssignmentDTO collections are still assembled locally in each
+test (rather than via `make_schedule_dto`) because the scenarios under test
+need to control exact field values — such as per-test program_requirements
+overrides and specific date orderings — that are easier to see and adjust
+inline than to thread through an additional fixture layer.
+"""
 import pytest
 from src.application.services.ViewModelMapper import ViewModelMapper
-from src.application.dto.ScheduleDTO import ScheduleDTO, AssignmentDTO
-from src.models.Course import Course
-from src.models.Enums import EvalType, Semester, Requirement, Moed
-from src.models.ExamPeriod import ExamPeriod
+from src.application.dto.ScheduleDTO import ScheduleDTO
+from src.models.Enums import EvalType, Semester, Moed
 from datetime import date
 
 # -----------------------------------------------------------------
@@ -59,7 +75,9 @@ def test_viewmodel_mapper_to_schedule_vm_none_raises_value_error():
     # Arrange
     mapper = ViewModelMapper()
 
-    # Act & Assert
+    # Act
+
+    # Assert
     with pytest.raises(ValueError):
         mapper.to_schedule_vm(None)
 
@@ -111,7 +129,8 @@ def test_viewmodel_mapper_to_schedule_vm_date_sorting(make_assignment_dto):
     # Act
     vm = mapper.to_schedule_vm(dto)
 
-    # Assert - should be sorted chronologically by date
+    # Assert
+    # Items must be in chronological order regardless of input order.
     assert vm.items[0].date == "2026-06-01"
     assert vm.items[1].date == "2026-06-05"
     assert vm.items[2].date == "2026-06-10"
@@ -144,12 +163,12 @@ def test_viewmodel_mapper_to_program_view_models(make_course):
 def test_viewmodel_mapper_to_program_vms_filtering_and_sorting(make_course, make_program_entry):
     # Arrange
     mapper = ViewModelMapper()
-    
+
     # Program 83102 has 1 exam course and 1 project course
     p2 = make_program_entry(program_id="83102")
     c1 = make_course(course_id="201", evaluation=EvalType.EXAM, program_entries=[p2])
     c2 = make_course(course_id="202", evaluation=EvalType.PROJECT, program_entries=[p2])
-    
+
     # Program 83101 has 1 exam course
     p1 = make_program_entry(program_id="83101")
     c3 = make_course(course_id="101", evaluation=EvalType.EXAM, program_entries=[p1])
@@ -157,11 +176,12 @@ def test_viewmodel_mapper_to_program_vms_filtering_and_sorting(make_course, make
     # Act
     vms = mapper.to_program_vms([c1, c2, c3])
 
-    # Assert - should be sorted by program_id
+    # Assert
+    # Programs must appear sorted by program_id, with course_count limited to exam courses.
     assert len(vms) == 2
     assert vms[0].program_id == "83101"
     assert vms[0].course_count == 1  # c3 is EXAM
-    
+
     assert vms[1].program_id == "83102"
     assert vms[1].course_count == 1  # c1 is EXAM, c2 is PROJECT (non-exam ignored)
 
@@ -193,10 +213,10 @@ def test_viewmodel_mapper_to_program_courses_vm(make_course):
 def test_viewmodel_mapper_to_program_courses_vm_multi_program_and_sorting(make_course, make_program_entry):
     # Arrange
     mapper = ViewModelMapper()
-    
+
     p1 = make_program_entry(program_id="83101")
     p2 = make_program_entry(program_id="83102")
-    
+
     # c1 belongs to both programs 83101 and 83102
     c1 = make_course(course_id="102", program_entries=[p1, p2])
     # c2 belongs to 83101 only
@@ -205,16 +225,17 @@ def test_viewmodel_mapper_to_program_courses_vm_multi_program_and_sorting(make_c
     # Act
     vms = mapper.to_program_courses_vm([c1, c2])
 
-    # Assert - sorted by program_id
+    # Assert
+    # Programs must appear sorted by program_id.
     assert len(vms) == 2
-    
+
     # Program 83101
     assert vms[0].program_id == "83101"
     # courses inside should be sorted by course_id: 101, then 102
     assert len(vms[0].courses) == 2
     assert vms[0].courses[0].course_id == "101"
     assert vms[0].courses[1].course_id == "102"
-    
+
     # Program 83102
     assert vms[1].program_id == "83102"
     assert len(vms[1].courses) == 1
@@ -258,7 +279,9 @@ def test_viewmodel_mapper_to_calendar_vm_none_raises_value_error():
     # Arrange
     mapper = ViewModelMapper()
 
-    # Act & Assert
+    # Act
+
+    # Assert
     with pytest.raises(ValueError):
         mapper.to_calendar_vm(None)
 
@@ -312,5 +335,8 @@ def test_viewmodel_mapper_to_period_edit_vms_none_returns_empty_list():
     # Arrange
     mapper = ViewModelMapper()
 
-    # Act & Assert
-    assert mapper.to_period_edit_vms(None) == []
+    # Act
+    vms = mapper.to_period_edit_vms(None)
+
+    # Assert
+    assert vms == []

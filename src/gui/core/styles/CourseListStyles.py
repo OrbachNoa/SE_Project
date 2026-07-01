@@ -1,7 +1,7 @@
 """Course list component styling rules."""
 
 from gui.core.styles.Palette import (
-    COLOR_PRIMARY, COLOR_PRIMARY_HOVER, COLOR_BORDER, COLOR_MUTED,
+    COLOR_PRIMARY, COLOR_PRIMARY_HOVER, COLOR_BORDER,
     COLOR_TEXT, COLOR_BG, COLOR_SUCCESS
 )
 

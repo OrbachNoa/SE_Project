@@ -1,11 +1,10 @@
 """Input screen layout and widget wiring."""
 from __future__ import annotations
 
-from typing import Callable, List
+from typing import List
 import os
-
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QProgressBar, QVBoxLayout
+from PyQt6.QtWidgets import QLabel, QMessageBox, QFrame, QHBoxLayout, QProgressBar, QPushButton, QVBoxLayout
 
 from gui.common.components.CalendarEditorWidget import CalendarEditorWidget
 from gui.common.components.CourseListWidget import CourseListWidget
@@ -16,10 +15,11 @@ from gui.features.input.InputScreenPresenter import InputScreenPresenter
 from gui.features.input.widgets.ActionBarWidget import ActionBarWidget
 from gui.features.input.widgets.ProgramSelectorCardWidget import ProgramSelectorCardWidget
 from src.application.ImportBoundary import ImportMode
+from src.application.viewmodels.ProgramViewModel import ProgramViewModel
+from src.config import MAX_PROGRAMS
 
 
 SCREEN_OUTPUT = "output"
-MAX_PROGRAMS = 5
 
 
 # This class manages the layout and user interactions for the main Input screen.
@@ -31,7 +31,9 @@ class InputScreen(Screen):
 
         # Setup main components like the editor, program selector, and layouts
         self._editor_widget: CalendarEditorWidget | None = None
-        self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, self)
+        # Programs are populated once a courses file is loaded (see set_available_programs),
+        # since the screen shouldn't know about every program the system knows about.
+        self.program_selector_card = ProgramSelectorCardWidget(MAX_PROGRAMS, [], self)
 
         # Create the main vertical layout that stacks everything from top to bottom
         root = QVBoxLayout(self)
@@ -129,6 +131,17 @@ class InputScreen(Screen):
         self._progress_label.setContentsMargins(24, 0, 24, 8)
         root.addWidget(self._progress_label)
 
+        settings_footer = QHBoxLayout()
+        settings_footer.setContentsMargins(20, 0, 20, 16)
+        self.settings_btn = QPushButton("Settings")
+        self.settings_btn.setObjectName("btn-settings")
+        self.settings_btn.setFixedHeight(38)
+        self.settings_btn.setMinimumWidth(112)
+        self.settings_btn.setToolTip("Scheduling constraints")
+        settings_footer.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        settings_footer.addStretch()
+        root.addLayout(settings_footer)
+
         # Link the UI to the Presenter (the logic layer) and connect button events
         self._presenter = InputScreenPresenter(self, controller, router, SCREEN_OUTPUT)
         self._connect_events()
@@ -141,11 +154,12 @@ class InputScreen(Screen):
     def _connect_events(self) -> None:
         self.program_selector_card.selection_changed.connect(self._presenter.refresh_generate_button)
         self.program_selector_card.selection_changed.connect(self.mark_inputs_dirty)
-        self.action_bar.courses_load_btn.clicked.connect(self._presenter.on_load_courses_clicked)
-        self.action_bar.periods_load_btn.clicked.connect(self._presenter.on_load_periods_clicked)
+        self.action_bar.courses_load_btn.clicked.connect(self._on_load_courses_clicked)
+        self.action_bar.periods_load_btn.clicked.connect(self._on_load_periods_clicked)
         self.action_bar.generate_btn.clicked.connect(self._on_generate_clicked)
         self.action_bar.cancel_btn.clicked.connect(self._presenter.on_cancel_clicked)
         self.action_bar.view_results_btn.clicked.connect(self._presenter.on_view_results_clicked)
+        self.settings_btn.clicked.connect(self._presenter.on_settings_clicked)
 
     # UI helper: create the card that lists the available courses
     def _build_courses_card(self) -> QFrame:
@@ -256,6 +270,7 @@ class InputScreen(Screen):
         self._progress_label.setVisible(running)
         self._courses_row["load_btn"].setEnabled(not running)
         self._periods_row["load_btn"].setEnabled(not running)
+        self.settings_btn.setEnabled(not running)
         if progress_text:
             self._progress_label.setText(progress_text)
 
@@ -291,6 +306,10 @@ class InputScreen(Screen):
     def render_courses(self, programs_vm) -> None:
         self._course_list_widget.render(programs_vm)
 
+    # Replaces the choosable programs with only those present in the loaded courses file.
+    def set_available_programs(self, programs_vm: List[ProgramViewModel]) -> None:
+        self.program_selector_card.set_program_view_models(programs_vm)
+
     # Swaps the placeholder with the actual calendar editor widget
     def show_period_editor(self, period_vms: list) -> None:
         if self._placeholder is not None:
@@ -303,8 +322,20 @@ class InputScreen(Screen):
             self._editor_widget.deleteLater()
 
         self._editor_widget = CalendarEditorWidget(period_vms)
-        self._editor_widget.data_changed.connect(self.mark_inputs_dirty)
+        self._editor_widget.data_changed.connect(self._on_period_data_changed)
         self.right_col.insertWidget(0, self._editor_widget, stretch=1)
+
+    # A period date/exclusion change both dirties the inputs and re-gates Generate,
+    # so an invalid date range immediately disables generation.
+    def _on_period_data_changed(self) -> None:
+        self.mark_inputs_dirty()
+        self._presenter.refresh_generate_button()
+
+    # True when there is no period editor yet, or its current range is valid.
+    def is_period_range_valid(self) -> bool:
+        if self._editor_widget is None:
+            return True
+        return self._editor_widget.is_valid()
 
     # Error popups
     def show_import_error(self, data_label: str, detail: str) -> None:
@@ -312,6 +343,12 @@ class InputScreen(Screen):
 
     def show_scheduler_error(self, message: str) -> None:
         QMessageBox.critical(self, "Scheduler error", message)
+
+    # Shown when the user clicks Generate without selecting a study program.
+    # The red label alone was easy to miss, so this dialog makes it unmissable.
+    def show_program_selection_error(self, message: str) -> None:
+        QMessageBox.warning(self, "Program selection required", message)
+        self.program_selector_card.setFocus()
 
     # UI helper: update text count for loaded files
     def _mark_file_loaded(self, row: dict, count: int, label: str) -> None:
@@ -351,14 +388,14 @@ class InputScreen(Screen):
 
     @_selected_program_ids.setter
     def _selected_program_ids(self, val: List[str]) -> None:
-        self.program_selector_card._selected_program_ids = val
+        self.program_selector_card.set_selected_program_ids(val)
 
     @property
     def _programs_count_badge(self):
-        return self.program_selector_card._programs_count_badge
+        return self.program_selector_card.programs_count_badge
 
     def _refresh_program_summary(self) -> None:
-        self.program_selector_card._refresh_program_summary()
+        self.program_selector_card.refresh_summary()
 
     def _selected_mode(self) -> ImportMode:
         return self._presenter.selected_mode()
@@ -367,9 +404,15 @@ class InputScreen(Screen):
         self._presenter.refresh_generate_button()
 
     def _on_load_courses_clicked(self) -> None:
+        if self._editor_widget is not None:
+            updated_vms = self._editor_widget.apply_and_get_constraints()
+            self._on_constraints_saved(updated_vms)
         self._presenter.on_load_courses_clicked()
 
     def _on_load_periods_clicked(self) -> None:
+        if self._editor_widget is not None:
+            updated_vms = self._editor_widget.apply_and_get_constraints()
+            self._on_constraints_saved(updated_vms)
         self._presenter.on_load_periods_clicked()
 
     # Logic for when Generate is clicked: save changes and start the process

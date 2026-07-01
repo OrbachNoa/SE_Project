@@ -1,3 +1,23 @@
+"""Unit tests for SlotBuilder — converts courses + exam periods into Slots.
+
+A Slot pairs one course with one (semester, moed) exam event and its list
+of candidate dates. Tests cover difficulty-based sort ordering (harder
+slots scheduled first), filtering by selected program and by exam-relevant
+evaluation type, candidate-date population from a period's available
+dates, building one slot per available moed and per semester a course
+belongs to, the empty-course-list edge case, and the construction-time
+guard that raises when a course's semester has no matching period defined
+(an orphan course must never be silently dropped from the result).
+
+Conventions:
+- Each test carries a unique TC-SLOT-NNN identifier in the comment block
+  above its definition, numbered sequentially.
+- Each test body is split into Arrange / Act / Assert sections, except
+  TC-SLOT-007 where the assertion is itself a `pytest.raises` context
+  manager.
+- `make_course`, `make_program_entry`, and `make_period` come from the
+  shared fixtures in tests/conftest.py.
+"""
 from datetime import date
 import pytest
 
@@ -155,7 +175,7 @@ def test_slot_builder_rejects_missing_period_for_required_course_semester(
     # Act & Assert
     with pytest.raises(ValueError) as excinfo:
         SlotBuilder([period_spri], selected_programs=["83101"]).build([course])
-    
+
     assert "no exam period is defined for that semester" in str(excinfo.value)
 
 

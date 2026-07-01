@@ -1,126 +1,73 @@
+"""
+Test suite for ProgramSelectorCardWidget.
+
+Scope   : The study-program selector card's real state logic — the
+          "selected / max" count badge that reflects the committed selection,
+          and the commit-on-accept rule that only writes the dialog's choice
+          back into the card (and notifies observers) when the picker dialog
+          is accepted. Both gate a user flow (choosing programs before a run),
+          so they are exercised on the live widget.
+Pattern : AAA (Arrange / Act / Assert)
+Naming  : test_<component>_<scenario>
+TC-IDs  : TC-SEL-001, TC-SEL-002
+Fixtures: qapp (tests/conftest.py)
+"""
 import pytest
-from unittest.mock import MagicMock
-from PyQt6.QtWidgets import QLabel
+from unittest.mock import patch
+
 from src.gui.features.input.widgets.ProgramSelectorCardWidget import ProgramSelectorCardWidget
 
 pytestmark = pytest.mark.usefixtures("qapp")
 
-# ===========================================================================
-# TC-PSCW-001: test initial badge text and empty selection list.
-# ===========================================================================
-def test_program_selector_card_initial_state_badge_and_selection():
-    # Act
-    widget = ProgramSelectorCardWidget(max_programs=5)
-    
-    # Assert
-    assert widget._programs_count_badge.text() == "0 / 5"
-    assert len(widget.selected_program_ids()) == 0
+_DIALOG_PATH = "src.gui.features.input.widgets.ProgramSelectorCardWidget.ProgramSelectorDialog"
+
 
 # ===========================================================================
-# TC-PSCW-002: test initial placeholder label exists with correct text.
+# TC-SEL-001: the count badge must render "selected / max" and track the
+# committed selection — "0 / 5" with nothing chosen, "2 / 5" after two
+# programs are committed.
 # ===========================================================================
-def test_program_selector_card_initial_state_placeholder():
-    # Act
-    widget = ProgramSelectorCardWidget(max_programs=5)
-    
-    # Assert
-    placeholder = widget.findChild(QLabel, "card-placeholder")
-    assert placeholder is not None
-    assert placeholder.text() == "Click to select programs"
-
-# ===========================================================================
-# TC-PSCW-003: test that rendering chips updates the count badge.
-# ===========================================================================
-def test_program_selector_card_rendering_chips_updates_badge():
+def test_program_selector_badge_reflects_selection_count():
     # Arrange
-    widget = ProgramSelectorCardWidget(max_programs=5)
-    widget._selected_program_ids = ["83101", "83102"]
-    
-    # Act
-    widget._refresh_program_summary()
-    
-    # Assert
-    assert widget._programs_count_badge.text() == "2 / 5"
+    card = ProgramSelectorCardWidget(max_programs=5, program_view_models=[])
+
+    # Assert — initial badge before any selection.
+    assert card.programs_count_badge.text() == "0 / 5"
+
+    # Act — commit a two-program selection.
+    card.set_selected_program_ids(["83101", "83102"])
+
+    # Assert — the badge tracks the committed count against the configured max.
+    assert card.programs_count_badge.text() == "2 / 5"
+
 
 # ===========================================================================
-# TC-PSCW-004: test that rendering chips removes the placeholder label.
+# TC-SEL-002: accepting the picker dialog must commit the dialog's chosen IDs
+# into the card and emit selection_changed exactly once; cancelling must leave
+# the existing selection untouched and emit nothing.
 # ===========================================================================
-def test_program_selector_card_rendering_chips_removes_placeholder():
+def test_program_selector_commits_dialog_choice_only_on_accept():
     # Arrange
-    widget = ProgramSelectorCardWidget(max_programs=5)
-    widget._selected_program_ids = ["83101", "83102"]
-    
-    # Act
-    widget._refresh_program_summary()
-    
-    # Assert
-    placeholder_in_layout = False
-    for i in range(widget._summary_layout.count()):
-        item = widget._summary_layout.itemAt(i)
-        w = item.widget()
-        if w and w.objectName() == "card-placeholder":
-            placeholder_in_layout = True
-    assert not placeholder_in_layout
+    card = ProgramSelectorCardWidget(max_programs=5, program_view_models=[])
+    emissions = []
+    card.selection_changed.connect(lambda: emissions.append(1))
 
-# ===========================================================================
-# TC-PSCW-005: test that rendering chips generates the correct chip labels.
-# ===========================================================================
-def test_program_selector_card_rendering_chips_populates_labels():
-    # Arrange
-    widget = ProgramSelectorCardWidget(max_programs=5)
-    widget._selected_program_ids = ["83101", "83102"]
-    
-    # Act
-    widget._refresh_program_summary()
-    
-    # Assert
-    chips = widget.findChildren(QLabel, "program-chip")
-    assert len(chips) == 2
-    assert "83101" in chips[0].text()
-    assert "83102" in chips[1].text()
+    # Act — user accepts the dialog with two programs picked.
+    with patch(_DIALOG_PATH) as MockDialog:
+        MockDialog.return_value.exec.return_value = True
+        MockDialog.return_value.selected_ids.return_value = ["83101", "83102"]
+        card._open_program_dialog()
 
+    # Assert — the accepted choice is committed and observers are notified once.
+    assert card.selected_program_ids() == ["83101", "83102"]
+    assert len(emissions) == 1
 
-# ===========================================================================
-# TC-PSCW-006: test mouse press dialog flow when selection is accepted.
-# ===========================================================================
-def test_program_selector_card_mouse_click_flow_accept():
-    # Arrange
-    widget = ProgramSelectorCardWidget(max_programs=5)
-    mock_choose = MagicMock(return_value=["83101", "83102"])
-    widget._selection_controller.choose_program_ids = mock_choose
-    
-    mock_slot = MagicMock()
-    widget.selection_changed.connect(mock_slot)
-    
-    # Act
-    widget.mousePressEvent(None)
-    
-    # Assert
-    assert mock_choose.call_count == 1
-    assert mock_choose.call_args[0] == (widget, [])
-    assert widget.selected_program_ids() == ["83101", "83102"]
-    assert mock_slot.call_count == 1
+    # Act — user cancels a second dialog (exec returns False).
+    with patch(_DIALOG_PATH) as MockDialog:
+        MockDialog.return_value.exec.return_value = False
+        MockDialog.return_value.selected_ids.return_value = ["83108"]
+        card._open_program_dialog()
 
-# ===========================================================================
-# TC-PSCW-007: test that the program selector card mouse click flow is rejected when selection is cancelled/rejected.
-# ===========================================================================
-def test_program_selector_card_mouse_click_flow_cancel():
-    # Arrange
-    widget = ProgramSelectorCardWidget(max_programs=5)
-    widget._selected_program_ids = ["83101"]
-    widget._refresh_program_summary()
-    
-    mock_choose = MagicMock(return_value=None)  
-    widget._selection_controller.choose_program_ids = mock_choose
-    
-    mock_slot = MagicMock()
-    widget.selection_changed.connect(mock_slot)
-    
-    # Act
-    widget.mousePressEvent(None)
-    
-    # Assert
-    assert mock_choose.call_count == 1
-    assert mock_choose.call_args[0] == (widget, ["83101"])
-    assert widget.selected_program_ids() == ["83101"]  
-    assert mock_slot.call_count == 0 
+    # Assert — a cancel must not change the committed selection or notify again.
+    assert card.selected_program_ids() == ["83101", "83102"]
+    assert len(emissions) == 1

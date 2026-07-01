@@ -1,0 +1,125 @@
+Algorithms Core
+10001
+Dr. Ada Cohen
+83101,2,FALL,Obligatory
+83108,2,FALL,Obligatory
+83107,2,FALL,Obligatory
+EXAM
+$$$$
+Data Structures Advanced
+10002
+Dr. Ben Levy
+83101,2,FALL,Obligatory
+83108,2,FALL,Obligatory
+83107,2,FALL,Obligatory
+EXAM
+$$$$
+Operating Systems
+10003
+Dr. Chen Amir
+83101,2,FALL,Obligatory
+83108,2,FALL,Obligatory
+83102,2,FALL,Elective
+EXAM
+$$$$
+Software Testing
+10004
+Dr. Dana Katz
+83108,3,FALL,Obligatory
+83101,3,FALL,Elective
+83107,2,FALL,Elective
+EXAM
+$$$$
+Machine Learning
+10005
+Dr. Eli Moran
+83107,3,FALL,Obligatory
+83101,2,FALL,Elective
+83108,2,FALL,Elective
+EXAM
+$$$$
+Computer Vision
+10006
+Dr. Fatima Nasser
+83107,3,FALL,Elective
+83101,2,FALL,Elective
+83108,2,FALL,Elective
+EXAM
+$$$$
+Cloud Computing
+10007
+Dr. Gil Stern
+83101,2,FALL,Elective
+83108,2,FALL,Elective
+83107,3,FALL,Elective
+EXAM
+$$$$
+Cyber Security
+10008
+Dr. Hila Bar
+83101,2,FALL,Elective
+83108,3,FALL,Elective
+83102,2,FALL,Elective
+EXAM
+$$$$
+Database Systems
+10009
+Dr. Iris Tal
+83101,2,SPRI,Obligatory
+83108,2,SPRI,Obligatory
+83107,2,SPRI,Elective
+EXAM
+$$$$
+Computer Networks
+10010
+Dr. Jacob Klein
+83101,2,SPRI,Obligatory
+83108,2,SPRI,Obligatory
+83102,2,SPRI,Obligatory
+EXAM
+$$$$
+Signals and Systems
+10011
+Dr. Karen Azulay
+83102,2,SPRI,Obligatory
+83182,2,SPRI,Obligatory
+83108,3,SPRI,Elective
+EXAM
+$$$$
+Embedded Systems
+10012
+Dr. Lior Weiss
+83182,2,SPRI,Obligatory
+83102,2,SPRI,Elective
+83101,3,SPRI,Obligatory
+EXAM
+$$$$
+Engineering Ethics
+10013
+Dr. Maya Dor
+83101,1,SUMM,Obligatory
+83102,1,SUMM,Obligatory
+83108,1,SUMM,Obligatory
+EXAM
+$$$$
+Research Methods
+10014
+Dr. Noam Peer
+83101,1,SUMM,Elective
+83102,1,SUMM,Elective
+83108,1,SUMM,Elective
+EXAM
+$$$$
+Capstone Project
+10015
+Dr. Oren Shaham
+83101,4,FALL,Obligatory
+83108,4,FALL,Obligatory
+PROJECT
+$$$$
+Professional Seminar
+10016
+Dr. Paz Golan
+83107,4,SPRI,Elective
+83182,4,SPRI,Elective
+ATTENDANCE

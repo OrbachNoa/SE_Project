@@ -1,3 +1,20 @@
+"""
+Integration tests for the CLI entry point (src/main.py: main() / run_pipeline()).
+
+These tests drive the full pipeline end to end through argv, covering the
+happy path (valid input produces an output file and a clean exit) as well as
+the error-reporting contract: validation failures must exit with code 1, must
+never leak a Python traceback to stderr, and must describe the specific
+failure reason to the user.
+
+Test cases use sequential identifiers TC-MAIN-001..006, and each test body
+follows the Arrange/Act/Assert structure via matching inline comments.
+
+Fixture policy: this file does not use any shared fixture from
+tests/conftest.py. It relies only on pytest's built-in tmp_path, capsys, and
+monkeypatch fixtures, reads its inputs from flat text files under
+tests/fixtures, and invokes main() directly (see _run_main below).
+"""
 import sys
 from pathlib import Path
 
@@ -11,7 +28,7 @@ FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 # ---------------------------------------------------------------------------
 def _run_main(argv, monkeypatch):
     monkeypatch.setattr(sys, "argv", argv)
-    from src.entrypoints.main import main
+    from main import main
     main()
 
 

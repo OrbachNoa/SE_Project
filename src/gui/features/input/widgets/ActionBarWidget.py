@@ -1,10 +1,12 @@
 """Action bar widget containing file loader triggers, import mode toggle, and scheduler run controls."""
 from __future__ import annotations
+import logging
 
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QLabel, QRadioButton, QButtonGroup, QWidget
-from PyQt6.QtCore import Qt        
 from PyQt6.QtGui import QIcon
 from gui.common.helpers import create_scaled_pixmap, create_vertical_divider
+
+logger = logging.getLogger(__name__)
 
 # This class builds the main control panel (toolbar) for the screen.
 # It holds the buttons to upload files, choose settings, and start the schedule generation.
@@ -30,7 +32,8 @@ class ActionBarWidget(QFrame):
         try:
             courses_pix = create_scaled_pixmap(self, "data/assets/courseIcon.png", 18)
             self.courses_load_btn.setIcon(QIcon(courses_pix))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Could not load courseIcon.png: {e}")
             self.courses_load_btn.setText("📂  Load Courses")
         layout.addWidget(self.courses_load_btn)
 
@@ -43,7 +46,8 @@ class ActionBarWidget(QFrame):
         try:
             periods_pix = create_scaled_pixmap(self, "data/assets/periodIcon.png", 18)
             self.periods_load_btn.setIcon(QIcon(periods_pix))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Could not load periodIcon.png: {e}")
             self.periods_load_btn.setText("📅  Load Periods")
         layout.addWidget(self.periods_load_btn)
 
@@ -93,6 +97,7 @@ class ActionBarWidget(QFrame):
         try:
             view_pix = create_scaled_pixmap(self, "data/assets/verify.png", 18)
             self.view_results_btn.setIcon(QIcon(view_pix))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Could not load verify.png: {e}")
             self.view_results_btn.setText("👁  View Results")
         layout.addWidget(self.view_results_btn)
