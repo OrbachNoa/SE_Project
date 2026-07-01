@@ -11,7 +11,7 @@ The following diagram illustrates the core structure, domain models, parsers, va
 <a href="https://yuval-keren.github.io/" target="_blank">View Architecture Blueprint v2.0</a>
 
 **Version 34.0:**
-<a href="./Architecture_blueprint.html" download="Architecture_blueprint.html">Click here to download v34.0 architecture blueprint</a>
+[📐 View Interactive Architecture Blueprint v34.0](https://orbachnoa.github.io/SE_Project/Architecture_blueprint.html)
 
 ## Architecture
 
