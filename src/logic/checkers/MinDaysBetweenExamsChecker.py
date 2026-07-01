@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Dict, List, Set, Tuple
 
 from src.logic.checkers.IConflictChecker import IConflictChecker
-from src.logic.feasibility.helpers import all_dates, max_spaced_count
+from src.logic.feasibility.helpers import all_dates, max_spaced_count, partition_slots_by_window
 from src.logic.indexes.SelectedProgramIndex import SelectedProgramIndex
 from src.models.Enums import Requirement
 
@@ -173,23 +173,28 @@ class MinDaysBetweenExamsChecker(IConflictChecker):
         errors = []
 
         for (program_id, year), group_slots in groups.items():
-            # Required is how many exams this cohort needs to schedule.
-            required = len(group_slots)
+            # A program/year cohort can span several exam periods (FALL, SPRING,
+            # SUMMER) that are months apart. Split it into independent windows so
+            # spare dates in one period cannot mask a shortage in another; each
+            # window is then checked on its own.
+            for window_slots in partition_slots_by_window(group_slots, self._k):
+                # Required is how many exams this window needs to schedule.
+                required = len(window_slots)
 
-            # If there is only one exam, there is no gap to check.
-            if required < 2:
-                continue
+                # If there is only one exam, there is no gap to check.
+                if required < 2:
+                    continue
 
-            # Calculate how many dates can fit with k days gap.
-            capacity = max_spaced_count(all_dates(group_slots), self._k)
+                # Calculate how many dates can fit with k days gap.
+                capacity = max_spaced_count(all_dates(window_slots), self._k)
 
-            # If the cohort needs more exams than the spaced capacity,
-            # there is no valid schedule for this cohort.
-            if required > capacity:
-                errors.append(
-                    f"Minimum gap for {label} requires {required} exams in "
-                    f"program {program_id} year {year}, but only {capacity} "
-                    f"dates can fit with a {self._k}-day gap."
-                )
+                # If the window needs more exams than the spaced capacity,
+                # there is no valid schedule for this cohort.
+                if required > capacity:
+                    errors.append(
+                        f"Minimum gap for {label} requires {required} exams in "
+                        f"program {program_id} year {year}, but only {capacity} "
+                        f"dates can fit with a {self._k}-day gap."
+                    )
 
         return errors

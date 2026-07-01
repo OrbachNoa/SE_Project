@@ -18,9 +18,10 @@ if TYPE_CHECKING:
 class ClusterOverviewPresenter:
     """Computes clusters, renders cards, and coordinates navigation/comparison."""
 
-    def __init__(self, view, controller, router, detail_screen, compare_screen) -> None:
+    def __init__(self, view, controller, cluster_controller, router, detail_screen, compare_screen) -> None:
         self._view = view
         self._controller = controller
+        self._cluster_controller = cluster_controller
         self._router = router
         self._detail = detail_screen
         self._compare = compare_screen
@@ -43,14 +44,14 @@ class ClusterOverviewPresenter:
     # If entering for the first time (no active clusters), use default automatic K.
     def on_enter(self) -> None:
         self._is_active = True
-        if self._controller.has_clusters():
+        if self._cluster_controller.has_clusters():
             # Restore last request text in the input field
             if self._last_request_text:
                 self._view.set_request_text(self._last_request_text)
             else:
                 self._view.clear_request_text()
             # Use last active K for consistency
-            prev_k = self._controller.get_active_k()
+            prev_k = self._cluster_controller.get_active_k()
             self._kick_off(k=prev_k or None, recompute=False)
         else:
             self._last_k = None
@@ -102,14 +103,14 @@ class ClusterOverviewPresenter:
         if self._worker is not None and self._worker.isRunning():
             return
         if not (text or "").strip():
-            self._controller.invalidate_clustering()
+            self._cluster_controller.invalidate_clustering()
             self._kick_off(k=None, recompute=False)
             return
         self._compare_selection = []
         self._pending_request_text = text
         self._view.set_busy(True)
         from src.infrastructure.concurrency.ClusterRequestWorker import ClusterRequestWorker
-        self._worker = ClusterRequestWorker(self._controller, text, k)
+        self._worker = ClusterRequestWorker(self._cluster_controller, text, k)
         worker = self._worker
         worker.finished.connect(lambda bundle, w=worker: self._on_request_worker_finished(bundle, w))
         worker.failed.connect(lambda message, w=worker: self._on_worker_failed(message, w))
@@ -155,7 +156,7 @@ class ClusterOverviewPresenter:
 
         # fresh=True forces a new sample+fit (on_enter); fresh=False reuses
         # the already-fitted matrix for a cheap K-change (on_apply_k).
-        coordinator = self._controller.get_cluster_coordinator(fresh=not recompute)
+        coordinator = self._cluster_controller.get_cluster_coordinator(fresh=not recompute)
         if coordinator is None:
             self._view.show_message("No schedules to cluster yet. Generate schedules first.")
             return
@@ -181,7 +182,7 @@ class ClusterOverviewPresenter:
         """Handler for ClusterRequestWorker.finished — commit + render."""
         if self._is_stale(worker):
             return
-        cards = self._controller.commit_request_run(bundle)
+        cards = self._cluster_controller.commit_request_run(bundle)
         self._finish_render(bundle.run, cards)
         self._last_request_text = self._pending_request_text
         self._last_k = bundle.run.result.k
@@ -191,7 +192,7 @@ class ClusterOverviewPresenter:
         if self._is_stale(worker):
             return
         try:
-            cards = self._controller.cards_from_run(run)
+            cards = self._cluster_controller.cards_from_run(run)
         except Exception as error:
             message = self._controller.map_error(
                 error, {"operation": "render_cluster_cards", "screen": "clusters"}
@@ -212,12 +213,12 @@ class ClusterOverviewPresenter:
             self._view.show_message("No schedules to cluster yet. Generate schedules first.")
             return
 
-        active_k = self._controller.get_active_k()
+        active_k = self._cluster_controller.get_active_k()
         self._view.set_k_value(active_k)
         self._view.set_summary(f"{active_k} families")
 
         parts = []
-        interp = self._controller.get_cluster_interpretation()
+        interp = self._cluster_controller.get_cluster_interpretation()
         if interp:
             parts.append(interp)
         if run.result.requested_k and run.result.requested_k != active_k:
@@ -225,7 +226,7 @@ class ClusterOverviewPresenter:
                 f"Note: only {active_k} families could be formed — "
                 "the data may not vary enough on these criteria."
             )
-        coordinator = self._controller.get_cluster_coordinator()
+        coordinator = self._cluster_controller.get_cluster_coordinator()
         if coordinator and coordinator.flat_criteria:
             _flat = coordinator.flat_criteria
             _names = [criterion_label(c) for c in _flat]

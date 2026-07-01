@@ -19,6 +19,7 @@ from src.application.errors.ErrorModel import (
     ErrorCategory,
     ErrorSeverity,
 )
+from src.logic.clustering.llm.ClusterTranslationError import ClusterTranslationError
 from src.logic.feasibility.InfeasibleScheduleError import InfeasibleScheduleError
 
 
@@ -57,6 +58,7 @@ _GENERIC_MESSAGE_BY_CATEGORY = {
     ErrorCategory.VALIDATION: "The provided input is not valid. Please check it and try again.",
     ErrorCategory.INPUT_FILE: "The file could not be read. Please check it and try again.",
     ErrorCategory.SCHEDULING: "The scheduling engine failed unexpectedly. Please try again.",
+    ErrorCategory.TRANSLATION: "Could not understand the request. Please try again.",
     ErrorCategory.RESOURCE: "The operation ran out of resources. Please try again.",
     ErrorCategory.PERSISTENCE: "Could not read or save the data. Please try again.",
     ErrorCategory.EXPORT: "Could not complete the export. Please try again.",
@@ -102,6 +104,30 @@ class InfeasibleScheduleMapper:
             technical_message=_tech(exc),
             recoverable=True,
             context={**context, "reasons": reasons},
+        )
+
+
+class ClusterTranslationMapper:
+    """A configured LLM failed/timed out translating a cluster request.
+
+    Deliberately not the SCHEDULING category: the clustering engine never ran,
+    so "the scheduling engine failed" would misdescribe the fault. The message
+    is fixed rather than derived from the exception text, since the underlying
+    fault (HTTP error, timeout, malformed JSON …) is never meaningful to a user.
+    """
+
+    def can_handle(self, exc: BaseException) -> bool:
+        return isinstance(exc, ClusterTranslationError)
+
+    def map(self, exc: BaseException, context: Dict[str, Any]) -> AppErrorInfo:
+        return AppErrorInfo(
+            code="CLUSTER_LLM_UNAVAILABLE",
+            category=ErrorCategory.TRANSLATION,
+            severity=ErrorSeverity.WARNING,
+            user_message="משהו השתבש, לא נמצאו תוצאות",
+            technical_message=_tech(exc),
+            recoverable=True,
+            context=_strip_control_keys(context),
         )
 
 
@@ -324,6 +350,7 @@ def default_registry() -> ExceptionMapperRegistry:
         [
             ApplicationErrorMapper(),
             InfeasibleScheduleMapper(),
+            ClusterTranslationMapper(),
             MemoryErrorMapper(),
             PermissionErrorMapper(),
             FileNotFoundMapper(),

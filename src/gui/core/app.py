@@ -19,12 +19,16 @@ SCREEN_CLUSTER_CALENDAR_OVERLAY = "cluster_calendar_overlay"
 
 # This is the main window of the application that holds everything together
 class App(QMainWindow):
-    def __init__(self, controller) -> None:
+    def __init__(self, controller, cluster_controller) -> None:
         """Initialize the main window."""
         super().__init__()
-        
+
         # Store the controller used by all screens to reach application services.
         self._controller = controller
+        # Dedicated controller owning the clustering session; injected directly
+        # into the cluster screens/presenters so AppController stays out of the
+        # clustering domain.
+        self._cluster_controller = cluster_controller
         
         # Set the window's title, default starting size, and the minimum size it can be shrunk to
         self.setWindowTitle("Exam Scheduler v3.1")
@@ -47,17 +51,17 @@ class App(QMainWindow):
 
         # Cluster screens: the overview drives navigation into the detail and
         # comparison screens, so it gets direct references to them.
-        cluster_detail  = ClusterDetailScreen(controller, self._router)
-        cluster_compare = ClusterCompareScreen(controller, self._router)
+        cluster_detail  = ClusterDetailScreen(controller, cluster_controller, self._router)
+        cluster_compare = ClusterCompareScreen(controller, cluster_controller, self._router)
         cluster_overview = ClusterOverviewScreen(
-            controller, self._router, cluster_detail, cluster_compare,
+            controller, cluster_controller, self._router, cluster_detail, cluster_compare,
             detail_name=SCREEN_CLUSTER_DETAIL, compare_name=SCREEN_CLUSTER_COMPARE,
         )
         self._router.register(SCREEN_CLUSTERS,        cluster_overview)
         self._router.register(SCREEN_CLUSTER_DETAIL,  cluster_detail)
         self._router.register(SCREEN_CLUSTER_COMPARE, cluster_compare)
-        
-        cluster_calendar_overlay = ClusterCalendarOverlayScreen(controller, self._router)
+
+        cluster_calendar_overlay = ClusterCalendarOverlayScreen(controller, cluster_controller, self._router)
         self._router.register(SCREEN_CLUSTER_CALENDAR_OVERLAY, cluster_calendar_overlay)
 
         # Decide which screen the user should see first when the app opens

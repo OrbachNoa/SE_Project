@@ -27,6 +27,7 @@ from src.application.services.InputDataMerger import InputDataMerger
 from src.application.services.SchedulingService import SchedulingService
 from src.application.services.ScheduleExportService import ScheduleExportService
 from src.application.services.ViewModelMapper import ViewModelMapper
+from src.application.services.ClusterSessionController import ClusterSessionController
 from src.application.state.HybridScheduleResultState import HybridScheduleResultState
 from src.infrastructure.repositories.SQLiteScheduleRepository import SQLiteScheduleRepository
 from src.logic.clustering.ExtendedFeatureComputer import ALL_EXTENDED_FEATURES
@@ -84,12 +85,14 @@ def install_qt_message_filter() -> None:
     qInstallMessageHandler(_handler)
 
 
-def build_controller() -> AppController:
+def build_controller() -> tuple[AppController, ClusterSessionController]:
     """
-    Builds and returns the AppController with all dependencies wired.
-    
+    Builds and returns the AppController and ClusterSessionController, fully wired.
+
     This function is the main entry point for the application's dependency injection.
-    It creates all the necessary services and wires them together to form the AppController.
+    It creates all the necessary services and wires them together to form the two
+    controllers: the AppController (scheduling / input / lifecycle) and the
+    ClusterSessionController (the clustering session used by the cluster screens).
     """
     # Clustering's extra score columns are wired in here, at the composition
     # root, rather than imported inside the repository itself.
@@ -123,12 +126,26 @@ def build_controller() -> AppController:
         input_state=input_state,
         schedule_state=hybrid_state,
     )
+
+    # The clustering session lives in its own controller, wired with the same
+    # collaborators AppController already holds. AppController does not know
+    # about it: it only emits schedule_results_changed when a run starts or
+    # finishes, and we connect that here to the cluster session's invalidation
+    # (observer seam) so the two stay decoupled.
+    cluster_controller = ClusterSessionController(
+        schedule_state=hybrid_state,
+        mapper=mapper,
+        input_state=input_state,
+        exporter=exporter,
+    )
+    controller.schedule_results_changed.connect(cluster_controller.invalidate_clustering)
+
     # Same idea as the scheduler pool warm-up above, applied to the
     # clustering engine: pre-import it in the background so the Clusters
     # screen opens instantly later, without paying that cost at launch for
     # sessions that never open it.
     controller.warm_up_clustering_async()
-    return controller
+    return controller, cluster_controller
 
 
 if __name__ == "__main__":
@@ -143,7 +160,7 @@ if __name__ == "__main__":
     install_qt_message_filter()
     app = QApplication(sys.argv)
     app.setFont(QFont("Segoe UI", 10))
-    controller = build_controller()
-    window = App(controller)
+    controller, cluster_controller = build_controller()
+    window = App(controller, cluster_controller)
     window.start()
     sys.exit(app.exec())

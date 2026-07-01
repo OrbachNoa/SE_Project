@@ -26,7 +26,7 @@ from gui.features.clusters.widgets.ScheduleCalendarView import ScheduleCalendarV
 class ClusterDetailScreen(Screen):
     """Shows one schedule of a family at a time with prev/next and export."""
 
-    def __init__(self, controller, router) -> None:
+    def __init__(self, controller, cluster_controller, router) -> None:
         super().__init__()
 
         root = QVBoxLayout(self)
@@ -40,7 +40,7 @@ class ClusterDetailScreen(Screen):
         self._calendar_view = ScheduleCalendarView()
         root.addWidget(self._calendar_view, stretch=1)
 
-        self._presenter = ClusterDetailPresenter(self, controller, router)
+        self._presenter = ClusterDetailPresenter(self, controller, cluster_controller, router)
         self._connect_events()
 
     def _build_toolbar(self, root: QVBoxLayout) -> None:
